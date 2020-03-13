@@ -1,0 +1,3 @@
+= `cq-maven-plugin`
+
+A Maven plugin to perform various tasks related to https://github.com/apache/camel-quarkus[Camel Quarkus].

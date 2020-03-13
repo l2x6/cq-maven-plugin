@@ -1,5 +1,5 @@
 ====
-    Copyright (c) 2019 Repackage Tests Maven Plugin
+    Copyright (c) 2020 CQ Maven Plugin
     project contributors as indicated by the @author tags.
 
     Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +14,6 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 ====
-
 
                                  Apache License
                            Version 2.0, January 2004
