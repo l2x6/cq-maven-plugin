@@ -309,16 +309,9 @@ public class PomSorter {
         final Set<String> extensionArtifactIds = new TreeSet<>();
         for (ExtensionDir extDir : extensionDirs) {
             final Path absPath = baseDir.resolve(extDir.getPath());
-            try {
-                Files.list(absPath)
-                        .filter(path -> Files.isDirectory(path)
-                                && Files.exists(path.resolve("pom.xml"))
-                                && Files.exists(path.resolve("runtime")))
-                        .map(dir -> extDir.getArtifactIdPrefix() + dir.getFileName().toString())
-                        .forEach(extensionArtifactIds::add);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
+            CqUtils.findExtensionArtifactIdBases(absPath)
+                    .map(artifactIdBase -> extDir.getArtifactIdPrefix() + artifactIdBase)
+                    .forEach(extensionArtifactIds::add);
         }
         return extensionArtifactIds;
     }

@@ -18,7 +18,6 @@ package org.l2x6.cq;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.Reader;
 import java.io.Writer;
 import java.lang.reflect.Field;
 import java.nio.charset.Charset;
@@ -28,7 +27,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.Stack;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -37,32 +35,20 @@ import java.util.stream.Stream;
 
 import javax.lang.model.SourceVersion;
 
-import org.apache.camel.catalog.DefaultCamelCatalog;
-import org.apache.camel.tooling.model.BaseModel;
-import org.apache.camel.tooling.model.ComponentModel;
-import org.apache.camel.tooling.model.DataFormatModel;
-import org.apache.camel.tooling.model.LanguageModel;
-import org.apache.camel.tooling.model.OtherModel;
 import org.apache.maven.model.Model;
-import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
-import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
+import org.l2x6.cq.CqCatalog.WrappedModel;
 import org.l2x6.cq.PomTransformer.Gavtcs;
 import org.l2x6.cq.PomTransformer.Transformation;
 
-import freemarker.cache.ClassTemplateLoader;
-import freemarker.cache.FileTemplateLoader;
-import freemarker.cache.MultiTemplateLoader;
-import freemarker.cache.TemplateLoader;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
 import freemarker.template.TemplateException;
-import freemarker.template.TemplateExceptionHandler;
 import freemarker.template.TemplateMethodModelEx;
 import freemarker.template.TemplateModelException;
 
@@ -73,9 +59,6 @@ import freemarker.template.TemplateModelException;
 public class CreateExtensionMojo extends AbstractMojo {
 
     static final String QUOTED_DOLLAR = Matcher.quoteReplacement("$");
-
-    static final String CLASSPATH_PREFIX = "classpath:";
-    static final String FILE_PREFIX = "file:";
 
     static final String QUARKUS_VERSION_PROP = "quarkus.version";
 
@@ -362,11 +345,11 @@ public class CreateExtensionMojo extends AbstractMojo {
      *
      * @since 0.0.1
      */
-    @Parameter(property = "cq.extensionDirs")
+    @Parameter(required = true)
     List<ExtensionDir> extensionDirs;
 
-    List<WrappedModel> models;
-    WrappedModel model;
+    List<org.l2x6.cq.CqCatalog.WrappedModel> models;
+    org.l2x6.cq.CqCatalog.WrappedModel model;
 
     Charset charset;
 
@@ -385,7 +368,7 @@ public class CreateExtensionMojo extends AbstractMojo {
         }
 
         charset = Charset.forName(encoding);
-        this.models = filterModels(artifactIdBase);
+        this.models = new CqCatalog().filterModels(artifactIdBase);
         switch (models.size()) {
         case 0:
             throw new IllegalStateException("Could not find name " + artifactIdBase + " in Camel catalog");
@@ -438,12 +421,12 @@ public class CreateExtensionMojo extends AbstractMojo {
         }
 
         final Path extensionsPomPath = this.extensionsPath.resolve("pom.xml");
-        final Model extensionsModel = readPom(extensionsPomPath, charset);
+        final Model extensionsModel = CqUtils.readPom(extensionsPomPath, charset);
         this.groupId = getGroupId(extensionsModel);
-        this.version = getVersion(extensionsModel);
+        this.version = CqUtils.getVersion(extensionsModel);
 
         final TemplateParams templateParams = getTemplateParams();
-        final Configuration cfg = getTemplateConfig();
+        final Configuration cfg = CqUtils.getTemplateConfig(basePath, DEFAULT_TEMPLATES_URI_BASE, templatesUriBase, encoding);
 
         generateExtensionProjects(cfg, templateParams);
         if (!extensionsModel.getModules().contains(artifactIdBase)) {
@@ -477,15 +460,6 @@ public class CreateExtensionMojo extends AbstractMojo {
         }
         generateItest(cfg, templateParams);
 
-    }
-
-    static List<WrappedModel> filterModels(String artifactIdBase) {
-        final DefaultCamelCatalog catalog = new DefaultCamelCatalog(true);
-        final String camelArtifactId = "camel-" + artifactIdBase;
-        return Stream.of(Kind.values())
-                .flatMap(kind -> kind.all(catalog))
-                .filter(wrappedModel -> wrappedModel.getArtifactId().equals(camelArtifactId))
-                .collect(Collectors.toList());
     }
 
     Path getExtensionProjectBaseDir() {
@@ -579,16 +553,6 @@ public class CreateExtensionMojo extends AbstractMojo {
         return templateParams;
     }
 
-    Configuration getTemplateConfig() {
-        final Configuration templateCfg = new Configuration(Configuration.VERSION_2_3_28);
-        templateCfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
-        templateCfg.setTemplateLoader(createTemplateLoader(basePath, templatesUriBase));
-        templateCfg.setDefaultEncoding(encoding);
-        templateCfg.setInterpolationSyntax(Configuration.SQUARE_BRACKET_INTERPOLATION_SYNTAX);
-        templateCfg.setTagSyntax(Configuration.SQUARE_BRACKET_TAG_SYNTAX);
-        return templateCfg;
-    }
-
     void generateItest(Configuration cfg, TemplateParams model) {
         final Path itestParentPath;
         final Path itestDir;
@@ -603,7 +567,7 @@ public class CreateExtensionMojo extends AbstractMojo {
             itestDir = itestParentPath.getParent().resolve("integration-test");
         }
 
-        final Model itestParent = readPom(itestParentPath, charset);
+        final Model itestParent = CqUtils.readPom(itestParentPath, charset);
         if (!"pom".equals(itestParent.getPackaging())) {
             throw new RuntimeException(
                     "Can add an extension integration test only under a project with packagin 'pom'; found: "
@@ -617,7 +581,7 @@ public class CreateExtensionMojo extends AbstractMojo {
 
         model.itestParentGroupId = getGroupId(itestParent);
         model.itestParentArtifactId = itestParent.getArtifactId();
-        model.itestParentVersion = getVersion(itestParent);
+        model.itestParentVersion = CqUtils.getVersion(itestParent);
         model.itestParentRelativePath = "../pom.xml";
 
         final Path itestPomPath = itestDir.resolve("pom.xml");
@@ -692,13 +656,6 @@ public class CreateExtensionMojo extends AbstractMojo {
                         : null;
     }
 
-    static String getVersion(Model basePom) {
-        return basePom.getVersion() != null ? basePom.getVersion()
-                : basePom.getParent() != null && basePom.getParent().getVersion() != null
-                        ? basePom.getParent().getVersion()
-                        : null;
-    }
-
     static String toCapCamelCase(String artifactIdBase) {
         final StringBuilder sb = new StringBuilder(artifactIdBase.length());
         for (String segment : artifactIdBase.split("[.\\-]+")) {
@@ -718,20 +675,6 @@ public class CreateExtensionMojo extends AbstractMojo {
                 sb.append('_');
             }
             sb.append(segments[i].toLowerCase(Locale.ROOT));
-        }
-        return sb.toString();
-    }
-
-    static String toCapWords(String artifactIdBase) {
-        final StringBuilder sb = new StringBuilder(artifactIdBase.length());
-        for (String segment : artifactIdBase.split("[.\\-]+")) {
-            if (sb.length() > 0) {
-                sb.append(' ');
-            }
-            sb.append(Character.toUpperCase(segment.charAt(0)));
-            if (segment.length() > 1) {
-                sb.append(segment.substring(1));
-            }
         }
         return sb.toString();
     }
@@ -759,36 +702,6 @@ public class CreateExtensionMojo extends AbstractMojo {
                 .collect(Collectors.joining("."));
     }
 
-    static TemplateLoader createTemplateLoader(Path basePath, String templatesUriBase) {
-        final TemplateLoader defaultLoader = new ClassTemplateLoader(CreateExtensionMojo.class,
-                DEFAULT_TEMPLATES_URI_BASE.substring(CLASSPATH_PREFIX.length()));
-        if (DEFAULT_TEMPLATES_URI_BASE.equals(templatesUriBase)) {
-            return defaultLoader;
-        } else if (templatesUriBase.startsWith(CLASSPATH_PREFIX)) {
-            return new MultiTemplateLoader( //
-                    new TemplateLoader[] { //
-                            new ClassTemplateLoader(CreateExtensionMojo.class,
-                                    templatesUriBase.substring(CLASSPATH_PREFIX.length())), //
-                            defaultLoader //
-                    });
-        } else if (templatesUriBase.startsWith(FILE_PREFIX)) {
-            final Path resolvedTemplatesDir = basePath.resolve(templatesUriBase.substring(FILE_PREFIX.length()));
-            try {
-                return new MultiTemplateLoader( //
-                        new TemplateLoader[] { //
-                                new FileTemplateLoader(resolvedTemplatesDir.toFile()),
-                                defaultLoader //
-                        });
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        } else {
-            throw new IllegalStateException(String.format(
-                    "Cannot handle templatesUriBase '%s'; only value starting with '%s' or '%s' are supported",
-                    templatesUriBase, CLASSPATH_PREFIX, FILE_PREFIX));
-        }
-    }
-
     void evalTemplate(Configuration cfg, String templateUri, Path dest, TemplateParams model) {
         getLog().info("Adding " + dest);
         try {
@@ -809,14 +722,6 @@ public class CreateExtensionMojo extends AbstractMojo {
             return artifactId.substring(lBPos + 1, rBPos);
         } else {
             return artifactId;
-        }
-    }
-
-    static Model readPom(final Path path, Charset charset) {
-        try (Reader r = Files.newBufferedReader(path, charset)) {
-            return new MavenXpp3Reader().read(r);
-        } catch (XmlPullParserException | IOException e) {
-            throw new RuntimeException("Could not parse " + path, e);
         }
     }
 
@@ -968,120 +873,6 @@ public class CreateExtensionMojo extends AbstractMojo {
             return toSnakeCase;
         }
 
-    }
-
-    public static class WrappedModel {
-        private final BaseModel<?> delegate;
-        private final Kind kind;
-
-        public WrappedModel(Kind kind, BaseModel<?> delegate) {
-            super();
-            this.kind = kind;
-            this.delegate = delegate;
-        }
-
-        public String getArtifactId() {
-            return kind.getArtifactId(delegate);
-        }
-
-        public String getKind() {
-            return kind.name();
-        }
-
-        public String getScheme() {
-            return kind.getScheme(delegate);
-        }
-
-        @Override
-        public String toString() {
-            return "WrappedModel [scheme=" + getScheme() + ", kind=" + getKind() + "]";
-        }
-
-    }
-
-    enum Kind {
-        component() {
-            @Override
-            public Optional<WrappedModel> load(DefaultCamelCatalog catalog, String name) {
-                final BaseModel<?> delegate = catalog.componentModel(name);
-                return Optional.ofNullable(delegate == null ? null : new WrappedModel(this, delegate));
-            }
-
-            @Override
-            public String getArtifactId(BaseModel<?> delegate) {
-                return ((ComponentModel) delegate).getArtifactId();
-            }
-
-            @Override
-            protected Stream<WrappedModel> all(DefaultCamelCatalog catalog) {
-                return catalog.findComponentNames().stream().map(name -> new WrappedModel(this, catalog.componentModel(name)));
-            }
-            protected String getScheme(BaseModel<?> delegate) {
-                return ((ComponentModel) delegate).getScheme();
-            }
-        },
-        language() {
-            @Override
-            public Optional<WrappedModel> load(DefaultCamelCatalog catalog, String name) {
-                final BaseModel<?> delegate = catalog.languageModel(name);
-                return Optional.ofNullable(delegate == null ? null : new WrappedModel(this, delegate));
-            }
-
-            @Override
-            public String getArtifactId(BaseModel<?> delegate) {
-                return ((LanguageModel) delegate).getArtifactId();
-            }
-
-            @Override
-            protected Stream<WrappedModel> all(DefaultCamelCatalog catalog) {
-                return catalog.findLanguageNames().stream().map(name -> new WrappedModel(this, catalog.languageModel(name)));
-            }
-        },
-        dataformat() {
-            @Override
-            public Optional<WrappedModel> load(DefaultCamelCatalog catalog, String name) {
-                final BaseModel<?> delegate = catalog.dataFormatModel(name);
-                return Optional.ofNullable(delegate == null ? null : new WrappedModel(this, delegate));
-            }
-
-            @Override
-            public String getArtifactId(BaseModel<?> delegate) {
-                return ((DataFormatModel) delegate).getArtifactId();
-            }
-
-            @Override
-            protected Stream<WrappedModel> all(DefaultCamelCatalog catalog) {
-                return catalog.findDataFormatNames().stream()
-                        .map(name -> new WrappedModel(this, catalog.dataFormatModel(name)));
-            }
-        },
-        other() {
-            @Override
-            public Optional<WrappedModel> load(DefaultCamelCatalog catalog, String name) {
-                final BaseModel<?> delegate = catalog.otherModel(name);
-                return Optional.ofNullable(delegate == null ? null : new WrappedModel(this, delegate));
-            }
-
-            @Override
-            public String getArtifactId(BaseModel<?> delegate) {
-                return ((OtherModel) delegate).getArtifactId();
-            }
-
-            @Override
-            protected Stream<WrappedModel> all(DefaultCamelCatalog catalog) {
-                return catalog.findOtherNames().stream().map(name -> new WrappedModel(this, catalog.otherModel(name)));
-            }
-        };
-
-        public abstract Optional<WrappedModel> load(DefaultCamelCatalog catalog, String name);
-
-        protected String getScheme(BaseModel<?> delegate) {
-            return delegate.getName();
-        }
-
-        protected abstract Stream<WrappedModel> all(DefaultCamelCatalog catalog);
-
-        public abstract String getArtifactId(BaseModel<?> delegate);
     }
 
 }

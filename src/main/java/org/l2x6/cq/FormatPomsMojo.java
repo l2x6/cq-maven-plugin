@@ -26,6 +26,11 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 
+/**
+ * Formats the {@code pom.xml} files in the source tree.
+ *
+ * @since 0.1.0
+ */
 @Mojo(name = "format", requiresProject = true, inheritByDefault = false)
 public class FormatPomsMojo extends AbstractMojo {
     public static final String CQ_SORT_MODULES_PATHS = "extensions/pom.xml,integration-tests/pom.xml";

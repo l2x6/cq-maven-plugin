@@ -52,7 +52,7 @@ public class CreateExtensionMojoTest {
         final Path pom = projectDir.resolve("pom.xml");
         if (Files.exists(pom)) {
             mojo.project.setFile(pom.toFile());
-            final Model rawModel = CreateExtensionMojo.readPom(pom, StandardCharsets.UTF_8);
+            final Model rawModel = CqUtils.readPom(pom, StandardCharsets.UTF_8);
             // the project would have an interpolated model at runtime, which we can't fully init here
             // here are just some key parts
             if (rawModel.getDependencyManagement() != null) {
