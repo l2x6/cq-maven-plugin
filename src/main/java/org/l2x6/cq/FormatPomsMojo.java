@@ -80,8 +80,20 @@ public class FormatPomsMojo extends AbstractMojo {
     @Parameter(property = "cq.extensionDirs")
     List<ExtensionDir> extensionDirs;
 
+    /**
+     * Skip the execution of this mojo.
+     *
+     * @since 0.0.1
+     */
+    @Parameter(property = "cq.format.skip", defaultValue = "false")
+    boolean skip;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
+        if (skip) {
+            getLog().info("Skipping as requested by the user");
+            return;
+        }
         final Path basePath = basedir.toPath();
 
         if (extensionDirs == null || extensionDirs.isEmpty()) {
