@@ -90,7 +90,7 @@ public class ExtensionListMojo extends AbstractMojo {
      *
      * @since 0.1.0
      */
-    @Parameter(defaultValue = CreateExtensionMojo.DEFAULT_ENCODING, required = true, property = "cq.encoding")
+    @Parameter(defaultValue = CqUtils.DEFAULT_ENCODING, required = true, property = "cq.encoding")
     String encoding;
 
     /**

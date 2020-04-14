@@ -16,28 +16,41 @@
  */
 package org.l2x6.cq;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
+import java.io.Writer;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
+import org.l2x6.cq.CqCatalog.Kind;
 
 import freemarker.cache.ClassTemplateLoader;
 import freemarker.cache.FileTemplateLoader;
 import freemarker.cache.MultiTemplateLoader;
 import freemarker.cache.TemplateLoader;
 import freemarker.template.Configuration;
+import freemarker.template.Template;
+import freemarker.template.TemplateException;
 import freemarker.template.TemplateExceptionHandler;
 
 public class CqUtils {
     public static final String CLASSPATH_PREFIX = "classpath:";
 
     public static final String FILE_PREFIX = "file:";
+    public static final List<String> DEFAULT_CATEGORIES = Collections.singletonList("integration");
+    public static final String DEFAULT_TEMPLATES_URI_BASE = "classpath:/create-extension-templates";
+    public static final String DEFAULT_ENCODING = "utf-8";
 
     static TemplateLoader createTemplateLoader(Path basePath, String defaultUriBase, String templatesUriBase) {
         final TemplateLoader defaultLoader = new ClassTemplateLoader(CreateExtensionMojo.class,
@@ -69,7 +82,6 @@ public class CqUtils {
         }
     }
 
-
     public static Stream<String> findExtensionArtifactIdBases(Path extensionDir) {
         try {
             return Files.list(extensionDir)
@@ -82,7 +94,18 @@ public class CqUtils {
         }
     }
 
-    public static Configuration getTemplateConfig(Path basePath, String defaultUriBase, String templatesUriBase, String encoding) {
+    public static Stream<ExtensionModule> findExtensions(Stream<Path> extensionDirectories, Predicate<String> artifactIdFilter) {
+        return extensionDirectories
+                .map(Path::toAbsolutePath)
+                .map(Path::normalize)
+                .flatMap(extDir -> CqUtils.findExtensionArtifactIdBases(extDir)
+                        .filter(artifactIdFilter)
+                        .map(artifactIdBase -> new ExtensionModule(extDir.resolve(artifactIdBase), artifactIdBase))
+                        .sorted());
+    }
+
+    public static Configuration getTemplateConfig(Path basePath, String defaultUriBase, String templatesUriBase,
+            String encoding) {
         final Configuration templateCfg = new Configuration(Configuration.VERSION_2_3_28);
         templateCfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
         templateCfg.setTemplateLoader(createTemplateLoader(basePath, defaultUriBase, templatesUriBase));
@@ -98,11 +121,42 @@ public class CqUtils {
                         ? basePom.getParent().getVersion()
                         : null;
     }
+
     public static Model readPom(final Path path, Charset charset) {
         try (Reader r = Files.newBufferedReader(path, charset)) {
             return new MavenXpp3Reader().read(r);
         } catch (XmlPullParserException | IOException e) {
             throw new RuntimeException("Could not parse " + path, e);
+        }
+    }
+
+    public static String extensionDocUrl(Path repoRootDir, String artifactIdBase, Kind kind) {
+        final Path docPage = extensionDocPage(repoRootDir, artifactIdBase);
+        if (Files.exists(docPage)) {
+            return "https://camel.apache.org/camel-quarkus/latest/extensions/"+ artifactIdBase +".html";
+        } else {
+            return entityDocUrl(artifactIdBase, kind);
+        }
+    }
+
+    public static Path extensionDocPage(Path repoRootDir, String artifactIdBase) {
+        return repoRootDir.resolve("docs/modules/ROOT/pages/extensions/" + artifactIdBase + ".adoc");
+    }
+
+    public static String entityDocUrl(String artifactIdBase, Kind kind) {
+        return "https://camel.apache.org/components/latest/" + artifactIdBase + "-" + kind.name() + ".html";
+    }
+
+    public static void evalTemplate(Configuration cfg, String templateUri, Path dest, TemplateParams model, Consumer<String> log) {
+        log.accept("Generating " + dest);
+        try {
+            final Template template = cfg.getTemplate(templateUri);
+            Files.createDirectories(dest.getParent());
+            try (Writer out = Files.newBufferedWriter(dest)) {
+                template.process(model, out);
+            }
+        } catch (IOException | TemplateException e) {
+            throw new RuntimeException("Could not evaluate template " + templateUri, e);
         }
     }
 

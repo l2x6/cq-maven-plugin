@@ -18,7 +18,6 @@ package org.l2x6.cq;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.Writer;
 import java.lang.reflect.Field;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
@@ -42,15 +41,10 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
-import org.l2x6.cq.CqCatalog.WrappedModel;
 import org.l2x6.cq.PomTransformer.Gavtcs;
 import org.l2x6.cq.PomTransformer.Transformation;
 
 import freemarker.template.Configuration;
-import freemarker.template.Template;
-import freemarker.template.TemplateException;
-import freemarker.template.TemplateMethodModelEx;
-import freemarker.template.TemplateModelException;
 
 /**
  * Scaffolds a new Camel Quarkus extension.
@@ -62,11 +56,9 @@ public class CreateExtensionMojo extends AbstractMojo {
 
     static final String QUARKUS_VERSION_PROP = "quarkus.version";
 
-    static final String DEFAULT_ENCODING = "utf-8";
     static final String DEFAULT_QUARKUS_VERSION = "@{" + QUARKUS_VERSION_PROP + "}";
     static final String QUARKUS_VERSION_POM_EXPR = "${" + QUARKUS_VERSION_PROP + "}";
     static final String DEFAULT_BOM_ENTRY_VERSION = "@{project.version}";
-    static final String DEFAULT_TEMPLATES_URI_BASE = "classpath:/create-extension-templates";
     static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("@\\{([^\\}]+)\\}");
 
     static final String CQ_EXTENSIONS_DIR = "extensions";
@@ -219,7 +211,7 @@ public class CreateExtensionMojo extends AbstractMojo {
      *
      * @since 0.0.1
      */
-    @Parameter(defaultValue = DEFAULT_TEMPLATES_URI_BASE, required = true, property = "cq.templatesUriBase")
+    @Parameter(defaultValue = CqUtils.DEFAULT_TEMPLATES_URI_BASE, required = true, property = "cq.templatesUriBase")
     String templatesUriBase;
 
     /**
@@ -227,7 +219,7 @@ public class CreateExtensionMojo extends AbstractMojo {
      *
      * @since 0.0.1
      */
-    @Parameter(defaultValue = DEFAULT_ENCODING, required = true, property = "cq.encoding")
+    @Parameter(defaultValue = CqUtils.DEFAULT_ENCODING, required = true, property = "cq.encoding")
     String encoding;
 
     /**
@@ -414,10 +406,10 @@ public class CreateExtensionMojo extends AbstractMojo {
              * under https://camel.apache.org/camel-quarkus/latest/extensions
              * The value may get corrected by the maven Mojo that generates the .adoc files.
              */
-            this.guideUrl = "https://camel.apache.org/components/latest/" + artifactIdBase + "-" + model.kind.name() + ".html";
+            this.guideUrl = CqUtils.entityDocUrl(artifactIdBase, model.kind);
         }
         if (this.categories == null || this.categories.isEmpty()) {
-            this.categories = Collections.singletonList("integration");
+            this.categories = org.l2x6.cq.CqUtils.DEFAULT_CATEGORIES;
         }
 
         final Path extensionsPomPath = this.extensionsPath.resolve("pom.xml");
@@ -425,8 +417,8 @@ public class CreateExtensionMojo extends AbstractMojo {
         this.groupId = getGroupId(extensionsModel);
         this.version = CqUtils.getVersion(extensionsModel);
 
-        final TemplateParams templateParams = getTemplateParams();
-        final Configuration cfg = CqUtils.getTemplateConfig(basePath, DEFAULT_TEMPLATES_URI_BASE, templatesUriBase, encoding);
+        final TemplateParams.Builder templateParams = getTemplateParams();
+        final Configuration cfg = CqUtils.getTemplateConfig(basePath, CqUtils.DEFAULT_TEMPLATES_URI_BASE, templatesUriBase, encoding);
 
         generateExtensionProjects(cfg, templateParams);
         if (!extensionsModel.getModules().contains(artifactIdBase)) {
@@ -437,13 +429,13 @@ public class CreateExtensionMojo extends AbstractMojo {
 
         if (runtimeBomPath != null) {
             getLog().info(
-                    String.format("Adding [%s] to dependencyManagement in [%s]", templateParams.artifactId,
+                    String.format("Adding [%s] to dependencyManagement in [%s]", templateParams.getArtifactId(),
                             runtimeBomPath));
             List<PomTransformer.Transformation> transformations = new ArrayList<PomTransformer.Transformation>();
             transformations
-                    .add(Transformation.addManagedDependency(templateParams.groupId, templateParams.artifactId,
-                            templateParams.bomEntryVersion));
-            for (Gavtcs gavtcs : templateParams.additionalRuntimeDependencies) {
+                    .add(Transformation.addManagedDependency(templateParams.getGroupId(), templateParams.getArtifactId(),
+                            templateParams.getBomEntryVersion()));
+            for (Gavtcs gavtcs : templateParams.getAdditionalRuntimeDependencies()) {
                 getLog().info(String.format("Adding [%s] to dependencyManagement in [%s]", gavtcs, runtimeBomPath));
                 transformations.add(Transformation.addManagedDependency(gavtcs));
             }
@@ -451,11 +443,11 @@ public class CreateExtensionMojo extends AbstractMojo {
             PomSorter.sortDependencyManagement(runtimeBomPath);
         }
         if (deploymentBomPath != null) {
-            final String aId = templateParams.artifactId + "-deployment";
+            final String aId = templateParams.getArtifactId() + "-deployment";
             getLog().info(String.format("Adding [%s] to dependencyManagement in [%s]", aId, deploymentBomPath));
             pomTransformer(deploymentBomPath)
-                    .transform(Transformation.addManagedDependency(templateParams.groupId, aId,
-                            templateParams.bomEntryVersion));
+                    .transform(Transformation.addManagedDependency(templateParams.getGroupId(), aId,
+                            templateParams.getBomEntryVersion()));
             PomSorter.sortDependencyManagement(basePath, Collections.singletonList(basePath.relativize(deploymentBomPath).toString()));
         }
         generateItest(cfg, templateParams);
@@ -474,20 +466,20 @@ public class CreateExtensionMojo extends AbstractMojo {
         return getExtensionProjectBaseDir().resolve("deployment");
     }
 
-    void generateExtensionProjects(Configuration cfg, TemplateParams templateParams) {
+    void generateExtensionProjects(Configuration cfg, TemplateParams.Builder templateParams) {
         final Path extParentPomPath = getExtensionProjectBaseDir().resolve("pom.xml");
-        evalTemplate(cfg, "parent-pom.xml", extParentPomPath, templateParams);
+        evalTemplate(cfg, "parent-pom.xml", extParentPomPath, templateParams.build());
 
         final Path extensionRuntimeBaseDir = getExtensionRuntimeBaseDir();
         final Path dir = extensionRuntimeBaseDir.resolve("src/main/java")
-                .resolve(templateParams.javaPackageBase.replace('.', '/'));
+                .resolve(templateParams.getJavaPackageBasePath());
         try {
             Files.createDirectories(dir);
         } catch (IOException e) {
             throw new RuntimeException("Could not create directories " + dir, e);
         }
         evalTemplate(cfg, "runtime-pom.xml", extensionRuntimeBaseDir.resolve("pom.xml"),
-                templateParams);
+                templateParams.build());
 
         if (keywords != null && !keywords.isEmpty()) {
             final Path metaInfDir = extensionRuntimeBaseDir.resolve("src/main/resources/META-INF");
@@ -496,64 +488,54 @@ public class CreateExtensionMojo extends AbstractMojo {
             } catch (IOException e) {
                 throw new RuntimeException("Could not create " + metaInfDir, e);
             }
-            evalTemplate(cfg, "quarkus-extension.yaml", metaInfDir.resolve("quarkus-extension.yaml"), templateParams);
+            evalTemplate(cfg, "quarkus-extension.yaml", metaInfDir.resolve("quarkus-extension.yaml"), templateParams.build());
         }
 
         evalTemplate(cfg, "deployment-pom.xml", getExtensionDeploymentBaseDir().resolve("pom.xml"),
-                templateParams);
+                templateParams.build());
         final Path processorPath = getExtensionDeploymentBaseDir()
                 .resolve("src/main/java")
-                .resolve(templateParams.javaPackageBase.replace('.', '/'))
+                .resolve(templateParams.getJavaPackageBasePath())
                 .resolve("deployment")
-                .resolve(toCapCamelCase(templateParams.artifactIdBase) + "Processor.java");
-        evalTemplate(cfg, "Processor.java", processorPath, templateParams);
+                .resolve(toCapCamelCase(templateParams.getArtifactIdBase()) + "Processor.java");
+        evalTemplate(cfg, "Processor.java", processorPath, templateParams.build());
     }
 
     PomTransformer pomTransformer(Path basePomXml) {
         return new PomTransformer(basePomXml, charset);
     }
 
-    TemplateParams getTemplateParams() throws MojoExecutionException {
-        final TemplateParams templateParams = new TemplateParams();
+    TemplateParams.Builder getTemplateParams() throws MojoExecutionException {
+        final TemplateParams.Builder templateParams = TemplateParams.builder();
 
-        templateParams.artifactId = artifactId;
-        templateParams.artifactIdPrefix = artifactIdPrefix;
-        templateParams.artifactIdBase = artifactIdBase;
-        templateParams.groupId = groupId;
-        templateParams.version = version;
+        templateParams.artifactId(artifactId);
+        templateParams.artifactIdPrefix(artifactIdPrefix);
+        templateParams.artifactIdBase(artifactIdBase);
+        templateParams.groupId(groupId);
+        templateParams.version(version);
 
-        templateParams.namePrefix = namePrefix;
-        templateParams.nameBase = nameBase;
-        templateParams.nameSegmentDelimiter = nameSegmentDelimiter;
-        templateParams.quarkusVersion = QUARKUS_VERSION_POM_EXPR;
-        templateParams.bomEntryVersion = bomEntryVersion.replace('@', '$');
+        templateParams.namePrefix(namePrefix);
+        templateParams.nameBase(nameBase);
+        templateParams.nameSegmentDelimiter(nameSegmentDelimiter);
+        templateParams.quarkusVersion(QUARKUS_VERSION_POM_EXPR);
+        templateParams.bomEntryVersion(bomEntryVersion.replace('@', '$'));
 
-        templateParams.javaPackageBase = javaPackageBase != null ? javaPackageBase
-                : getJavaPackage(templateParams.groupId, javaPackageInfix, artifactId);
-        templateParams.additionalRuntimeDependencies = getAdditionalRuntimeDependencies();
-        templateParams.runtimeBomPathSet = runtimeBomPath != null;
+        templateParams.javaPackageBase(javaPackageBase != null ? javaPackageBase
+                : getJavaPackage(templateParams.getGroupId(), javaPackageInfix, artifactId));
+        templateParams.additionalRuntimeDependencies(getAdditionalRuntimeDependencies());
+        templateParams.runtimeBomPathSet(runtimeBomPath != null);
 
-        templateParams.description = model.delegate.getDescription();
-        final String rawLabel = model.delegate.getLabel();
-        if (rawLabel != null) {
-            templateParams.keywords = Stream.of(rawLabel.split(","))
-                    .map(String::trim)
-                    .map(label -> label.toLowerCase(Locale.ROOT))
-                    .sorted()
-                    .collect(Collectors.toList());
-        } else {
-            templateParams.keywords = Collections.emptyList();
-        }
-        templateParams.guideUrl = guideUrl;
-        templateParams.categories = categories;
-        templateParams.nativeSupported = nativeSupported;
-        templateParams.kind = model.kind.name();
-        templateParams.models = models;
+        templateParams.modelParams(model);
+
+        templateParams.guideUrl(guideUrl);
+        templateParams.categories(categories);
+        templateParams.nativeSupported(nativeSupported);
+        templateParams.models(models);
 
         return templateParams;
     }
 
-    void generateItest(Configuration cfg, TemplateParams model) {
+    void generateItest(Configuration cfg, TemplateParams.Builder model) {
         final Path itestParentPath;
         final Path itestDir;
         if (nativeSupported) {
@@ -579,31 +561,31 @@ public class CreateExtensionMojo extends AbstractMojo {
             PomSorter.sortModules(itestParentPath);
         }
 
-        model.itestParentGroupId = getGroupId(itestParent);
-        model.itestParentArtifactId = itestParent.getArtifactId();
-        model.itestParentVersion = CqUtils.getVersion(itestParent);
-        model.itestParentRelativePath = "../pom.xml";
+        model.itestParentGroupId(getGroupId(itestParent));
+        model.itestParentArtifactId(itestParent.getArtifactId());
+        model.itestParentVersion(CqUtils.getVersion(itestParent));
+        model.itestParentRelativePath("../pom.xml");
 
         final Path itestPomPath = itestDir.resolve("pom.xml");
-        evalTemplate(cfg, "integration-test-pom.xml", itestPomPath, model);
+        evalTemplate(cfg, "integration-test-pom.xml", itestPomPath, model.build());
         PomSorter.updateMvndRules(basePath, itestPomPath, PomSorter.findExtensionArtifactIds(basePath, extensionDirs));
 
         if (nativeSupported) {
             evalTemplate(cfg, "integration-test-application.properties",
-                    itestDir.resolve("src/main/resources/application.properties"), model);
+                    itestDir.resolve("src/main/resources/application.properties"), model.build());
         }
 
-        final String artifactIdBaseCapCamelCase = toCapCamelCase(model.artifactIdBase);
-        final Path testResourcePath = itestDir.resolve("src/main/java/" + model.javaPackageBase.replace('.', '/')
+        final String artifactIdBaseCapCamelCase = toCapCamelCase(model.getArtifactIdBase());
+        final Path testResourcePath = itestDir.resolve("src/main/java/" + model.getJavaPackageBasePath()
                 + "/it/" + artifactIdBaseCapCamelCase + "Resource.java");
-        evalTemplate(cfg, "TestResource.java", testResourcePath, model);
+        evalTemplate(cfg, "TestResource.java", testResourcePath, model.build());
         final Path testClassDir = itestDir
-                .resolve("src/test/java/" + model.javaPackageBase.replace('.', '/') + "/it");
+                .resolve("src/test/java/" + model.getJavaPackageBasePath() + "/it");
         evalTemplate(cfg, "Test.java", testClassDir.resolve(artifactIdBaseCapCamelCase + "Test.java"),
-                model);
+                model.build());
         if (nativeSupported) {
             evalTemplate(cfg, "IT.java", testClassDir.resolve(artifactIdBaseCapCamelCase + "IT.java"),
-                    model);
+                    model.build());
         }
 
     }
@@ -702,17 +684,8 @@ public class CreateExtensionMojo extends AbstractMojo {
                 .collect(Collectors.joining("."));
     }
 
-    void evalTemplate(Configuration cfg, String templateUri, Path dest, TemplateParams model) {
-        getLog().info("Adding " + dest);
-        try {
-            final Template template = cfg.getTemplate(templateUri);
-            Files.createDirectories(dest.getParent());
-            try (Writer out = Files.newBufferedWriter(dest)) {
-                template.process(model, out);
-            }
-        } catch (IOException | TemplateException e) {
-            throw new RuntimeException("Could not evaluate template " + templateUri, e);
-        }
+    public void evalTemplate(Configuration cfg, String templateUri, Path dest, TemplateParams model) {
+        CqUtils.evalTemplate(cfg, templateUri, dest, model, m -> getLog().info(m));
     }
 
     static String artifactIdBase(String artifactId) {
@@ -723,156 +696,6 @@ public class CreateExtensionMojo extends AbstractMojo {
         } else {
             return artifactId;
         }
-    }
-
-    public static class TemplateParams {
-        public boolean nativeSupported;
-        public String itestParentRelativePath;
-        public String itestParentVersion;
-        public String itestParentArtifactId;
-        public String itestParentGroupId;
-        public String groupId;
-        public String artifactId;
-        public String artifactIdPrefix;
-        public String artifactIdBase;
-        public String version;
-        public String namePrefix;
-        public String nameBase;
-        public String nameSegmentDelimiter;
-        public String javaPackageBase;
-        public String quarkusVersion;
-        public List<Gavtcs> additionalRuntimeDependencies;
-        public boolean runtimeBomPathSet;
-        public String bomEntryVersion;
-        public String description;
-        public List<String> keywords;
-        public String guideUrl;
-        public List<String> categories;
-        public String kind;
-        public List<WrappedModel> models;
-        private final TemplateMethodModelEx toCapCamelCase = new TemplateMethodModelEx() {
-            @Override
-            public Object exec(List arguments) throws TemplateModelException {
-                if (arguments.size() != 1) {
-                    throw new TemplateModelException("Wrong argument count in toCamelCase()");
-                }
-                return toCapCamelCase(String.valueOf(arguments.get(0)));
-            }
-        };
-        private final TemplateMethodModelEx toSnakeCase = new TemplateMethodModelEx() {
-            @Override
-            public Object exec(List arguments) throws TemplateModelException {
-                if (arguments.size() != 1) {
-                    throw new TemplateModelException("Wrong argument count in toCamelCase()");
-                }
-                return toSnakeCase(String.valueOf(arguments.get(0)));
-            }
-        };
-
-        public boolean isNativeSupported() {
-            return nativeSupported;
-        }
-
-        public String getJavaPackageBase() {
-            return javaPackageBase;
-        }
-
-        public String getArtifactIdPrefix() {
-            return artifactIdPrefix;
-        }
-
-        public String getArtifactIdBase() {
-            return artifactIdBase;
-        }
-
-        public String getNamePrefix() {
-            return namePrefix;
-        }
-
-        public String getNameBase() {
-            return nameBase;
-        }
-
-        public String getNameSegmentDelimiter() {
-            return nameSegmentDelimiter;
-        }
-
-        public String getQuarkusVersion() {
-            return quarkusVersion;
-        }
-
-        public String getGroupId() {
-            return groupId;
-        }
-
-        public String getVersion() {
-            return version;
-        }
-
-        public String getArtifactId() {
-            return artifactId;
-        }
-
-        public List<Gavtcs> getAdditionalRuntimeDependencies() {
-            return additionalRuntimeDependencies;
-        }
-
-        public boolean isRuntimeBomPathSet() {
-            return runtimeBomPathSet;
-        }
-
-        public String getItestParentRelativePath() {
-            return itestParentRelativePath;
-        }
-
-        public String getItestParentVersion() {
-            return itestParentVersion;
-        }
-
-        public String getItestParentArtifactId() {
-            return itestParentArtifactId;
-        }
-
-        public String getItestParentGroupId() {
-            return itestParentGroupId;
-        }
-
-        public String getBomEntryVersion() {
-            return bomEntryVersion;
-        }
-
-        public String getDescription() {
-            return description;
-        }
-
-        public List<String> getKeywords() {
-            return keywords;
-        }
-
-        public String getGuideUrl() {
-            return guideUrl;
-        }
-
-        public List<String> getCategories() {
-            return categories;
-        }
-
-        public String getKind() {
-            return kind;
-        }
-
-        public List<WrappedModel> getModels() {
-            return models;
-        }
-
-        public TemplateMethodModelEx getToCapCamelCase() {
-            return toCapCamelCase;
-        }
-
-        public TemplateMethodModelEx getToSnakeCase() {
-            return toSnakeCase;
-        }
-
     }
 
 }

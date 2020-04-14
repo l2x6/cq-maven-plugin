@@ -91,8 +91,8 @@ public class CreateExtensionMojoTest {
         }
         mojo.runtimeBom = basePath.resolve("boms/runtime/pom.xml").toFile();
         mojo.deploymentBom = basePath.resolve("boms/deployment/pom.xml").toFile();
-        mojo.encoding = CreateExtensionMojo.DEFAULT_ENCODING;
-        mojo.templatesUriBase = CreateExtensionMojo.DEFAULT_TEMPLATES_URI_BASE;
+        mojo.encoding = CqUtils.DEFAULT_ENCODING;
+        mojo.templatesUriBase = CqUtils.DEFAULT_TEMPLATES_URI_BASE;
         mojo.quarkusVersion = CreateExtensionMojo.DEFAULT_QUARKUS_VERSION;
         mojo.bomEntryVersion = CreateExtensionMojo.DEFAULT_BOM_ENTRY_VERSION;
         mojo.nameSegmentDelimiter = CreateExtensionMojo.CQ_NAME_SEGMENT_DELIMITER;
