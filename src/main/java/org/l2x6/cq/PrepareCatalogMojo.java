@@ -105,10 +105,10 @@ public class PrepareCatalogMojo extends AbstractExtensionListMojo {
                             kindObject.addProperty("artifactId", ext.getRuntimeArtifactId());
                             kindObject.addProperty("version", ext.getVersion());
                             if (nativeSupported) {
-                                kindObject.addProperty("target", "Native");
+                                kindObject.addProperty("compilationTarget", "Native");
                                 kindObject.addProperty("supportLevel", "stable");
                             } else {
-                                kindObject.addProperty("target", "JVM");
+                                kindObject.addProperty("compilationTarget", "JVM");
                                 kindObject.addProperty("supportLevel", "preview");
                             }
 
@@ -169,10 +169,10 @@ public class PrepareCatalogMojo extends AbstractExtensionListMojo {
         other.addProperty("artifactId", ext.getRuntimeArtifactId());
         other.addProperty("version", ext.getVersion());
         if (nativeSupported) {
-            other.addProperty("target", "Native");
+            other.addProperty("compilationTarget", "Native");
             other.addProperty("supportLevel", "stable");
         } else {
-            other.addProperty("target", "JVM");
+            other.addProperty("compilationTarget", "JVM");
             other.addProperty("supportLevel", "preview");
         }
 

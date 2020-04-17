@@ -210,7 +210,7 @@ public class CqCatalog {
             this.supportLevel = sl;
             String t = null;
             try {
-                t = json.get("target").getAsString();
+                t = json.get("compilationTarget").getAsString();
             } catch (Exception ignored) {
             }
             this.target = t;
