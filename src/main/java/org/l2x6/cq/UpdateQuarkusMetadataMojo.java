@@ -27,12 +27,12 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
-import org.l2x6.cq.CqCatalog.WrappedModel;
 
 import freemarker.template.Configuration;
 
@@ -92,8 +92,8 @@ public class UpdateQuarkusMetadataMojo extends AbstractExtensionListMojo {
                         }
                     }
                     //getLog().info("Regenerating " + rootDir.toPath().relativize(quarkusExtensionsYamlPath));
-                    final List<WrappedModel> models = catalog.filterModels(artifactIdBase).stream()
-                            .filter(WrappedModel::isFirstScheme)
+                    final List<ArtifactModel<?>> models = catalog.filterModels(artifactIdBase).stream()
+                            .filter(CqCatalog::isFirstScheme)
                             .collect(Collectors.toList());
                     if (models.isEmpty()) {
                         //throw new IllegalStateException("Found zero models for " + extModule);
@@ -109,13 +109,13 @@ public class UpdateQuarkusMetadataMojo extends AbstractExtensionListMojo {
                         final String title = name.substring(NAME_PREFIX.length(), name.length() - NAME_SUFFIX.length());
                         final String description;
                         if (models.size() == 1) {
-                            description = models.get(0).delegate.getDescription();
+                            description = models.get(0).getDescription();
                             System.out.println(description);
                         } else {
                             //System.out.println("models.size() = " + models.size());
                             if (runtimePom.getDescription() == null || runtimePom.getDescription().trim().isEmpty()) {
                                 description = models.stream()
-                                        .map(m -> m.delegate.getDescription())
+                                        .map(m -> m.getDescription())
                                         .collect(Collectors.toSet())
                                         .stream()
                                         .collect(Collectors.joining(" "));
@@ -126,7 +126,7 @@ public class UpdateQuarkusMetadataMojo extends AbstractExtensionListMojo {
                             }
                         }
                         final Set<String> keywords = models.stream()
-                                .map(m -> m.delegate.getLabel())
+                                .map(m -> m.getLabel())
                                 .map(lbls -> lbls.split(","))
                                 .flatMap(Stream::of)
                                 .collect(Collectors.toCollection(TreeSet::new));
@@ -136,7 +136,7 @@ public class UpdateQuarkusMetadataMojo extends AbstractExtensionListMojo {
                                 .description(description)
                                 .keywords(keywords)
                                 .nativeSupported(extModule.isNativeSupported())
-                                .guideUrl(CqUtils.extensionDocUrl(rootDir.toPath(), artifactIdBase, models.get(0) /* FIXME */.kind))
+                                .guideUrl(CqUtils.extensionDocUrl(rootDir.toPath(), artifactIdBase, models.get(0) /* FIXME */.getKind()))
                                 .categories(org.l2x6.cq.CqUtils.DEFAULT_CATEGORIES)
                                 .build();
                         final Configuration cfg = CqUtils.getTemplateConfig(rootDir.toPath(), CqUtils.DEFAULT_TEMPLATES_URI_BASE,

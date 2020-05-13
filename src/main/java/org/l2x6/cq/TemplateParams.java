@@ -16,7 +16,6 @@
  */
 package org.l2x6.cq;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -25,7 +24,7 @@ import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import org.l2x6.cq.CqCatalog.WrappedModel;
+import org.apache.camel.tooling.model.ArtifactModel;
 import org.l2x6.cq.PomTransformer.Gavtcs;
 
 import freemarker.template.TemplateMethodModelEx;
@@ -55,7 +54,7 @@ public class TemplateParams {
     private final String guideUrl;
     private final List<String> categories;
     private final String kind;
-    private final List<WrappedModel> models;
+    private final List<ArtifactModel<?>> models;
     private final TemplateMethodModelEx toCapCamelCase = new TemplateMethodModelEx() {
         @Override
         public Object exec(List arguments) throws TemplateModelException {
@@ -198,7 +197,7 @@ public class TemplateParams {
         return kind;
     }
 
-    public List<WrappedModel> getModels() {
+    public List<ArtifactModel<?>> getModels() {
         return models;
     }
 
@@ -234,7 +233,7 @@ public class TemplateParams {
         private String guideUrl;
         private List<String> categories = new ArrayList<>();
         private String kind;
-        private List<WrappedModel> models = new ArrayList<>();
+        private List<ArtifactModel<?>> models = new ArrayList<>();
 
         public Builder nativeSupported(boolean nativeSupported) {
             this.nativeSupported = nativeSupported;
@@ -366,12 +365,12 @@ public class TemplateParams {
             return this;
         }
 
-        public Builder models(List<WrappedModel> models) {
-            this.models = models;
+        public Builder models(List<ArtifactModel<?>> model) {
+            this.models = model;
             return this;
         }
 
-        public Builder model(WrappedModel models) {
+        public Builder model(ArtifactModel<?> models) {
             this.models.add(models);
             return this;
         }
@@ -404,9 +403,9 @@ public class TemplateParams {
             return artifactIdBase;
         }
 
-        public Builder modelParams(WrappedModel model) {
-            description(model.delegate.getDescription());
-            final String rawLabel = model.delegate.getLabel();
+        public Builder modelParams(ArtifactModel<?> model) {
+            description(model.getDescription());
+            final String rawLabel = model.getLabel();
             if (rawLabel != null) {
                 keywords(Stream.of(rawLabel.split(","))
                         .map(String::trim)
@@ -416,7 +415,7 @@ public class TemplateParams {
             } else {
                 keywords(Collections.emptyList());
             }
-            kind(model.kind.name());
+            kind(model.getKind());
             return this;
         }
     }

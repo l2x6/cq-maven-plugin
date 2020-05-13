@@ -34,6 +34,7 @@ import java.util.stream.Stream;
 
 import javax.lang.model.SourceVersion;
 
+import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -340,8 +341,8 @@ public class CreateExtensionMojo extends AbstractMojo {
     @Parameter(required = true)
     List<ExtensionDir> extensionDirs;
 
-    List<org.l2x6.cq.CqCatalog.WrappedModel> models;
-    org.l2x6.cq.CqCatalog.WrappedModel model;
+    List<ArtifactModel<?>> models;
+    ArtifactModel<?> model;
 
     Charset charset;
 
@@ -376,7 +377,7 @@ public class CreateExtensionMojo extends AbstractMojo {
                 : artifactIdPrefix + artifactIdBase;
 
         if (nameBase == null) {
-            nameBase = model.delegate.getTitle();
+            nameBase = model.getTitle();
             if (nameBase == null) {
                 throw new MojoFailureException("Name not found for " + artifactIdBase);
             }
@@ -386,10 +387,10 @@ public class CreateExtensionMojo extends AbstractMojo {
         }
 
         if (this.description == null) {
-            this.description = model.delegate.getDescription();
+            this.description = model.getDescription();
         }
         if (this.keywords == null || this.keywords.isEmpty()) {
-            final String rawLabel = model.delegate.getLabel();
+            final String rawLabel = model.getLabel();
             if (rawLabel != null) {
                 this.keywords = Stream.of(rawLabel.split(","))
                         .map(String::trim)
@@ -406,7 +407,7 @@ public class CreateExtensionMojo extends AbstractMojo {
              * under https://camel.apache.org/camel-quarkus/latest/extensions
              * The value may get corrected by the maven Mojo that generates the .adoc files.
              */
-            this.guideUrl = CqUtils.entityDocUrl(artifactIdBase, model.kind);
+            this.guideUrl = CqUtils.entityDocUrl(artifactIdBase, model.getKind());
         }
         if (this.categories == null || this.categories.isEmpty()) {
             this.categories = org.l2x6.cq.CqUtils.DEFAULT_CATEGORIES;

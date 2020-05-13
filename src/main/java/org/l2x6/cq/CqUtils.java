@@ -30,10 +30,10 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
+import org.apache.camel.catalog.Kind;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
-import org.l2x6.cq.CqCatalog.Kind;
 
 import freemarker.cache.ClassTemplateLoader;
 import freemarker.cache.FileTemplateLoader;
@@ -130,7 +130,7 @@ public class CqUtils {
         }
     }
 
-    public static String extensionDocUrl(Path repoRootDir, String artifactIdBase, Kind kind) {
+    public static String extensionDocUrl(Path repoRootDir, String artifactIdBase, String kind) {
         final Path docPage = extensionDocPage(repoRootDir, artifactIdBase);
         if (Files.exists(docPage)) {
             return "https://camel.apache.org/camel-quarkus/latest/extensions/"+ artifactIdBase +".html";
@@ -143,8 +143,8 @@ public class CqUtils {
         return repoRootDir.resolve("docs/modules/ROOT/pages/extensions/" + artifactIdBase + ".adoc");
     }
 
-    public static String entityDocUrl(String artifactIdBase, Kind kind) {
-        return "https://camel.apache.org/components/latest/" + artifactIdBase + "-" + kind.name() + ".html";
+    public static String entityDocUrl(String artifactIdBase, String kind) {
+        return "https://camel.apache.org/components/latest/" + artifactIdBase + "-" + kind + ".html";
     }
 
     public static void evalTemplate(Configuration cfg, String templateUri, Path dest, TemplateParams model, Consumer<String> log) {

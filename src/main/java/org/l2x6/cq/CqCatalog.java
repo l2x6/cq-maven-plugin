@@ -24,13 +24,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.apache.camel.catalog.CamelCatalog;
 import org.apache.camel.catalog.DefaultCamelCatalog;
 import org.apache.camel.catalog.DefaultVersionManager;
+import org.apache.camel.catalog.Kind;
 import org.apache.camel.catalog.RuntimeProvider;
 import org.apache.camel.catalog.impl.CatalogHelper;
 import org.apache.camel.tooling.model.ArtifactModel;
@@ -57,16 +57,6 @@ public class CqCatalog {
         this.catalog = new DefaultCamelCatalog(true);
     }
 
-    public String toCamelComponentArtifactIdBase(String cqArtifactIdBase) {
-        if ("core".equals(cqArtifactIdBase)) {
-            return "base";
-        } else if ("reactive-executor".equals(cqArtifactIdBase)) {
-            return "reactive-executor-vertx";
-        } else {
-            return cqArtifactIdBase;
-        }
-    }
-
     public List<String> toCamelArtifactIdBase(String cqArtifactIdBase) {
         if ("core".equals(cqArtifactIdBase)) {
             return Arrays.asList("camel-base", "camel-core-languages");
@@ -77,212 +67,39 @@ public class CqCatalog {
         }
     }
 
-    public List<WrappedModel> filterModels(String artifactIdBase) {
+    public List<ArtifactModel<?>> filterModels(String artifactIdBase) {
         List<String> camelArtifactIds = toCamelArtifactIdBase(artifactIdBase);
-        return Stream.of(Kind.values())
-                .flatMap(kind -> kind.all(this))
-                .filter(wrappedModel -> camelArtifactIds.contains(wrappedModel.delegate.getArtifactId()))
+        return models()
+                .filter(model -> camelArtifactIds.contains(model.getArtifactId()))
                 .collect(Collectors.toList());
     }
 
-    enum Kind {
-        component() {
-            @Override
-            public Optional<WrappedModel> load(CqCatalog catalog, String name) {
-                final ArtifactModel<?> delegate = catalog.catalog.componentModel(name);
-                return Optional.ofNullable(delegate == null ? null : new WrappedModel(catalog, this, delegate));
-            }
-
-            @Override
-            protected Stream<WrappedModel> all(CqCatalog catalog) {
-                return catalog.catalog.findComponentNames().stream()
-                        .map(name -> new WrappedModel(catalog, this, catalog.catalog.componentModel(name)));
-            }
-
-            @Override
-            protected String getJson(CqCatalog catalog, BaseModel<?> delegate) {
-                return catalog.catalog.componentJSonSchema(delegate.getName());
-            }
-        },
-        language() {
-            @Override
-            public Optional<WrappedModel> load(CqCatalog catalog, String name) {
-                final ArtifactModel<?> delegate = catalog.catalog.languageModel(name);
-                return Optional.ofNullable(delegate == null ? null : new WrappedModel(catalog, this, delegate));
-            }
-
-            @Override
-            protected Stream<WrappedModel> all(CqCatalog catalog) {
-                return catalog.catalog.findLanguageNames().stream()
-                        .map(name -> new WrappedModel(catalog, this, catalog.catalog.languageModel(name)));
-            }
-
-            @Override
-            protected String getJson(CqCatalog catalog, BaseModel<?> delegate) {
-                return catalog.catalog.languageJSonSchema(delegate.getName());
-            }
-        },
-        dataformat() {
-            @Override
-            public Optional<WrappedModel> load(CqCatalog catalog, String name) {
-                final ArtifactModel<?> delegate = catalog.catalog.dataFormatModel(name);
-                return Optional.ofNullable(delegate == null ? null : new WrappedModel(catalog, this, delegate));
-            }
-
-            @Override
-            protected Stream<WrappedModel> all(CqCatalog catalog) {
-                return catalog.catalog.findDataFormatNames().stream()
-                        .map(name -> new WrappedModel(catalog, this, catalog.catalog.dataFormatModel(name)));
-            }
-
-            @Override
-            protected String getJson(CqCatalog catalog, BaseModel<?> delegate) {
-                return catalog.catalog.dataFormatJSonSchema(delegate.getName());
-            }
-        },
-        other() {
-            @Override
-            public Optional<WrappedModel> load(CqCatalog catalog, String name) {
-                final ArtifactModel<?> delegate = catalog.catalog.otherModel(name);
-                return Optional.ofNullable(delegate == null ? null : new WrappedModel(catalog, this, delegate));
-            }
-
-            @Override
-            protected Stream<WrappedModel> all(CqCatalog catalog) {
-                return catalog.catalog.findOtherNames().stream()
-                        .map(name -> new WrappedModel(catalog, this, catalog.catalog.otherModel(name)));
-            }
-
-            @Override
-            protected String getJson(CqCatalog catalog, BaseModel<?> delegate) {
-                return catalog.catalog.otherJSonSchema(delegate.getName());
-            }
-        };
-
-        public abstract Optional<WrappedModel> load(CqCatalog catalog, String name);
-
-        protected abstract Stream<WrappedModel> all(CqCatalog catalog);
-
-        protected abstract String getJson(CqCatalog catalog, BaseModel<?> delegate);
-
-        public String getPluralName() {
-            return name() + "s";
-        }
+    public Stream<ArtifactModel<?>> models() {
+        return kinds()
+                .flatMap(kind -> models(kind));
     }
 
-    public static class WrappedModel implements Comparable<WrappedModel> {
-        final ArtifactModel<?> delegate;
-        final Kind kind;
-        final CqCatalog catalog;
-        final String supportLevel;
-        final String target;
+    public Stream<ArtifactModel<?>> models(org.apache.camel.catalog.Kind kind) {
+        return catalog.findNames(kind).stream().map(name -> (ArtifactModel<?>) catalog.model(kind, name));
+    }
 
-        public WrappedModel(CqCatalog catalog, Kind kind, ArtifactModel<?> delegate) {
-            super();
-            this.catalog = catalog;
-            this.kind = kind;
-            this.delegate = delegate;
-            final JsonObject json = getJson().getAsJsonObject(kind.name());
-            String sl = null;
-            try {
-                sl = json.get("supportLevel").getAsString();
-            } catch (Exception ignored) {
-            }
-            this.supportLevel = sl;
-            String t = null;
-            try {
-                t = json.get("compilationTarget").getAsString();
-            } catch (Exception ignored) {
-            }
-            this.target = t;
-        }
+    public static Stream<org.apache.camel.catalog.Kind> kinds() {
+        return Stream.of(org.apache.camel.catalog.Kind.values())
+                .filter(kind -> kind != org.apache.camel.catalog.Kind.eip);
+    }
 
-        public String getArtifactId() {
-            return delegate.getArtifactId();
-        }
-
-        public String getArtifactIdBase() {
-            final String artifactId = delegate.getArtifactId();
-            if (artifactId.startsWith("camel-quarkus-")) {
-                return artifactId.substring("camel-quarkus-".length());
-            } else if (artifactId.startsWith("camel-")) {
-                return artifactId.substring("camel-".length());
-            }
-            throw new IllegalStateException(
-                    "Unexpected artifactId " + artifactId + "; expected one starting with camel-quarkus- or camel-");
-        }
-
-        public String getKind() {
-            return kind.name();
-        }
-
-        public boolean isFirstScheme() {
-            switch (kind) {
-            case component:
-                final String altSchemes = ((ComponentModel) delegate).getAlternativeSchemes();
-                if (altSchemes == null || altSchemes.isEmpty()) {
-                    return true;
-                } else {
-                    final String scheme = delegate.getName();
-                    return altSchemes.equals(scheme) || altSchemes.startsWith(scheme + ",");
-                }
-            default:
+    public static boolean isFirstScheme(ArtifactModel<?> model) {
+        if (model.getKind().equals("component")) {
+            final String altSchemes = ((ComponentModel) model).getAlternativeSchemes();
+            if (altSchemes == null || altSchemes.isEmpty()) {
                 return true;
+            } else {
+                final String scheme = model.getName();
+                return altSchemes.equals(scheme) || altSchemes.startsWith(scheme + ",");
             }
+        } else {
+            return true;
         }
-
-        public String getSyntax() {
-            switch (kind) {
-            case component:
-                return ((ComponentModel) delegate).getSyntax();
-            default:
-                throw new UnsupportedOperationException(kind.getPluralName() + " do not have syntax");
-            }
-        }
-
-        public String getFirstVersion() {
-            return delegate.getFirstVersion();
-        }
-
-        public String getTitle() {
-            return delegate.getTitle();
-        }
-
-        public String getDescription() {
-            return delegate.getDescription();
-        }
-
-        public boolean isDeprecated() {
-            return delegate.isDeprecated();
-        }
-
-        public JsonObject getJson() {
-            final JsonParser jsonParser = new JsonParser();
-            return (JsonObject) jsonParser.parse(kind.getJson(catalog, delegate));
-        }
-
-        @Override
-        public String toString() {
-            return "WrappedModel [scheme=" + delegate.getName() + ", kind=" + getKind() + "]";
-        }
-
-        @Override
-        public int compareTo(WrappedModel other) {
-            return this.getTitle().compareToIgnoreCase(other.getTitle());
-        }
-
-        public String getSupportLevel() {
-            return supportLevel;
-        }
-
-        public String getTarget() {
-            return target;
-        }
-
-        public String getScheme() {
-            return delegate.getName();
-        }
-
     }
 
     static class CqVersionManager extends DefaultVersionManager {
@@ -305,15 +122,16 @@ public class CqCatalog {
     }
 
     static class CqRuntimeProvider implements RuntimeProvider {
+        public static final String CQ_CATALOG_DIR = "org/apache/camel/catalog/quarkus";
 
-        private static final String COMPONENT_DIR = PrepareCatalogMojo.CQ_CATALOG_DIR  + "/components";
-        private static final String DATAFORMAT_DIR = PrepareCatalogMojo.CQ_CATALOG_DIR  + "/dataformats";
-        private static final String LANGUAGE_DIR = PrepareCatalogMojo.CQ_CATALOG_DIR  + "/languages";
-        private static final String OTHER_DIR = PrepareCatalogMojo.CQ_CATALOG_DIR  + "/others";
-        private static final String COMPONENTS_CATALOG = PrepareCatalogMojo.CQ_CATALOG_DIR  + "/components.properties";
-        private static final String DATA_FORMATS_CATALOG = PrepareCatalogMojo.CQ_CATALOG_DIR  + "/dataformats.properties";
-        private static final String LANGUAGE_CATALOG = PrepareCatalogMojo.CQ_CATALOG_DIR  + "/languages.properties";
-        private static final String OTHER_CATALOG = PrepareCatalogMojo.CQ_CATALOG_DIR  + "/others.properties";
+        private static final String COMPONENT_DIR = CQ_CATALOG_DIR + "/components";
+        private static final String DATAFORMAT_DIR = CQ_CATALOG_DIR + "/dataformats";
+        private static final String LANGUAGE_DIR = CQ_CATALOG_DIR + "/languages";
+        private static final String OTHER_DIR = CQ_CATALOG_DIR + "/others";
+        private static final String COMPONENTS_CATALOG = CQ_CATALOG_DIR + "/components.properties";
+        private static final String DATA_FORMATS_CATALOG = CQ_CATALOG_DIR + "/dataformats.properties";
+        private static final String LANGUAGE_CATALOG = CQ_CATALOG_DIR + "/languages.properties";
+        private static final String OTHER_CATALOG = CQ_CATALOG_DIR + "/others.properties";
 
         private CamelCatalog camelCatalog;
 
@@ -437,6 +255,10 @@ public class CqCatalog {
             }
             return names;
         }
+    }
+
+    public BaseModel<?> load(org.apache.camel.catalog.Kind kind, String name) {
+        return catalog.model(kind, name);
     }
 
 }

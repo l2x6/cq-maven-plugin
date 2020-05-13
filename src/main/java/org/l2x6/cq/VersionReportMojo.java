@@ -28,15 +28,13 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.camel.tooling.model.BaseModel;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
-import org.l2x6.cq.CqCatalog.Kind;
-import org.l2x6.cq.CqCatalog.WrappedModel;
 
 /**
  * Prepares a report upon releasing a new Camel Quarkus version.
@@ -94,30 +92,29 @@ public class VersionReportMojo extends AbstractExtensionListMojo {
                 final CqCatalog currentCatalog = new CqCatalog(currentCatalogFs.getRootDirectories().iterator().next());
                 final CqCatalog previousCatalog = new CqCatalog(previousCatalogFs.getRootDirectories().iterator().next());
 
-                for (Kind kind : Kind.values()) {
-                    final String pluralName = CreateExtensionMojo.toCapCamelCase(kind.getPluralName());
+                CqCatalog.kinds().forEach(kind -> {
+                    final String pluralName = CreateExtensionMojo.toCapCamelCase(kind.name() + "s");
                     final AtomicInteger cnt = new AtomicInteger();
                     final String kindItem = pluralName + ":\n";
                     details.append(kindItem);
-                    kind.all(currentCatalog)
-                            .sorted()
+                    currentCatalog.models(kind)
+                            .sorted(BaseModel.compareTitle())
                             .forEach(currentModel -> {
                                 if (reportVersion.equals(currentModel.getFirstVersion())) {
                                     /* added in this version */
                                     details.append("• ").append(currentModel.getTitle());
-                                    if ("JVM".equals(currentModel.getTarget())) {
+                                    if (!currentModel.isNativeSupported()) {
                                         details.append(" (JVM only)");
                                     }
                                     details.append('\n');
                                     cnt.incrementAndGet();
                                 } else {
                                     /* added earlier */
-                                    if (!"JVM".equals(currentModel.getTarget())) {
+                                    if (currentModel.isNativeSupported()) {
                                         /* It is native now, check whether was JVM in the previous version */
                                         try {
-                                            Optional<WrappedModel> previousModel = kind.load(previousCatalog,
-                                                    currentModel.getScheme());
-                                            if (previousModel.isPresent() && "JVM".equals(previousModel.get().getTarget())) {
+                                            BaseModel<?> previousModel = previousCatalog.load(kind, currentModel.getName());
+                                            if (previousModel != null && !previousModel.isNativeSupported()) {
                                                 details.append("• ").append(currentModel.getTitle()).append(" +native")
                                                         .append('\n');
                                             }
@@ -132,9 +129,9 @@ public class VersionReportMojo extends AbstractExtensionListMojo {
                     if (cnt.get() == 0) {
                         details.delete(details.length() - kindItem.length(), details.length());
                     } else {
-                        counts.append("• ").append(cnt.get()).append(" new ").append(kind.getPluralName()).append("\n");
+                        counts.append("• ").append(cnt.get()).append(" new ").append(kind.name()).append("s\n");
                     }
-                }
+                });
             }
 
             getLog().info("Counts:\n\n\n" + counts.toString() + "\n\n");
