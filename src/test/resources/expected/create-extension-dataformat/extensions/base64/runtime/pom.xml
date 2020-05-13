@@ -30,7 +30,7 @@
 
     <artifactId>camel-quarkus-base64</artifactId>
     <name>Camel Quarkus :: Base64 :: Runtime</name>
-    <description>The Base64 data format is used for base64 encoding and decoding.</description>
+    <description>Encode and decode data using Base64.</description>
 
     <properties>
         <firstVersion>1.0.0-M6</firstVersion>

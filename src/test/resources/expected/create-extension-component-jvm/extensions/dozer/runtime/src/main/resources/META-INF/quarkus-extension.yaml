@@ -17,7 +17,7 @@
 
 ---
 name: "Dozer"
-description: "The dozer component provides the ability to map between Java beans using the Dozer mapping library."
+description: "Map between Java beans using the Dozer mapping library."
 metadata:
   unlisted: true
   keywords:

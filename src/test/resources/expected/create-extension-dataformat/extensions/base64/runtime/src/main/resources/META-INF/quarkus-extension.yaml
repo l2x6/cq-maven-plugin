@@ -17,7 +17,7 @@
 
 ---
 name: "Base64"
-description: "The Base64 data format is used for base64 encoding and decoding."
+description: "Encode and decode data using Base64."
 metadata:
   keywords:
   - "dataformat"
