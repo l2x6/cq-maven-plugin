@@ -17,15 +17,16 @@
 package org.l2x6.cq;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.maven.model.Model;
@@ -42,7 +43,6 @@ import freemarker.template.Configuration;
 @Mojo(name = "update-quarkus-metadata", requiresProject = true, inheritByDefault = false)
 public class UpdateQuarkusMetadataMojo extends AbstractExtensionListMojo {
 
-    private static final String NAME_PREFIX = "Camel Quarkus :: ";
     private static final String NAME_SUFFIX = " :: Runtime";
 
     /**
@@ -55,6 +55,7 @@ public class UpdateQuarkusMetadataMojo extends AbstractExtensionListMojo {
 
     /**
      * URI prefix to use when looking up FreeMarker templates when generating {@code quarkus-extension.yaml} files.
+     * {@code file:} URIs will be resolved relative to {@link #rootDir}.
      *
      * @since 0.3.0
      */
@@ -72,82 +73,43 @@ public class UpdateQuarkusMetadataMojo extends AbstractExtensionListMojo {
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         final CqCatalog catalog = new CqCatalog();
+        final List<String> errors = new ArrayList<>();
         CqUtils.findExtensions(extensionDirectories.stream().map(File::toPath).sorted(),
                 artifactIdBase -> !skipArtifactIdBases.contains(artifactIdBase))
                 .forEach(extModule -> {
                     final String artifactIdBase = extModule.getArtifactIdBase();
                     final Path quarkusExtensionsYamlPath = extModule.getExtensionDir()
                             .resolve("runtime/src/main/resources/META-INF/quarkus-extension.yaml");
-                    if (Files.exists(quarkusExtensionsYamlPath)) {
-                        try {
-                            final String oldContent = new String(Files.readAllBytes(quarkusExtensionsYamlPath),
-                                    StandardCharsets.UTF_8);
-                            if (/* oldContent.contains(SKIP_MARKER) || */ oldContent.contains("unlisted: true")) {
-//                                getLog().info("Skipping a manually maintained or unlisted file "
-//                                        + rootDir.toPath().relativize(quarkusExtensionsYamlPath));
-                                return;
-                            }
-                        } catch (IOException e) {
-                            throw new RuntimeException("Could not read " + quarkusExtensionsYamlPath, e);
-                        }
+                    getLog().info("Regenerating " + rootDir.toPath().relativize(quarkusExtensionsYamlPath));
+                    final List<ArtifactModel<?>> models = catalog.primaryModel(artifactIdBase);
+                    final Model runtimePom = CqUtils.readPom(extModule.getRuntimePomPath(), StandardCharsets.UTF_8);
+                    final Path relativeRuntimePomPath = rootDir.toPath().relativize(extModule.getRuntimePomPath());
+
+                    final String name = runtimePom.getName();
+                    if (!name.endsWith(NAME_SUFFIX)) {
+                        throw new RuntimeException("The name in " + relativeRuntimePomPath +" must end with '"+ NAME_SUFFIX +"'; found: " + name);
                     }
-                    //getLog().info("Regenerating " + rootDir.toPath().relativize(quarkusExtensionsYamlPath));
-                    final List<ArtifactModel<?>> models = catalog.filterModels(artifactIdBase).stream()
-                            .filter(CqCatalog::isFirstScheme)
-                            .collect(Collectors.toList());
-                    if (models.isEmpty()) {
-                        //throw new IllegalStateException("Found zero models for " + extModule);
-                    } else {
-                        final Model runtimePom = CqUtils.readPom(extModule.getRuntimePomPath(), StandardCharsets.UTF_8);
-                        final String name = runtimePom.getName();
-                        if (!name.startsWith(NAME_PREFIX)) {
-                            throw new RuntimeException("The name in " + extModule.getRuntimePomPath() +" must start with '"+ NAME_PREFIX +"'; found: " + name);
-                        }
-                        if (!name.endsWith(NAME_SUFFIX)) {
-                            throw new RuntimeException("The name in " + extModule.getRuntimePomPath() +" must end with '"+ NAME_SUFFIX +"'; found: " + name);
-                        }
-                        final String title = name.substring(NAME_PREFIX.length(), name.length() - NAME_SUFFIX.length());
-                        final String description;
-                        if (models.size() == 1) {
-                            description = models.get(0).getDescription();
-                            System.out.println(description);
-                        } else {
-                            //System.out.println("models.size() = " + models.size());
-                            if (runtimePom.getDescription() == null || runtimePom.getDescription().trim().isEmpty()) {
-                                description = models.stream()
-                                        .map(m -> m.getDescription())
-                                        .collect(Collectors.toSet())
-                                        .stream()
-                                        .collect(Collectors.joining(" "));
-
-                                //throw new RuntimeException("Description must be set in " + extModule.getRuntimePomPath());
-                            } else {
-                                description = runtimePom.getDescription();
-                            }
-                        }
-                        final Set<String> keywords = models.stream()
-                                .map(m -> m.getLabel())
-                                .map(lbls -> lbls.split(","))
-                                .flatMap(Stream::of)
-                                .collect(Collectors.toCollection(TreeSet::new));
-
-                        final TemplateParams templateParams = TemplateParams.builder()
-                                .nameBase(title)
-                                .description(description)
-                                .keywords(keywords)
-                                .nativeSupported(extModule.isNativeSupported())
-                                .guideUrl(CqUtils.extensionDocUrl(rootDir.toPath(), artifactIdBase, models.get(0) /* FIXME */.getKind()))
-                                .categories(org.l2x6.cq.CqUtils.DEFAULT_CATEGORIES)
-                                .build();
-                        final Configuration cfg = CqUtils.getTemplateConfig(rootDir.toPath(), CqUtils.DEFAULT_TEMPLATES_URI_BASE,
-                                templatesUriBase, encoding);
-
-                        CqUtils.evalTemplate(cfg, "quarkus-extension.yaml", quarkusExtensionsYamlPath, templateParams,
-                                m -> {
-                                });
+                    final int startDelimPos = name.lastIndexOf(" :: ", name.length() - NAME_SUFFIX.length() - 1);
+                    if (startDelimPos < 0) {
+                        throw new RuntimeException("The name in " + relativeRuntimePomPath +" must start with '<whatever> :: '; found: " + name);
                     }
+                    final String titleBase = name.substring(startDelimPos + 4, name.length() - NAME_SUFFIX.length());
+                    final String rawKeywords = (String) runtimePom.getProperties().getProperty("quarkus.metadata.keywords");
+                    final List<String> keywords = rawKeywords != null ? Arrays.asList(rawKeywords.split(",")) : Collections.emptyList();
+                    final boolean unlisted = !extModule.isNativeSupported() || Boolean.parseBoolean(runtimePom.getProperties().getProperty("quarkus.metadata.unlisted", "false"));
+
+                    final TemplateParams templateParams = CqUtils.quarkusExtensionYamlParams(models, artifactIdBase, titleBase, runtimePom.getDescription(), keywords, unlisted, extModule.isNativeSupported(), rootDir.toPath(), getLog(), errors);
+                    final Configuration cfg = CqUtils.getTemplateConfig(rootDir.toPath(), CqUtils.DEFAULT_TEMPLATES_URI_BASE,
+                            templatesUriBase, encoding);
+
+                    CqUtils.evalTemplate(cfg, "quarkus-extension.yaml", quarkusExtensionsYamlPath, templateParams,
+                            m -> {
+                            });
 
                 });
+        if (!errors.isEmpty()) {
+            throw new MojoFailureException(errors.stream().collect(Collectors.joining("\n")));
+        }
     }
 
 }

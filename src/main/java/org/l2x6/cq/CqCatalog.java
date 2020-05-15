@@ -67,11 +67,27 @@ public class CqCatalog {
         }
     }
 
-    public List<ArtifactModel<?>> filterModels(String artifactIdBase) {
-        List<String> camelArtifactIds = toCamelArtifactIdBase(artifactIdBase);
+    public Stream<ArtifactModel<?>> filterModels(String cqArtifactIdBase) {
+        List<String> camelArtifactIds = toCamelArtifactIdBase(cqArtifactIdBase);
         return models()
-                .filter(model -> camelArtifactIds.contains(model.getArtifactId()))
+                .filter(model -> camelArtifactIds.contains(model.getArtifactId()));
+    }
+
+    public List<ArtifactModel<?>> primaryModel(String cqArtifactIdBase) {
+        final List<ArtifactModel<?>> models = filterModels(cqArtifactIdBase)
+                .filter(CqCatalog::isFirstScheme)
+                .filter(m -> !m.getName().startsWith("google-") || !m.getName().endsWith("-stream")) // ignore the google stream component variants
                 .collect(Collectors.toList());
+        if (models.size() > 1) {
+            List<ArtifactModel<?>> componentModels = models.stream()
+                    .filter(m -> m.getKind().equals("component"))
+                    .collect(Collectors.toList());
+            if (componentModels.size() == 1) {
+                /* If there is only one component take that one */
+                return componentModels;
+            }
+        }
+        return models;
     }
 
     public Stream<ArtifactModel<?>> models() {

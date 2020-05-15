@@ -16,23 +16,25 @@
  */
 package org.l2x6.cq;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import org.apache.camel.catalog.Kind;
+import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
+import org.apache.maven.plugin.logging.Log;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 
 import freemarker.cache.ClassTemplateLoader;
@@ -158,6 +160,63 @@ public class CqUtils {
         } catch (IOException | TemplateException e) {
             throw new RuntimeException("Could not evaluate template " + templateUri, e);
         }
+    }
+
+    public static TemplateParams quarkusExtensionYamlParams(List<ArtifactModel<?>> models, String artifactIdBase, String titleBase, String description, List<String> keywords, boolean unlisted, boolean isNativeSupported, Path rootDir, Log log, List<String> errors) {
+        final String kind;
+        if (models.isEmpty()) {
+            if (!unlisted) {
+                log.debug(artifactIdBase + ": found zero models");
+            }
+            kind = null;
+        } else {
+            if (models.size() == 1) {
+                final ArtifactModel<?> model = models.get(0);
+                if (description == null) {
+                    description = model.getDescription();
+                }
+                String expectedTitle = model.getTitle();
+                if (expectedTitle.toLowerCase(Locale.ROOT).startsWith("json ")) {
+                    expectedTitle = expectedTitle.substring("json ".length());
+                }
+                if (titleBase != null && !titleBase.equals(expectedTitle)) {
+                    log.warn(artifactIdBase + ": expected name base '"+ expectedTitle +"' found '"+ titleBase +"'");
+                }
+                kind = model.getKind();
+            } else {
+                if (description == null) {
+                    final Set<String> uniqueDescriptions = models.stream()
+                            .map(m -> m.getDescription())
+                            .collect(Collectors.toSet());
+                    description = uniqueDescriptions
+                            .stream()
+                            .collect(Collectors.joining(" "));
+                    if (uniqueDescriptions.size() > 1) {
+                        log.warn(artifactIdBase + ": Consider adding and explicit <description> if you do not like the concatenated description: " + description);
+                    }
+                }
+                kind = models.get(0).getKind();
+            }
+        }
+        if (description == null) {
+            final String msg = artifactIdBase + ": Add and explicit <description>";
+            log.error(msg);
+            errors.add(msg);
+        }
+
+        return TemplateParams.builder()
+                .nameBase(titleBase)
+                .description(sanitizeDescription(description))
+                .keywords(keywords)
+                .unlisted(unlisted)
+                .nativeSupported(isNativeSupported)
+                .guideUrl(CqUtils.extensionDocUrl(rootDir, artifactIdBase, kind))
+                .categories(org.l2x6.cq.CqUtils.DEFAULT_CATEGORIES)
+                .build();
+    }
+
+    public static String sanitizeDescription(String description) {
+        return description.endsWith(".") ? description.substring(0, description.length() - 1) : description;
     }
 
 }

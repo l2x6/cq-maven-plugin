@@ -361,12 +361,13 @@ public class CreateExtensionMojo extends AbstractMojo {
         }
 
         charset = Charset.forName(encoding);
-        this.models = new CqCatalog().filterModels(artifactIdBase);
-        switch (models.size()) {
+        this.models = new CqCatalog().filterModels(artifactIdBase).collect(Collectors.toList());
+        final List<ArtifactModel<?>> primaryModels = new CqCatalog().primaryModel(artifactIdBase);
+        switch (primaryModels.size()) {
         case 0:
             throw new IllegalStateException("Could not find name " + artifactIdBase + " in Camel catalog");
         default:
-            this.model = models.get(0);
+            this.model = primaryModels.get(0);
             break;
         }
 
@@ -389,17 +390,8 @@ public class CreateExtensionMojo extends AbstractMojo {
         if (this.description == null) {
             this.description = model.getDescription();
         }
-        if (this.keywords == null || this.keywords.isEmpty()) {
-            final String rawLabel = model.getLabel();
-            if (rawLabel != null) {
-                this.keywords = Stream.of(rawLabel.split(","))
-                        .map(String::trim)
-                        .map(label -> label.toLowerCase(Locale.ROOT))
-                        .sorted()
-                        .collect(Collectors.toList());
-            } else {
-                this.keywords = Collections.emptyList();
-            }
+        if (this.keywords == null) {
+            this.keywords = Collections.emptyList();
         }
         if (this.guideUrl == null) {
             /*
@@ -482,15 +474,14 @@ public class CreateExtensionMojo extends AbstractMojo {
         evalTemplate(cfg, "runtime-pom.xml", extensionRuntimeBaseDir.resolve("pom.xml"),
                 templateParams.build());
 
-        if (keywords != null && !keywords.isEmpty()) {
-            final Path metaInfDir = extensionRuntimeBaseDir.resolve("src/main/resources/META-INF");
-            try {
-                Files.createDirectories(metaInfDir);
-            } catch (IOException e) {
-                throw new RuntimeException("Could not create " + metaInfDir, e);
-            }
-            evalTemplate(cfg, "quarkus-extension.yaml", metaInfDir.resolve("quarkus-extension.yaml"), templateParams.build());
+        final TemplateParams quarkusExtensionYamlParams = CqUtils.quarkusExtensionYamlParams(models, artifactIdBase, nameBase, description, keywords, !nativeSupported, nativeSupported, runtimeBomPath.getParent().getParent().getParent(), getLog(), new ArrayList<>());
+        final Path metaInfDir = extensionRuntimeBaseDir.resolve("src/main/resources/META-INF");
+        try {
+            Files.createDirectories(metaInfDir);
+        } catch (IOException e) {
+            throw new RuntimeException("Could not create " + metaInfDir, e);
         }
+        evalTemplate(cfg, "quarkus-extension.yaml", metaInfDir.resolve("quarkus-extension.yaml"), quarkusExtensionYamlParams);
 
         evalTemplate(cfg, "deployment-pom.xml", getExtensionDeploymentBaseDir().resolve("pom.xml"),
                 templateParams.build());
@@ -531,6 +522,7 @@ public class CreateExtensionMojo extends AbstractMojo {
         templateParams.guideUrl(guideUrl);
         templateParams.categories(categories);
         templateParams.nativeSupported(nativeSupported);
+        templateParams.unlisted(!nativeSupported);
         templateParams.models(models);
 
         return templateParams;

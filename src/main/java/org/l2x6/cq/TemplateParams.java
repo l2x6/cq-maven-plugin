@@ -32,6 +32,7 @@ import freemarker.template.TemplateModelException;
 
 public class TemplateParams {
     private final boolean nativeSupported;
+    private final boolean unlisted;
     private final String itestParentRelativePath;
     private final String itestParentVersion;
     private final String itestParentArtifactId;
@@ -80,6 +81,7 @@ public class TemplateParams {
 
     private TemplateParams(Builder builder) {
         this.nativeSupported = builder.nativeSupported;
+        this.unlisted = builder.unlisted;
         this.itestParentRelativePath = builder.itestParentRelativePath;
         this.itestParentVersion = builder.itestParentVersion;
         this.itestParentArtifactId = builder.itestParentArtifactId;
@@ -234,6 +236,7 @@ public class TemplateParams {
         private List<String> categories = new ArrayList<>();
         private String kind;
         private List<ArtifactModel<?>> models = new ArrayList<>();
+        private boolean unlisted;
 
         public Builder nativeSupported(boolean nativeSupported) {
             this.nativeSupported = nativeSupported;
@@ -418,6 +421,15 @@ public class TemplateParams {
             kind(model.getKind());
             return this;
         }
+
+        public Builder unlisted(boolean unlisted) {
+            this.unlisted = unlisted;
+            return this;
+        }
+    }
+
+    public boolean isUnlisted() {
+        return unlisted;
     }
 
 }
