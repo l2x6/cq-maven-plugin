@@ -334,6 +334,16 @@ public class CreateExtensionMojo extends AbstractMojo {
     boolean nativeSupported;
 
     /**
+     * If {@code true} the mojo creates some empty directories for user's convenience, such as {@code src/main/java/...} for
+     * user's convenience. Otherwise, these empty directories are not created. Setting this option to {@code false}
+     * might be useful when testing.
+     *
+     * @since 0.0.9
+     */
+    @Parameter(property = "cq.createConvenienceDirs", defaultValue = "true")
+    boolean createConvenienceDirs = true;
+
+    /**
      * A list of directory paths relative to the current module's {@code baseDir} containing Quarkus extensions.
      *
      * @since 0.0.1
@@ -464,12 +474,9 @@ public class CreateExtensionMojo extends AbstractMojo {
         evalTemplate(cfg, "parent-pom.xml", extParentPomPath, templateParams.build());
 
         final Path extensionRuntimeBaseDir = getExtensionRuntimeBaseDir();
-        final Path dir = extensionRuntimeBaseDir.resolve("src/main/java")
-                .resolve(templateParams.getJavaPackageBasePath());
-        try {
-            Files.createDirectories(dir);
-        } catch (IOException e) {
-            throw new RuntimeException("Could not create directories " + dir, e);
+        if (createConvenienceDirs) {
+            createDirectories(extensionRuntimeBaseDir.resolve("src/main/java").resolve(templateParams.getJavaPackageBasePath()));
+            // TODO: createDirectories(extensionRuntimeBaseDir.resolve("src/main/doc"));
         }
         evalTemplate(cfg, "runtime-pom.xml", extensionRuntimeBaseDir.resolve("pom.xml"),
                 templateParams.build());
@@ -491,6 +498,14 @@ public class CreateExtensionMojo extends AbstractMojo {
                 .resolve("deployment")
                 .resolve(toCapCamelCase(templateParams.getArtifactIdBase()) + "Processor.java");
         evalTemplate(cfg, "Processor.java", processorPath, templateParams.build());
+    }
+
+    private void createDirectories(final Path dir) {
+        try {
+            Files.createDirectories(dir);
+        } catch (IOException e) {
+            throw new RuntimeException("Could not create directories " + dir, e);
+        }
     }
 
     PomTransformer pomTransformer(Path basePomXml) {

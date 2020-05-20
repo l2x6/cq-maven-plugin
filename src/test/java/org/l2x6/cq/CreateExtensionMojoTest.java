@@ -102,6 +102,7 @@ public class CreateExtensionMojoTest {
         mojo.javaPackageInfix = CreateExtensionMojo.CQ_JAVA_PACKAGE_INFIX;
         mojo.additionalRuntimeDependencies = Arrays.asList(CreateExtensionMojo.CQ_ADDITIONAL_RUNTIME_DEPENDENCIES.split(","));
         mojo.extensionDirs = Collections.singletonList(new ExtensionDir("extensions", "camel-quarkus-"));
+        mojo.createConvenienceDirs = false;
 
         return mojo;
     }
