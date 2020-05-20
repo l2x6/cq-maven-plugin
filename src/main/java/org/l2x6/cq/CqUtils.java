@@ -23,6 +23,7 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -187,7 +188,7 @@ public class CqUtils {
                 if (description == null) {
                     final Set<String> uniqueDescriptions = models.stream()
                             .map(m -> m.getDescription())
-                            .collect(Collectors.toSet());
+                            .collect(Collectors.toCollection(LinkedHashSet::new));
                     description = uniqueDescriptions
                             .stream()
                             .collect(Collectors.joining(" "));
