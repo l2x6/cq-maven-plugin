@@ -25,6 +25,7 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -52,6 +53,9 @@ public class VersionReportMojo extends AbstractExtensionListMojo {
     @Parameter(property = "cq.versions")
     String versions;
 
+    @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
+    String localRepository;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         if (skipArtifactIdBases == null) {
@@ -69,11 +73,11 @@ public class VersionReportMojo extends AbstractExtensionListMojo {
             final Path tempDir = Files.createTempDirectory(getClass().getSimpleName());
 
             for (String version : versions) {
-                final String uri = String.format(
-                        "https://repository.apache.org/content/groups/public/org/apache/camel/quarkus/camel-quarkus-catalog/%s/camel-quarkus-catalog-%s.jar",
-                        version, version);
-                final URL url = new URL(uri);
-                try (InputStream in = url.openStream();
+                final String relativeJarPath = String.format("org/apache/camel/quarkus/camel-quarkus-catalog/%s/camel-quarkus-catalog-%s.jar", version, version);
+                final Path localPath = Paths.get(localRepository).resolve(relativeJarPath);
+                final boolean localExists = Files.exists(localPath);
+                final String remoteUri = "https://repository.apache.org/content/groups/public/" + relativeJarPath;
+                try (InputStream in = (localExists ? Files.newInputStream(localPath) : new URL(remoteUri).openStream());
                         OutputStream out = Files.newOutputStream(tempDir.resolve(version + ".jar"))) {
                     final byte[] buf = new byte[4096];
                     int len;
