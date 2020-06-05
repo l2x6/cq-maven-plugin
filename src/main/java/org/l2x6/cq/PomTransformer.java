@@ -47,6 +47,7 @@ import org.w3c.dom.DOMException;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+import org.w3c.dom.Text;
 
 /**
  * A utility to transform {@code pom.xml} files on the DOM level while keeping the original comments and formatting also
@@ -64,6 +65,7 @@ public class PomTransformer {
     static final Pattern[] POSTPROCESS_PATTERNS = new Pattern[] { Pattern.compile("(<\\?xml[^>]*\\?>)?(\\s*)<"),
             Pattern.compile("(\\s*)<project([^>]*)>"), Pattern.compile("\\s*$") };
     static final Pattern EOL_PATTERN = Pattern.compile("\r?\n");
+    static final Pattern WS_PATTERN = Pattern.compile("[ \t\n\r]+");
 
     private final Path path;
     private final Charset charset;
@@ -161,12 +163,12 @@ public class PomTransformer {
                 int i = ws.length() - 1;
                 LOOP: while (i >= 0) {
                     switch (ws.charAt(i)) {
-                        case ' ':
-                        case '\t':
-                            i--;
-                            break;
-                        default:
-                            break LOOP;
+                    case ' ':
+                    case '\t':
+                        i--;
+                        break;
+                    default:
+                        break LOOP;
                     }
                 }
                 return ws.substring(i + 1);
@@ -519,6 +521,80 @@ public class PomTransformer {
                     }
                     dep.appendChild(context.indent(3));
                     dependencyManagementDeps.insertBefore(dep, ws);
+                } catch (XPathExpressionException | DOMException e) {
+                    throw new RuntimeException(e);
+                }
+            };
+        }
+
+        public static Transformation removeModule(String module) {
+            return (Document document, TransformationContext context) -> {
+                try {
+                    Node moduleNode = (Node) context.getXPath().evaluate(
+                            anyNs("project", "modules", "module") + "[text() = '" + module + "']", document,
+                            XPathConstants.NODE);
+                    if (moduleNode != null) {
+                        final Node prevSibling = moduleNode.getPreviousSibling();
+                        if (prevSibling != null && prevSibling.getNodeType() == Node.TEXT_NODE
+                                && WS_PATTERN.matcher(prevSibling.getTextContent()).matches()) {
+                            /* remove any preceding whitespace */
+                            prevSibling.getParentNode().removeChild(prevSibling);
+                        }
+                        moduleNode.getParentNode().removeChild(moduleNode);
+                    }
+                } catch (XPathExpressionException | DOMException e) {
+                    throw new RuntimeException(e);
+                }
+            };
+        }
+
+        public static Transformation setParent(String artifactId, String relativePath) {
+            return (Document document, TransformationContext context) -> {
+                try {
+                    {
+                        final String xPathExpression = anyNs("project", "parent", "artifactId") + "text()";
+                        Node artifactIdNode = (Node) context.getXPath().evaluate(
+                                xPathExpression, document,
+                                XPathConstants.NODE);
+                        if (artifactIdNode != null) {
+                            artifactIdNode.setNodeValue(artifactId);
+                        } else {
+                            throw new IllegalStateException("Could not find " + xPathExpression + " in " + context.pomXmlPath);
+                        }
+
+                    }
+                    if (relativePath == null) {
+                        /* remove relativePath */
+                        final String xPathExpression = anyNs("project", "parent", "relativePath");
+                        Node node = (Node) context.getXPath().evaluate(
+                                xPathExpression, document,
+                                XPathConstants.NODE);
+                        if (node != null) {
+                            final Node prevSibling = node.getPreviousSibling();
+                            if (prevSibling != null && prevSibling.getNodeType() == Node.TEXT_NODE
+                                    && WS_PATTERN.matcher(prevSibling.getTextContent()).matches()) {
+                                /* remove any preceding whitespace */
+                                prevSibling.getParentNode().removeChild(prevSibling);
+                            }
+                            node.getParentNode().removeChild(node);
+                        }
+                    } else {
+                        /* Add or set relativePath */
+                        final String xPathExpression = anyNs("project", "parent", "relativePath");
+                        Node node = (Node) context.getXPath().evaluate(
+                                xPathExpression, document,
+                                XPathConstants.NODE);
+                        if (node != null) {
+                            node.getFirstChild().setNodeValue(relativePath);
+                        } else {
+                            node = document.createElement("relativePath");
+                            ((Node) context.getXPath().evaluate(
+                                    anyNs("project", "parent"), document,
+                                    XPathConstants.NODE)).appendChild(node);
+                            final Text text = document.createTextNode(relativePath);
+                            node.appendChild(text);
+                        }
+                    }
                 } catch (XPathExpressionException | DOMException e) {
                     throw new RuntimeException(e);
                 }

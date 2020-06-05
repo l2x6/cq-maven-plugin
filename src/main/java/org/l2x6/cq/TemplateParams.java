@@ -62,7 +62,7 @@ public class TemplateParams {
             if (arguments.size() != 1) {
                 throw new TemplateModelException("Wrong argument count in toCamelCase()");
             }
-            return CreateExtensionMojo.toCapCamelCase(String.valueOf(arguments.get(0)));
+            return CqUtils.toCapCamelCase(String.valueOf(arguments.get(0)));
         }
     };
     private final TemplateMethodModelEx toSnakeCase = new TemplateMethodModelEx() {
@@ -71,7 +71,7 @@ public class TemplateParams {
             if (arguments.size() != 1) {
                 throw new TemplateModelException("Wrong argument count in toCamelCase()");
             }
-            return CreateExtensionMojo.toSnakeCase(String.valueOf(arguments.get(0)));
+            return CqUtils.toSnakeCase(String.valueOf(arguments.get(0)));
         }
     };
 
@@ -209,6 +209,10 @@ public class TemplateParams {
 
     public TemplateMethodModelEx getToSnakeCase() {
         return toSnakeCase;
+    }
+
+    public String getJavaPackageBasePath() {
+        return javaPackageBase.replace('.', '/');
     }
 
     public static class Builder {
