@@ -269,20 +269,20 @@ public class CreateExtensionMojoTest {
 
     @Test
     void getPackage() throws IOException {
-        assertEquals("org.apache.camel.quarkus.aws.sns.deployment", CreateExtensionMojo
+        assertEquals("org.apache.camel.quarkus.aws.sns.deployment", CqUtils
                 .getJavaPackage("org.apache.camel.quarkus", null, "camel-quarkus-aws-sns-deployment"));
-        assertEquals("org.apache.camel.quarkus.component.aws.sns.deployment", CreateExtensionMojo
+        assertEquals("org.apache.camel.quarkus.component.aws.sns.deployment", CqUtils
                 .getJavaPackage("org.apache.camel.quarkus", "component", "camel-quarkus-aws-sns-deployment"));
     }
 
     @Test
     void toCapCamelCase() throws IOException {
-        assertEquals("FooBarBaz", CreateExtensionMojo.toCapCamelCase("foo-bar-baz"));
+        assertEquals("FooBarBaz", CqUtils.toCapCamelCase("foo-bar-baz"));
     }
 
     @Test
     void toSnakeCase() throws IOException {
-        assertEquals("foo_bar_baz", CreateExtensionMojo.toSnakeCase("Foo-bar-baz"));
+        assertEquals("foo_bar_baz", CqUtils.toSnakeCase("Foo-bar-baz"));
     }
 
 }

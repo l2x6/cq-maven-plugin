@@ -97,7 +97,7 @@ public class VersionReportMojo extends AbstractExtensionListMojo {
                 final CqCatalog previousCatalog = new CqCatalog(previousCatalogFs.getRootDirectories().iterator().next());
 
                 CqCatalog.kinds().forEach(kind -> {
-                    final String pluralName = CreateExtensionMojo.toCapCamelCase(kind.name() + "s");
+                    final String pluralName = CqUtils.toCapCamelCase(kind.name() + "s");
                     final AtomicInteger cnt = new AtomicInteger();
                     final String kindItem = pluralName + ":\n";
                     details.append(kindItem);

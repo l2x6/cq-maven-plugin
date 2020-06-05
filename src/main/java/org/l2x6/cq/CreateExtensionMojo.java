@@ -25,14 +25,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
-import java.util.Stack;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import javax.lang.model.SourceVersion;
 
 import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.maven.model.Model;
@@ -496,7 +491,7 @@ public class CreateExtensionMojo extends AbstractMojo {
                 .resolve("src/main/java")
                 .resolve(templateParams.getJavaPackageBasePath())
                 .resolve("deployment")
-                .resolve(toCapCamelCase(templateParams.getArtifactIdBase()) + "Processor.java");
+                .resolve(CqUtils.toCapCamelCase(templateParams.getArtifactIdBase()) + "Processor.java");
         evalTemplate(cfg, "Processor.java", processorPath, templateParams.build());
     }
 
@@ -528,7 +523,7 @@ public class CreateExtensionMojo extends AbstractMojo {
         templateParams.bomEntryVersion(bomEntryVersion.replace('@', '$'));
 
         templateParams.javaPackageBase(javaPackageBase != null ? javaPackageBase
-                : getJavaPackage(templateParams.getGroupId(), javaPackageInfix, artifactId));
+                : CqUtils.getJavaPackage(templateParams.getGroupId(), javaPackageInfix, artifactId));
         templateParams.additionalRuntimeDependencies(getAdditionalRuntimeDependencies());
         templateParams.runtimeBomPathSet(runtimeBomPath != null);
 
@@ -583,7 +578,7 @@ public class CreateExtensionMojo extends AbstractMojo {
                     itestDir.resolve("src/main/resources/application.properties"), model.build());
         }
 
-        final String artifactIdBaseCapCamelCase = toCapCamelCase(model.getArtifactIdBase());
+        final String artifactIdBaseCapCamelCase = CqUtils.toCapCamelCase(model.getArtifactIdBase());
         final Path testResourcePath = itestDir.resolve("src/main/java/" + model.getJavaPackageBasePath()
                 + "/it/" + artifactIdBaseCapCamelCase + "Resource.java");
         evalTemplate(cfg, "TestResource.java", testResourcePath, model.build());
@@ -644,52 +639,6 @@ public class CreateExtensionMojo extends AbstractMojo {
                 : basePom.getParent() != null && basePom.getParent().getGroupId() != null
                         ? basePom.getParent().getGroupId()
                         : null;
-    }
-
-    static String toCapCamelCase(String artifactIdBase) {
-        final StringBuilder sb = new StringBuilder(artifactIdBase.length());
-        for (String segment : artifactIdBase.split("[.\\-]+")) {
-            sb.append(Character.toUpperCase(segment.charAt(0)));
-            if (segment.length() > 1) {
-                sb.append(segment.substring(1));
-            }
-        }
-        return sb.toString();
-    }
-
-    static String toSnakeCase(String artifactIdBase) {
-        final StringBuilder sb = new StringBuilder(artifactIdBase.length());
-        final String[] segments = artifactIdBase.split("[.\\-]+");
-        for (int i = 0; i < segments.length; i++) {
-            if (i > 0) {
-                sb.append('_');
-            }
-            sb.append(segments[i].toLowerCase(Locale.ROOT));
-        }
-        return sb.toString();
-    }
-
-    static String getJavaPackage(String groupId, String javaPackageInfix, String artifactId) {
-        final Stack<String> segments = new Stack<>();
-        for (String segment : groupId.split("[.\\-]+")) {
-            if (segments.isEmpty() || !segments.peek().equals(segment)) {
-                segments.add(segment);
-            }
-        }
-        if (javaPackageInfix != null) {
-            for (String segment : javaPackageInfix.split("[.\\-]+")) {
-                segments.add(segment);
-            }
-        }
-        for (String segment : artifactId.split("[.\\-]+")) {
-            if (!segments.contains(segment)) {
-                segments.add(segment);
-            }
-        }
-        return segments.stream() //
-                .map(s -> s.toLowerCase(Locale.ROOT)) //
-                .map(s -> SourceVersion.isKeyword(s) ? s + "_" : s) //
-                .collect(Collectors.joining("."));
     }
 
     public void evalTemplate(Configuration cfg, String templateUri, Path dest, TemplateParams model) {
