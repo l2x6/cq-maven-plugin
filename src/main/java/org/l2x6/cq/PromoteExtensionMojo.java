@@ -48,7 +48,7 @@ public class PromoteExtensionMojo extends AbstractMojo {
     /**
      * The unique part of the {@link #artifactId} of the extension to promote.
      *
-     * @since 0.9.0
+     * @since 0.10.0
      */
     @Parameter(property = "cq.artifactIdBase", required = true)
     String artifactIdBase;
@@ -56,7 +56,7 @@ public class PromoteExtensionMojo extends AbstractMojo {
     /**
      * Encoding to read and write files in the current source tree
      *
-     * @since 0.9.0
+     * @since 0.10.0
      */
     @Parameter(defaultValue = CqUtils.DEFAULT_ENCODING, required = true, property = "cq.encoding")
     String encoding;
@@ -64,7 +64,7 @@ public class PromoteExtensionMojo extends AbstractMojo {
     /**
      * The root directory of the Camel Quarkus source tree.
      *
-     * @since 0.9.0
+     * @since 0.10.0
      */
     @Parameter(defaultValue = "${maven.multiModuleProjectDirectory}", readonly = true)
     File multiModuleProjectDirectory;
@@ -72,7 +72,7 @@ public class PromoteExtensionMojo extends AbstractMojo {
     /**
      * The directory where the extension should be moved, relative to {@link #multiModuleProjectDirectory}.
      *
-     * @since 0.9.0
+     * @since 0.10.0
      */
     @Parameter(property = "cq.extensionsDir", defaultValue = "extensions")
     String extensionsDir;
@@ -80,7 +80,7 @@ public class PromoteExtensionMojo extends AbstractMojo {
     /**
      * URI prefix to use when looking up FreeMarker templates when generating various source files.
      *
-     * @since 0.9.0
+     * @since 0.10.0
      */
     @Parameter(defaultValue = CqUtils.DEFAULT_TEMPLATES_URI_BASE, required = true, property = "cq.templatesUriBase")
     String templatesUriBase;
