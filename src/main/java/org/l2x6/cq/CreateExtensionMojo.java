@@ -231,16 +231,13 @@ public class CreateExtensionMojo extends AbstractMojo {
     private Path runtimeBomPath;
 
     /**
-     * Path relative to {@link #basedir} pointing at a {@code pom.xml} file containing the BOM (Bill of Materials) that
-     * manages deployment time extension artifacts. If set, the newly created Deployment module will be added to
-     * {@code <dependencyManagement>} section of this bom; otherwise the newly created Deployment module will not be
-     * added to any BOM.
+     * Ignored since 0.11.0 because deployment BOM was removed in Quarkus 1.6.
      *
+     * @deprecated
      * @since 0.0.1
      */
     @Parameter(property = "cq.deploymentBomPath", defaultValue = CQ_DEPLOYMENT_BOM_PATH)
     File deploymentBom;
-    private Path deploymentBomPath;
 
     /**
      * A version for the entries added to the runtime BOM (see {@link #runtimeBomPath}) and to the deployment BOM (see
@@ -360,7 +357,6 @@ public class CreateExtensionMojo extends AbstractMojo {
         }
         extensionsPath = extensionsDir.toPath();
         runtimeBomPath = runtimeBom.toPath();
-        deploymentBomPath = deploymentBom.toPath();
         if (extensionDirs == null || extensionDirs.isEmpty()) {
             extensionDirs = PomSorter.CQ_EXTENSIONS_DIRECTORIES;
         }
@@ -426,27 +422,26 @@ public class CreateExtensionMojo extends AbstractMojo {
         PomSorter.sortModules(extensionsPomPath);
 
         if (runtimeBomPath != null) {
+            List<PomTransformer.Transformation> transformations = new ArrayList<PomTransformer.Transformation>();
             getLog().info(
                     String.format("Adding [%s] to dependencyManagement in [%s]", templateParams.getArtifactId(),
                             runtimeBomPath));
-            List<PomTransformer.Transformation> transformations = new ArrayList<PomTransformer.Transformation>();
             transformations
                     .add(Transformation.addManagedDependency(templateParams.getGroupId(), templateParams.getArtifactId(),
                             templateParams.getBomEntryVersion()));
+
+            final String aId = templateParams.getArtifactId() + "-deployment";
+            getLog().info(String.format("Adding [%s] to dependencyManagement in [%s]", aId, runtimeBomPath));
+            transformations
+                    .add(Transformation.addManagedDependency(templateParams.getGroupId(), aId,
+                            templateParams.getBomEntryVersion()));
+
             for (Gavtcs gavtcs : templateParams.getAdditionalRuntimeDependencies()) {
                 getLog().info(String.format("Adding [%s] to dependencyManagement in [%s]", gavtcs, runtimeBomPath));
                 transformations.add(Transformation.addManagedDependency(gavtcs));
             }
             pomTransformer(runtimeBomPath).transform(transformations);
             PomSorter.sortDependencyManagement(runtimeBomPath);
-        }
-        if (deploymentBomPath != null) {
-            final String aId = templateParams.getArtifactId() + "-deployment";
-            getLog().info(String.format("Adding [%s] to dependencyManagement in [%s]", aId, deploymentBomPath));
-            pomTransformer(deploymentBomPath)
-                    .transform(Transformation.addManagedDependency(templateParams.getGroupId(), aId,
-                            templateParams.getBomEntryVersion()));
-            PomSorter.sortDependencyManagement(basePath, Collections.singletonList(basePath.relativize(deploymentBomPath).toString()));
         }
         generateItest(cfg, templateParams);
 
