@@ -27,3 +27,5 @@ metadata:
   guide: "https://camel.apache.org/components/latest/base64-dataformat.html"
   categories:
   - "integration"
+  status:
+  - "stable"

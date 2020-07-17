@@ -27,3 +27,5 @@ metadata:
   guide: "https://camel.apache.org/components/latest/dozer-component.html"
   categories:
   - "integration"
+  status:
+  - "stable"

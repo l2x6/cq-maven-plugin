@@ -97,8 +97,9 @@ public class UpdateQuarkusMetadataMojo extends AbstractExtensionListMojo {
                     final String rawKeywords = (String) runtimePom.getProperties().getProperty("quarkus.metadata.keywords");
                     final List<String> keywords = rawKeywords != null ? Arrays.asList(rawKeywords.split(",")) : Collections.emptyList();
                     final boolean unlisted = !extModule.isNativeSupported() || Boolean.parseBoolean(runtimePom.getProperties().getProperty("quarkus.metadata.unlisted", "false"));
+                    final boolean deprecated = models.stream().anyMatch(ArtifactModel::isDeprecated) || Boolean.parseBoolean(runtimePom.getProperties().getProperty("quarkus.metadata.deprecated", "false"));
 
-                    final TemplateParams templateParams = CqUtils.quarkusExtensionYamlParams(models, artifactIdBase, titleBase, runtimePom.getDescription(), keywords, unlisted, extModule.isNativeSupported(), rootDir.toPath(), getLog(), errors);
+                    final TemplateParams templateParams = CqUtils.quarkusExtensionYamlParams(models, artifactIdBase, titleBase, runtimePom.getDescription(), keywords, unlisted, deprecated, extModule.isNativeSupported(), rootDir.toPath(), getLog(), errors);
                     final Configuration cfg = CqUtils.getTemplateConfig(rootDir.toPath(), CqUtils.DEFAULT_TEMPLATES_URI_BASE,
                             templatesUriBase, encoding);
 

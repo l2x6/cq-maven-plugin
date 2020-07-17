@@ -33,6 +33,7 @@ import freemarker.template.TemplateModelException;
 public class TemplateParams {
     private final boolean nativeSupported;
     private final boolean unlisted;
+    private final boolean deprecated;
     private final String itestParentRelativePath;
     private final String itestParentVersion;
     private final String itestParentArtifactId;
@@ -82,6 +83,7 @@ public class TemplateParams {
     private TemplateParams(Builder builder) {
         this.nativeSupported = builder.nativeSupported;
         this.unlisted = builder.unlisted;
+        this.deprecated = builder.deprecated;
         this.itestParentRelativePath = builder.itestParentRelativePath;
         this.itestParentVersion = builder.itestParentVersion;
         this.itestParentArtifactId = builder.itestParentArtifactId;
@@ -215,6 +217,16 @@ public class TemplateParams {
         return javaPackageBase.replace('.', '/');
     }
 
+    public boolean isUnlisted() {
+        return unlisted;
+    }
+
+    public boolean isDeprecated() {
+        return deprecated;
+    }
+
+
+
     public static class Builder {
         private boolean nativeSupported;
         private String itestParentRelativePath;
@@ -241,6 +253,7 @@ public class TemplateParams {
         private String kind;
         private List<ArtifactModel<?>> models = new ArrayList<>();
         private boolean unlisted;
+        private boolean deprecated = false;
 
         public Builder nativeSupported(boolean nativeSupported) {
             this.nativeSupported = nativeSupported;
@@ -430,10 +443,11 @@ public class TemplateParams {
             this.unlisted = unlisted;
             return this;
         }
-    }
 
-    public boolean isUnlisted() {
-        return unlisted;
+        public Builder deprecated(boolean deprecated) {
+            this.deprecated = deprecated;
+            return this;
+        }
     }
 
 }

@@ -166,7 +166,18 @@ public class CqUtils {
         }
     }
 
-    public static TemplateParams quarkusExtensionYamlParams(List<ArtifactModel<?>> models, String artifactIdBase, String titleBase, String description, List<String> keywords, boolean unlisted, boolean isNativeSupported, Path rootDir, Log log, List<String> errors) {
+    public static TemplateParams quarkusExtensionYamlParams(
+            List<ArtifactModel<?>> models,
+            String artifactIdBase,
+            String titleBase,
+            String description,
+            List<String> keywords,
+            boolean unlisted,
+            boolean deprecated,
+            boolean isNativeSupported,
+            Path rootDir,
+            Log log,
+            List<String> errors) {
         final String kind;
         if (models.isEmpty()) {
             if (!unlisted) {
@@ -201,6 +212,7 @@ public class CqUtils {
                 }
                 kind = models.get(0).getKind();
             }
+
         }
         if (description == null) {
             final String msg = artifactIdBase + ": Add and explicit <description>";
@@ -213,6 +225,7 @@ public class CqUtils {
                 .description(sanitizeDescription(description))
                 .keywords(keywords)
                 .unlisted(unlisted)
+                .deprecated(deprecated)
                 .nativeSupported(isNativeSupported)
                 .guideUrl(CqUtils.extensionDocUrl(rootDir, artifactIdBase, kind))
                 .categories(org.l2x6.cq.CqUtils.DEFAULT_CATEGORIES)

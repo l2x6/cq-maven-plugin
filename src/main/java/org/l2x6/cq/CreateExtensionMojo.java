@@ -470,8 +470,9 @@ public class CreateExtensionMojo extends AbstractMojo {
         }
         evalTemplate(cfg, "runtime-pom.xml", extensionRuntimeBaseDir.resolve("pom.xml"),
                 templateParams.build());
+        final boolean deprecated = models.stream().anyMatch(ArtifactModel::isDeprecated);
 
-        final TemplateParams quarkusExtensionYamlParams = CqUtils.quarkusExtensionYamlParams(models, artifactIdBase, nameBase, description, keywords, !nativeSupported, nativeSupported, runtimeBomPath.getParent().getParent().getParent(), getLog(), new ArrayList<>());
+        final TemplateParams quarkusExtensionYamlParams = CqUtils.quarkusExtensionYamlParams(models, artifactIdBase, nameBase, description, keywords, !nativeSupported, deprecated, nativeSupported, runtimeBomPath.getParent().getParent().getParent(), getLog(), new ArrayList<>());
         final Path metaInfDir = extensionRuntimeBaseDir.resolve("src/main/resources/META-INF");
         try {
             Files.createDirectories(metaInfDir);
