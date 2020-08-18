@@ -17,8 +17,11 @@
 package org.l2x6.cq;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Reader;
 import java.io.Writer;
+import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -100,7 +103,8 @@ public class CqUtils {
         }
     }
 
-    public static Stream<ExtensionModule> findExtensions(Stream<Path> extensionDirectories, Predicate<String> artifactIdFilter) {
+    public static Stream<ExtensionModule> findExtensions(Stream<Path> extensionDirectories,
+            Predicate<String> artifactIdFilter) {
         return extensionDirectories
                 .map(Path::toAbsolutePath)
                 .map(Path::normalize)
@@ -139,7 +143,7 @@ public class CqUtils {
     public static String extensionDocUrl(Path repoRootDir, String artifactIdBase, String kind) {
         final Path docPage = extensionDocPage(repoRootDir, artifactIdBase);
         if (Files.exists(docPage)) {
-            return "https://camel.apache.org/camel-quarkus/latest/extensions/"+ artifactIdBase +".html";
+            return "https://camel.apache.org/camel-quarkus/latest/extensions/" + artifactIdBase + ".html";
         } else {
             return entityDocUrl(artifactIdBase, kind);
         }
@@ -153,7 +157,8 @@ public class CqUtils {
         return "https://camel.apache.org/components/latest/" + artifactIdBase + "-" + kind + ".html";
     }
 
-    public static void evalTemplate(Configuration cfg, String templateUri, Path dest, TemplateParams model, Consumer<String> log) {
+    public static void evalTemplate(Configuration cfg, String templateUri, Path dest, TemplateParams model,
+            Consumer<String> log) {
         log.accept("Generating " + dest);
         try {
             final Template template = cfg.getTemplate(templateUri);
@@ -195,7 +200,7 @@ public class CqUtils {
                     expectedTitle = expectedTitle.substring("json ".length());
                 }
                 if (titleBase != null && !titleBase.equals(expectedTitle)) {
-                    log.warn(artifactIdBase + ": expected name base '"+ expectedTitle +"' found '"+ titleBase +"'");
+                    log.warn(artifactIdBase + ": expected name base '" + expectedTitle + "' found '" + titleBase + "'");
                 }
                 kind = model.getKind();
             } else {
@@ -207,7 +212,9 @@ public class CqUtils {
                             .stream()
                             .collect(Collectors.joining(" "));
                     if (uniqueDescriptions.size() > 1) {
-                        log.warn(artifactIdBase + ": Consider adding and explicit <description> if you do not like the concatenated description: " + description);
+                        log.warn(artifactIdBase
+                                + ": Consider adding and explicit <description> if you do not like the concatenated description: "
+                                + description);
                     }
                 }
                 kind = models.get(0).getKind();
@@ -280,6 +287,31 @@ public class CqUtils {
                 .map(s -> s.toLowerCase(Locale.ROOT)) //
                 .map(s -> SourceVersion.isKeyword(s) ? s + "_" : s) //
                 .collect(Collectors.joining("."));
+    }
+
+    static Path copyJar(Path localRepository, String groupId, String artifactId, String version) {
+        final String relativeJarPath = groupId.replace('.', '/') + "/" + artifactId + "/" + version + "/" + artifactId + "-"
+                + version + ".jar";
+        final Path localPath = localRepository.resolve(relativeJarPath);
+        final boolean localExists = Files.exists(localPath);
+        final String remoteUri = "https://repository.apache.org/content/groups/public/" + relativeJarPath;
+        Path result;
+        try {
+            result = Files.createTempFile(null, localPath.getFileName().toString());
+            try (InputStream in = (localExists ? Files.newInputStream(localPath) : new URL(remoteUri).openStream());
+                    OutputStream out = Files.newOutputStream(result)) {
+                final byte[] buf = new byte[4096];
+                int len;
+                while ((len = in.read(buf)) >= 0) {
+                    out.write(buf, 0, len);
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Could not copy " + (localExists ? localPath : remoteUri) + " to " + result, e);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Could not create temp file", e);
+        }
+        return result;
     }
 
 }

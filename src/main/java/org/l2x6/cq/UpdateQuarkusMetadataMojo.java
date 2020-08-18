@@ -34,6 +34,7 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
+import org.l2x6.cq.CqCatalog.Flavor;
 
 import freemarker.template.Configuration;
 
@@ -72,7 +73,7 @@ public class UpdateQuarkusMetadataMojo extends AbstractExtensionListMojo {
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
-        final CqCatalog catalog = new CqCatalog();
+        final CqCatalog catalog = new CqCatalog(Flavor.camel);
         final List<String> errors = new ArrayList<>();
         CqUtils.findExtensions(extensionDirectories.stream().map(File::toPath).sorted(),
                 artifactIdBase -> !skipArtifactIdBases.contains(artifactIdBase))

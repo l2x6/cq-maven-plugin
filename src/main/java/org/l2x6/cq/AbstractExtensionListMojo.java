@@ -41,7 +41,4 @@ public abstract class AbstractExtensionListMojo extends AbstractMojo {
     @Parameter(property = "cq.skipArtifactIdBases")
     protected Set<String> skipArtifactIdBases;
 
-    final CqCatalog catalog = new CqCatalog();
-
-
 }

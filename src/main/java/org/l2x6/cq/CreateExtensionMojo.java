@@ -37,6 +37,7 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
+import org.l2x6.cq.CqCatalog.Flavor;
 import org.l2x6.cq.PomTransformer.Gavtcs;
 import org.l2x6.cq.PomTransformer.Transformation;
 
@@ -362,8 +363,9 @@ public class CreateExtensionMojo extends AbstractMojo {
         }
 
         charset = Charset.forName(encoding);
-        this.models = new CqCatalog().filterModels(artifactIdBase).collect(Collectors.toList());
-        final List<ArtifactModel<?>> primaryModels = new CqCatalog().primaryModel(artifactIdBase);
+        final CqCatalog cqCatalog = new CqCatalog(Flavor.camel);
+        this.models = cqCatalog.filterModels(artifactIdBase).collect(Collectors.toList());
+        final List<ArtifactModel<?>> primaryModels = cqCatalog.primaryModel(artifactIdBase);
         switch (primaryModels.size()) {
         case 0:
             throw new IllegalStateException("Could not find name " + artifactIdBase + " in Camel catalog");
