@@ -25,7 +25,7 @@ name: "Camel Attachments"
 description: "Java Attachments support for Camel Message"
 metadata:
   unlisted: true
-  guide: "https://camel.apache.org/components/latest/attachments-other.html"
+  guide: "https://camel.apache.org/camel-quarkus/latest/reference/extensions/attachments.html"
   categories:
   - "integration"
   status:

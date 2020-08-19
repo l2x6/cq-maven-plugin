@@ -140,22 +140,14 @@ public class CqUtils {
         }
     }
 
-    public static String extensionDocUrl(Path repoRootDir, String artifactIdBase, String kind) {
-        final Path docPage = extensionDocPage(repoRootDir, artifactIdBase);
-        if (Files.exists(docPage)) {
-            return "https://camel.apache.org/camel-quarkus/latest/extensions/" + artifactIdBase + ".html";
-        } else {
-            return entityDocUrl(artifactIdBase, kind);
-        }
+    public static String extensionDocUrl(String artifactIdBase) {
+        return "https://camel.apache.org/camel-quarkus/latest/reference/extensions/" + artifactIdBase + ".html";
     }
 
     public static Path extensionDocPage(Path repoRootDir, String artifactIdBase) {
-        return repoRootDir.resolve("docs/modules/ROOT/pages/extensions/" + artifactIdBase + ".adoc");
+        return repoRootDir.resolve("docs/modules/ROOT/pages/reference/extensions/" + artifactIdBase + ".adoc");
     }
 
-    public static String entityDocUrl(String artifactIdBase, String kind) {
-        return "https://camel.apache.org/components/latest/" + artifactIdBase + "-" + kind + ".html";
-    }
 
     public static void evalTemplate(Configuration cfg, String templateUri, Path dest, TemplateParams model,
             Consumer<String> log) {
@@ -234,7 +226,7 @@ public class CqUtils {
                 .unlisted(unlisted)
                 .deprecated(deprecated)
                 .nativeSupported(isNativeSupported)
-                .guideUrl(CqUtils.extensionDocUrl(rootDir, artifactIdBase, kind))
+                .guideUrl(CqUtils.extensionDocUrl(artifactIdBase))
                 .categories(org.l2x6.cq.CqUtils.DEFAULT_CATEGORIES)
                 .build();
     }

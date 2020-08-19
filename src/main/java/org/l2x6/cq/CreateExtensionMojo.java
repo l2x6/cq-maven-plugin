@@ -397,12 +397,7 @@ public class CreateExtensionMojo extends AbstractMojo {
             this.keywords = Collections.emptyList();
         }
         if (this.guideUrl == null) {
-            /*
-             * We do not know yet whether this extension will have a page
-             * under https://camel.apache.org/camel-quarkus/latest/extensions
-             * The value may get corrected by the maven Mojo that generates the .adoc files.
-             */
-            this.guideUrl = CqUtils.entityDocUrl(artifactIdBase, model.getKind());
+            this.guideUrl = CqUtils.extensionDocUrl(artifactIdBase);
         }
         if (this.categories == null || this.categories.isEmpty()) {
             this.categories = org.l2x6.cq.CqUtils.DEFAULT_CATEGORIES;
