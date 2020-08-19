@@ -209,8 +209,6 @@ public class PomSorter {
 
     public static void updateMvndRules(Path baseDir, Path pomXmlPath, Set<String> extensionArtifactIds) {
         final XPath xPath = XPathFactory.newInstance().newXPath();
-        final Path relativePomPath = baseDir.relativize(pomXmlPath);
-        String pomXmlText = read(pomXmlPath);
         final Document pomXmlProject = parse(pomXmlPath);
         /* Policy may disappear at some point */
         final boolean policyExtensionExists = extensionArtifactIds.contains("camel-quarkus-support-policy");
@@ -233,6 +231,18 @@ public class PomSorter {
                 .sorted()
                 .collect(Collectors.joining(","));
 
+        setMvndRule(baseDir, pomXmlPath, xPath, pomXmlProject, expectedRule);
+    }
+
+    public static void setMvndRule(Path baseDir, Path pomXmlPath, final String expectedRule) {
+        final XPath xPath = XPathFactory.newInstance().newXPath();
+        final Document pomXmlProject = parse(pomXmlPath);
+        setMvndRule(baseDir, pomXmlPath, xPath, pomXmlProject, expectedRule);
+    }
+
+    static void setMvndRule(Path baseDir, Path pomXmlPath, final XPath xPath, final Document pomXmlProject, final String expectedRule) {
+        final Path relativePomPath = baseDir.relativize(pomXmlPath);
+        String pomXmlText = read(pomXmlPath);
         final Matcher depsMatcher = dependenciesPattern.matcher(pomXmlText);
         if (depsMatcher.find()) {
             final String indent = depsMatcher.group(1);

@@ -19,6 +19,8 @@ package org.l2x6.cq;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -36,6 +38,7 @@ public class FormatPomsMojo extends AbstractMojo {
     public static final String CQ_SORT_MODULES_PATHS = "extensions/pom.xml,integration-tests/pom.xml";
     public static final String CQ_SORT_DEPENDENCY_MANAGEMENT_PATHS = "poms/bom/pom.xml,poms/bom-deployment/pom.xml";
     public static final String CQ_UPDATE_MVND_RULES_DIRS = "examples,integration-tests";
+    public static final String CQ_UPDATE_MVND_RULES_ALL_EXTENSIONS_DIRS = "catalog";
 
     /**
      * Directory where the changes should be performed. Default is the current directory of the current Java process.
@@ -65,12 +68,23 @@ public class FormatPomsMojo extends AbstractMojo {
 
     /**
      * A list of directory paths relative to the current module's {@code baseDir} containing Maven modules in which
-     * {@code <mvnd.builder.rule>}.
+     * {@code <mvnd.builder.rule>} should be updated. The rule will contain deployment modules corresponding to the
+     * runtime modules available as dependencies in the given module.
      *
      * @since 0.0.1
      */
     @Parameter(property = "cq.updateMvndRuleDirs", defaultValue = CQ_UPDATE_MVND_RULES_DIRS)
     List<String> updateMvndRuleDirs;
+
+    /**
+     * A list of directory paths relative to the current module's {@code baseDir} containing Maven modules in which
+     * {@code <mvnd.builder.rule>} should be updated. The rule will contain all runtime modules available in the current
+     * source tree.
+     *
+     * @since 0.14.0
+     */
+    @Parameter(property = "cq.updateMvndRuleAllExtensionsDirs", defaultValue = CQ_UPDATE_MVND_RULES_ALL_EXTENSIONS_DIRS)
+    List<String> updateMvndRuleAllExtensionsDirs;
 
     /**
      * A list of directory paths relative to the current module's {@code baseDir} containing Quarkus extensions.
@@ -102,6 +116,18 @@ public class FormatPomsMojo extends AbstractMojo {
 
         PomSorter.sortDependencyManagement(basePath, sortDependencyManagementPaths);
         PomSorter.sortModules(basePath, sortModulesPaths);
-        PomSorter.updateMvndRules(basePath, updateMvndRuleDirs, PomSorter.findExtensionArtifactIds(basePath, extensionDirs));
+        final Set<String> extensionArtifactIds = PomSorter.findExtensionArtifactIds(basePath, extensionDirs);
+        PomSorter.updateMvndRules(basePath, updateMvndRuleDirs, extensionArtifactIds);
+
+        if (updateMvndRuleAllExtensionsDirs != null) {
+            final String allExtensionsRule = extensionArtifactIds.stream()
+                    .sorted()
+                    .collect(Collectors.joining(","));
+            updateMvndRuleAllExtensionsDirs.stream()
+                .map(p -> basePath.resolve(p).resolve("pom.xml"))
+                .forEach(pomXmlPath -> {
+                    PomSorter.setMvndRule(basePath, pomXmlPath, allExtensionsRule);
+                });
+        }
     }
 }
