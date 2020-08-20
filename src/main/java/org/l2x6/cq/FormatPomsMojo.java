@@ -120,13 +120,10 @@ public class FormatPomsMojo extends AbstractMojo {
         PomSorter.updateMvndRules(basePath, updateMvndRuleDirs, extensionArtifactIds);
 
         if (updateMvndRuleAllExtensionsDirs != null) {
-            final String allExtensionsRule = extensionArtifactIds.stream()
-                    .sorted()
-                    .collect(Collectors.joining(","));
             updateMvndRuleAllExtensionsDirs.stream()
                 .map(p -> basePath.resolve(p).resolve("pom.xml"))
                 .forEach(pomXmlPath -> {
-                    PomSorter.setMvndRule(basePath, pomXmlPath, allExtensionsRule);
+                    PomSorter.setMvndRule(basePath, pomXmlPath, extensionArtifactIds, true);
                 });
         }
     }

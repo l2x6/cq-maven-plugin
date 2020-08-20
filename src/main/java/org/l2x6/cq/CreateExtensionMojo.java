@@ -456,14 +456,10 @@ public class CreateExtensionMojo extends AbstractMojo {
 
         if (updateMvndRuleAllExtensionsDirs != null) {
             final Set<String> extensionArtifactIds = PomSorter.findExtensionArtifactIds(basePath, extensionDirs);
-            final String allExtensionsRule = extensionArtifactIds.stream()
-                    .sorted()
-                    .collect(Collectors.joining(","));
-            System.out.println("rule = "+ allExtensionsRule);
             updateMvndRuleAllExtensionsDirs.stream()
                 .map(p -> basePath.resolve(p).resolve("pom.xml"))
                 .forEach(pomXmlPath -> {
-                    PomSorter.setMvndRule(basePath, pomXmlPath, allExtensionsRule);
+                    PomSorter.setMvndRule(basePath, pomXmlPath, extensionArtifactIds, true);
                 });
         }
 
@@ -589,7 +585,7 @@ public class CreateExtensionMojo extends AbstractMojo {
 
         final Path itestPomPath = itestDir.resolve("pom.xml");
         evalTemplate(cfg, "integration-test-pom.xml", itestPomPath, model.build());
-        PomSorter.updateMvndRules(basePath, itestPomPath, PomSorter.findExtensionArtifactIds(basePath, extensionDirs));
+        PomSorter.updateMvndRules(basePath, itestPomPath, PomSorter.findExtensionArtifactIds(basePath, extensionDirs), false);
 
         if (nativeSupported) {
             evalTemplate(cfg, "integration-test-application.properties",
