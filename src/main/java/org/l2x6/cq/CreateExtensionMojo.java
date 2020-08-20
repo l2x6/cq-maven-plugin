@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -319,7 +320,8 @@ public class CreateExtensionMojo extends AbstractMojo {
     List<String> categories;
 
     /**
-     * The extension status to use in {@code quarkus-extension.yaml}; one of {@code stable} or {@code preview}
+     * If {@code true} an extension with native support will be generated; otherwise a JVM-only extension will be
+     * generated.
      *
      * @since 0.0.1
      */
@@ -343,6 +345,16 @@ public class CreateExtensionMojo extends AbstractMojo {
      */
     @Parameter(required = true)
     List<ExtensionDir> extensionDirs;
+
+    /**
+     * A list of directory paths relative to the current module's {@code baseDir} containing Maven modules in which
+     * {@code <mvnd.builder.rule>} should be updated. The rule will contain all runtime modules available in the current
+     * source tree.
+     *
+     * @since 0.15.0
+     */
+    @Parameter(property = "cq.updateMvndRuleAllExtensionsDirs", defaultValue = FormatPomsMojo.CQ_UPDATE_MVND_RULES_ALL_EXTENSIONS_DIRS)
+    List<String> updateMvndRuleAllExtensionsDirs;
 
     List<ArtifactModel<?>> models;
     ArtifactModel<?> model;
@@ -441,6 +453,19 @@ public class CreateExtensionMojo extends AbstractMojo {
             PomSorter.sortDependencyManagement(runtimeBomPath);
         }
         generateItest(cfg, templateParams);
+
+        if (updateMvndRuleAllExtensionsDirs != null) {
+            final Set<String> extensionArtifactIds = PomSorter.findExtensionArtifactIds(basePath, extensionDirs);
+            final String allExtensionsRule = extensionArtifactIds.stream()
+                    .sorted()
+                    .collect(Collectors.joining(","));
+            System.out.println("rule = "+ allExtensionsRule);
+            updateMvndRuleAllExtensionsDirs.stream()
+                .map(p -> basePath.resolve(p).resolve("pom.xml"))
+                .forEach(pomXmlPath -> {
+                    PomSorter.setMvndRule(basePath, pomXmlPath, allExtensionsRule);
+                });
+        }
 
     }
 

@@ -280,7 +280,7 @@ public class PomSorter {
                                     + "</mvnd.builder.rule>";
                             ruleMatcher.appendReplacement(buf, Matcher.quoteReplacement(replacement));
                             ruleMatcher.appendTail(buf);
-                            write(pomXmlPath, pomXmlText);
+                            write(pomXmlPath, buf.toString());
                         } else {
                             throw new IllegalStateException(
                                     "Could not find " + rulePattern.pattern() + " in " + relativePomPath);
