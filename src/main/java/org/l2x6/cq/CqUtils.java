@@ -258,6 +258,18 @@ public class CqUtils {
         return sb.toString();
     }
 
+    public static String toKebabCase(String artifactIdBase) {
+        final StringBuilder sb = new StringBuilder(artifactIdBase.length());
+        final String[] segments = artifactIdBase.split("[.\\-\\+]+");
+        for (int i = 0; i < segments.length; i++) {
+            if (i > 0) {
+                sb.append('-');
+            }
+            sb.append(segments[i].toLowerCase(Locale.ROOT));
+        }
+        return sb.toString();
+    }
+
     public static String getJavaPackage(String groupId, String javaPackageInfix, String artifactId) {
         final Stack<String> segments = new Stack<>();
         for (String segment : groupId.split("[.\\-]+")) {

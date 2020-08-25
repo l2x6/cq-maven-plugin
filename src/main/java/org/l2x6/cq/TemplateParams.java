@@ -75,6 +75,15 @@ public class TemplateParams {
             return CqUtils.toSnakeCase(String.valueOf(arguments.get(0)));
         }
     };
+    private final TemplateMethodModelEx toKebabCase = new TemplateMethodModelEx() {
+        @Override
+        public Object exec(List arguments) throws TemplateModelException {
+            if (arguments.size() != 1) {
+                throw new TemplateModelException("Wrong argument count in toKebabCase()");
+            }
+            return CqUtils.toKebabCase(String.valueOf(arguments.get(0)));
+        }
+    };
 
     public static Builder builder() {
         return new Builder();
@@ -211,6 +220,10 @@ public class TemplateParams {
 
     public TemplateMethodModelEx getToSnakeCase() {
         return toSnakeCase;
+    }
+
+    public TemplateMethodModelEx getToKebabCase() {
+        return toKebabCase;
     }
 
     public String getJavaPackageBasePath() {

@@ -277,12 +277,17 @@ public class CreateExtensionMojoTest {
 
     @Test
     void toCapCamelCase() throws IOException {
-        assertEquals("FooBarBaz", CqUtils.toCapCamelCase("foo-bar-baz"));
+        assertEquals("FooBarBaz", CqUtils.toCapCamelCase("foo+-bar.baz"));
     }
 
     @Test
     void toSnakeCase() throws IOException {
-        assertEquals("foo_bar_baz", CqUtils.toSnakeCase("Foo-bar-baz"));
+        assertEquals("foo_bar_baz", CqUtils.toSnakeCase("Foo+-bar.baz"));
+    }
+
+    @Test
+    void toKebabCase() throws IOException {
+        assertEquals("foo-bar-baz", CqUtils.toKebabCase("foo+-BAR.baZ"));
     }
 
 }
