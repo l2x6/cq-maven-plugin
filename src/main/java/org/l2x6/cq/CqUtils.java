@@ -237,7 +237,7 @@ public class CqUtils {
 
     public static String toCapCamelCase(String artifactIdBase) {
         final StringBuilder sb = new StringBuilder(artifactIdBase.length());
-        for (String segment : artifactIdBase.split("[.\\-]+")) {
+        for (String segment : artifactIdBase.split("[.\\-\\+]+")) {
             sb.append(Character.toUpperCase(segment.charAt(0)));
             if (segment.length() > 1) {
                 sb.append(segment.substring(1));
@@ -248,7 +248,7 @@ public class CqUtils {
 
     public static String toSnakeCase(String artifactIdBase) {
         final StringBuilder sb = new StringBuilder(artifactIdBase.length());
-        final String[] segments = artifactIdBase.split("[.\\-]+");
+        final String[] segments = artifactIdBase.split("[.\\-\\+]+");
         for (int i = 0; i < segments.length; i++) {
             if (i > 0) {
                 sb.append('_');
