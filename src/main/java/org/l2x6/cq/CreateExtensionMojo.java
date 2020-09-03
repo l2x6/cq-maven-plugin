@@ -39,7 +39,6 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.l2x6.cq.CqCatalog.Flavor;
-import org.l2x6.cq.PomTransformer.Gavtcs;
 import org.l2x6.cq.PomTransformer.Transformation;
 
 import freemarker.template.Configuration;
@@ -329,7 +328,8 @@ public class CreateExtensionMojo extends AbstractMojo {
     boolean nativeSupported;
 
     /**
-     * If {@code true} the mojo creates some empty directories for user's convenience, such as {@code src/main/java/...} for
+     * If {@code true} the mojo creates some empty directories for user's convenience, such as {@code src/main/java/...}
+     * for
      * user's convenience. Otherwise, these empty directories are not created. Setting this option to {@code false}
      * might be useful when testing.
      *
@@ -347,14 +347,24 @@ public class CreateExtensionMojo extends AbstractMojo {
     List<ExtensionDir> extensionDirs;
 
     /**
-     * A list of directory paths relative to the current module's {@code baseDir} containing Maven modules in which
-     * {@code <mvnd.builder.rule>} should be updated. The rule will contain all runtime modules available in the current
-     * source tree.
+     * A set of artifactIdBases that are nor extensions and should not be processed by this mojo.
      *
-     * @since 0.15.0
+     * @since 0.18.0
      */
-    @Parameter(property = "cq.updateMvndRuleAllExtensionsDirs", defaultValue = FormatPomsMojo.CQ_UPDATE_MVND_RULES_ALL_EXTENSIONS_DIRS)
-    List<String> updateMvndRuleAllExtensionsDirs;
+    @Parameter(property = "cq.skipArtifactIdBases")
+    Set<String> skipArtifactIdBases;
+    private Set<String> skipArtifactIds;
+
+    /**
+     * A list of directory paths relative to the current module's {@code baseDir} containing Maven modules in which
+     * virtual dependencies should be updated. After running this mojo, the selected {@code pom.xml} files will depend
+     * on artifacts with type {@code pom} and scope {@code test} of all runtime extension modules available in the
+     * current source tree.
+     *
+     * @since 0.18.0
+     */
+    @Parameter(property = "cq.updateVirtualDependenciesAllExtensionsDirs", defaultValue = FormatPomsMojo.CQ_UPDATE_VIRTUAL_DEPENDENCIES_ALL_EXTENSIONS_DIRS)
+    List<String> updateVirtualDependenciesAllExtensionsDirs;
 
     List<ArtifactModel<?>> models;
     ArtifactModel<?> model;
@@ -373,6 +383,9 @@ public class CreateExtensionMojo extends AbstractMojo {
         if (extensionDirs == null || extensionDirs.isEmpty()) {
             extensionDirs = PomSorter.CQ_EXTENSIONS_DIRECTORIES;
         }
+        skipArtifactIds = skipArtifactIdBases != null
+                ? skipArtifactIdBases.stream().map(base -> "camel-quarkus-"+ base).collect(Collectors.toSet())
+                : Collections.emptySet();
 
         charset = Charset.forName(encoding);
         final CqCatalog cqCatalog = new CqCatalog(Flavor.camel);
@@ -421,7 +434,8 @@ public class CreateExtensionMojo extends AbstractMojo {
         this.version = CqUtils.getVersion(extensionsModel);
 
         final TemplateParams.Builder templateParams = getTemplateParams();
-        final Configuration cfg = CqUtils.getTemplateConfig(basePath, CqUtils.DEFAULT_TEMPLATES_URI_BASE, templatesUriBase, encoding);
+        final Configuration cfg = CqUtils.getTemplateConfig(basePath, CqUtils.DEFAULT_TEMPLATES_URI_BASE, templatesUriBase,
+                encoding);
 
         generateExtensionProjects(cfg, templateParams);
         if (!extensionsModel.getModules().contains(artifactIdBase)) {
@@ -454,13 +468,20 @@ public class CreateExtensionMojo extends AbstractMojo {
         }
         generateItest(cfg, templateParams);
 
-        if (updateMvndRuleAllExtensionsDirs != null) {
-            final Set<String> extensionArtifactIds = PomSorter.findExtensionArtifactIds(basePath, extensionDirs);
-            updateMvndRuleAllExtensionsDirs.stream()
-                .map(p -> basePath.resolve(p).resolve("pom.xml"))
-                .forEach(pomXmlPath -> {
-                    PomSorter.setMvndRule(basePath, pomXmlPath, extensionArtifactIds, true);
-                });
+        if (updateVirtualDependenciesAllExtensionsDirs != null) {
+            final Set<Gavtcs> allVirtualExtensions = PomSorter.findExtensionArtifactIds(basePath, extensionDirs, skipArtifactIds).stream()
+                    .map(artifactId -> Gavtcs.virtual("org.apache.camel.quarkus", artifactId, "${project.version}"))
+                    .collect(Collectors.toSet());
+            updateVirtualDependenciesAllExtensionsDirs.stream()
+                    .map(p -> basePath.resolve(p).resolve("pom.xml"))
+                    .forEach(pomXmlPath -> {
+                        new PomTransformer(pomXmlPath, charset)
+                                .transform(Transformation.updateDependencySubset(
+                                        gavtcs -> gavtcs.isVirtual(),
+                                        allVirtualExtensions,
+                                        Gavtcs.scopeAndTypeFirstComparator(),
+                                        FormatPomsMojo.VIRTUAL_DEPS_INITIAL_COMMENT));
+                    });
         }
 
     }
@@ -483,14 +504,17 @@ public class CreateExtensionMojo extends AbstractMojo {
 
         final Path extensionRuntimeBaseDir = getExtensionRuntimeBaseDir();
         if (createConvenienceDirs) {
-            createDirectories(extensionRuntimeBaseDir.resolve("src/main/java").resolve(templateParams.getJavaPackageBasePath()));
+            createDirectories(
+                    extensionRuntimeBaseDir.resolve("src/main/java").resolve(templateParams.getJavaPackageBasePath()));
             // TODO: createDirectories(extensionRuntimeBaseDir.resolve("src/main/doc"));
         }
         evalTemplate(cfg, "runtime-pom.xml", extensionRuntimeBaseDir.resolve("pom.xml"),
                 templateParams.build());
         final boolean deprecated = models.stream().anyMatch(ArtifactModel::isDeprecated);
 
-        final TemplateParams quarkusExtensionYamlParams = CqUtils.quarkusExtensionYamlParams(models, artifactIdBase, nameBase, description, keywords, !nativeSupported, deprecated, nativeSupported, runtimeBomPath.getParent().getParent().getParent(), getLog(), new ArrayList<>());
+        final TemplateParams quarkusExtensionYamlParams = CqUtils.quarkusExtensionYamlParams(models, artifactIdBase, nameBase,
+                description, keywords, !nativeSupported, deprecated, nativeSupported,
+                runtimeBomPath.getParent().getParent().getParent(), getLog(), new ArrayList<>());
         final Path metaInfDir = extensionRuntimeBaseDir.resolve("src/main/resources/META-INF");
         try {
             Files.createDirectories(metaInfDir);
@@ -585,7 +609,14 @@ public class CreateExtensionMojo extends AbstractMojo {
 
         final Path itestPomPath = itestDir.resolve("pom.xml");
         evalTemplate(cfg, "integration-test-pom.xml", itestPomPath, model.build());
-        PomSorter.updateMvndRules(basePath, itestPomPath, PomSorter.findExtensionArtifactIds(basePath, extensionDirs), false);
+
+        final Set<String> extensionArtifactIds = PomSorter.findExtensionArtifactIds(basePath, extensionDirs, skipArtifactIds);
+        new PomTransformer(itestPomPath, charset)
+                .transform(Transformation.updateMappedDependencies(
+                        Gavtcs::isVirtualDeployment,
+                        Gavtcs.deploymentVitualMapper(gavtcs -> extensionArtifactIds.contains(gavtcs.getArtifactId())),
+                        Gavtcs.scopeAndTypeFirstComparator(),
+                        FormatPomsMojo.VIRTUAL_DEPS_INITIAL_COMMENT));
 
         if (nativeSupported) {
             evalTemplate(cfg, "integration-test-application.properties",

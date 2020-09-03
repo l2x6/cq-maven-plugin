@@ -25,7 +25,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.apache.camel.tooling.model.ArtifactModel;
-import org.l2x6.cq.PomTransformer.Gavtcs;
 
 import freemarker.template.TemplateMethodModelEx;
 import freemarker.template.TemplateModelException;

@@ -122,7 +122,7 @@ public class PromoteExtensionMojo extends AbstractMojo {
 
         /* Remove the test module from the extension parent */
         final Path srcParentPomPath = srcParentDir.resolve("pom.xml");
-        new PomTransformer(srcParentPomPath, charset).transform(Transformation.removeModule("integration-test"));
+        new PomTransformer(srcParentPomPath, charset).transform(Transformation.removeModule(true, true, "integration-test"));
 
         /* Adjust the names in the test POM */
         adjustTestPom(artifactIdBase, destItestDir.resolve("pom.xml"), charset, templatesUriBase);
@@ -141,7 +141,7 @@ public class PromoteExtensionMojo extends AbstractMojo {
 
         /* Remove the extension module from the extensions-jvm POM */
         final Path extensionsJvmPomPath = sourceRootPath.resolve("extensions-jvm/pom.xml");
-        new PomTransformer(extensionsJvmPomPath, charset).transform(Transformation.removeModule(artifactIdBase));
+        new PomTransformer(extensionsJvmPomPath, charset).transform(Transformation.removeModule(false, true, artifactIdBase));
 
         /* Add the extension module to its new parent module */
         final Path destExtensionsPomPath = extensionsPath.resolve("pom.xml");

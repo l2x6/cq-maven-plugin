@@ -56,7 +56,6 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import javax.xml.namespace.QName;
@@ -68,7 +67,6 @@ import javax.xml.transform.stream.StreamSource;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
-import javax.xml.xpath.XPathFactory;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
@@ -82,10 +80,6 @@ public class PomSorter {
             new ExtensionDir("extensions-jvm", "camel-quarkus-"),
             new ExtensionDir("extensions-support", "camel-quarkus-support-"),
             new ExtensionDir("integration-tests/support", "camel-quarkus-integration-test-support-")));
-
-    private static final Pattern dependenciesPattern = Pattern.compile("([^\n<]*)<dependenc");
-    private static final Pattern propsPattern = Pattern.compile("([^\n<]*)</properties>");
-    private static final Pattern rulePattern = Pattern.compile("<mvnd.builder.rule>[^<]*</mvnd.builder.rule>");
 
     public static void sortDependencyManagement(Path baseDir, List<String> pomPaths) {
         for (String pomPath : pomPaths) {
@@ -192,146 +186,16 @@ public class PomSorter {
         }
     }
 
-    public static void updateMvndRules(Path baseDir, List<String> updateMvndRuleDirs, Set<String> extensionArtifactIds) {
-
-        for (String updateMvndRuleDir : updateMvndRuleDirs) {
-            safeList(baseDir.resolve(updateMvndRuleDir))
-                    .filter(p -> Files.isDirectory(p) && !"support".equals(p.getFileName().toString()))
-                    .sorted()
-                    .map(p -> p.resolve("pom.xml"))
-                    .filter(p -> Files.exists(p))
-                    .forEach(pomXmlPath -> {
-                        updateMvndRules(baseDir, pomXmlPath, extensionArtifactIds, false);
-                    });
-        }
-    }
-
-    public static void updateMvndRules(Path baseDir, Path pomXmlPath, Set<String> extensionArtifactIds, boolean newLineDelimited) {
-        final XPath xPath = XPathFactory.newInstance().newXPath();
-        final Document pomXmlProject = parse(pomXmlPath);
-        /* Policy may disappear at some point */
-        final boolean policyExtensionExists = extensionArtifactIds.contains("camel-quarkus-support-policy");
-
-        final Set<String> extensionDependencies = evalStream(
-                xPath,
-                PomTransformer.anyNs("project", "dependencies", "dependency"),
-                pomXmlProject)
-                        .filter(dep -> "org.apache.camel.quarkus"
-                                .equals(eval(xPath, "./" + PomTransformer.anyNs("groupId") + "/text()", dep, String.class)))
-                        .map(dep -> eval(xPath, "./" + PomTransformer.anyNs("artifactId") + "/text()", dep, String.class))
-                        .filter(artifactId -> extensionArtifactIds.contains(artifactId))
-                        .map(artifactId -> artifactId + "-deployment")
-                        .collect(Collectors.toCollection(TreeSet::new));
-        if (policyExtensionExists) {
-            extensionDependencies.add("camel-quarkus-support-policy-deployment");
-        }
-
-        setMvndRule(baseDir, pomXmlPath, xPath, pomXmlProject, extensionDependencies, newLineDelimited);
-    }
-
-    public static void setMvndRule(Path baseDir, Path pomXmlPath, final Set<String> expectedRule, boolean newLineDelimited) {
-        final XPath xPath = XPathFactory.newInstance().newXPath();
-        final Document pomXmlProject = parse(pomXmlPath);
-        setMvndRule(baseDir, pomXmlPath, xPath, pomXmlProject, expectedRule, newLineDelimited);
-    }
-
-    static void setMvndRule(
+    public static Set<String> findExtensionArtifactIds(
             Path baseDir,
-            Path pomXmlPath,
-            final XPath xPath,
-            final Document pomXmlProject,
-            final Set<String> expectedRule,
-            boolean newLineDelimited) {
-        final Path relativePomPath = baseDir.relativize(pomXmlPath);
-        String pomXmlText = read(pomXmlPath);
-        final Matcher depsMatcher = dependenciesPattern.matcher(pomXmlText);
-        if (depsMatcher.find()) {
-            final String indent = depsMatcher.group(1);
-            final int insertionPos = depsMatcher.start();
-
-            final NodeList props = eval(xPath, PomTransformer.anyNs("project", "properties"), pomXmlProject, NodeList.class);
-            if (props.getLength() == 0) {
-                final String insert = indent + "<properties>\n" +
-                        rule(expectedRule, indent, newLineDelimited) +
-                        indent + "</properties>\n\n";
-                pomXmlText = new StringBuilder(pomXmlText).insert(insertionPos, insert).toString();
-                write(pomXmlPath, pomXmlText);
-            } else {
-                final NodeList mvndRule = eval(xPath, "." + PomTransformer.anyNs("mvnd.builder.rule"), props.item(0),
-                        NodeList.class);
-                if (mvndRule.getLength() == 0) {
-                    final Matcher propsMatcher = propsPattern.matcher(pomXmlText);
-                    if (propsMatcher.find()) {
-                        final int insPos = propsMatcher.start();
-                        final String insert = rule(expectedRule, indent, newLineDelimited);
-                        pomXmlText = new StringBuilder(pomXmlText).insert(insPos, insert).toString();
-                        write(pomXmlPath, pomXmlText);
-                    } else {
-                        throw new IllegalStateException(
-                                "Could not find " + propsPattern.pattern() + " in " + relativePomPath);
-                    }
-                } else {
-                    final String rawActualRule = eval(xPath, "./text()", mvndRule.item(0), String.class);
-                    Set<String> actualRule = Stream.of(rawActualRule.trim().split("[,\\s]+"))
-                            .collect(Collectors.toCollection(TreeSet::new));
-                    if (!expectedRule.equals(actualRule)) {
-                        final Matcher ruleMatcher = rulePattern.matcher(pomXmlText);
-                        if (ruleMatcher.find()) {
-                            final StringBuffer buf = new StringBuffer(pomXmlText.length() + 128);
-                            final String replacement = "<mvnd.builder.rule>"
-                                    + formatRule(expectedRule, indent, newLineDelimited)
-                                    + "</mvnd.builder.rule>";
-                            ruleMatcher.appendReplacement(buf, Matcher.quoteReplacement(replacement));
-                            ruleMatcher.appendTail(buf);
-                            write(pomXmlPath, buf.toString());
-                        } else {
-                            throw new IllegalStateException(
-                                    "Could not find " + rulePattern.pattern() + " in " + relativePomPath);
-                        }
-                    }
-                }
-            }
-
-        } else {
-            throw new IllegalStateException(
-                    "Could not find " + dependenciesPattern.pattern() + " in " + relativePomPath);
-        }
-    }
-
-    private static String rule(Set<String> expectedRule, String indent, boolean newLineDelimited) {
-        return indent + indent + "<!-- mvnd, a.k.a. Maven Daemon: https://github.com/mvndaemon/mvnd -->\n"
-                +
-                indent + indent
-                + "<!-- The following rule tells mvnd to build the listed deployment modules before this module. -->\n"
-                +
-                indent + indent
-                + "<!-- This is important because mvnd builds modules in parallel by default. The deployment modules are not -->\n"
-                +
-                indent + indent
-                + "<!-- explicit dependencies of this module in the Maven sense, although they are required by the Quarkus Maven plugin. -->\n"
-                +
-                indent + indent
-                + "<!-- Please update the rule whenever you change the dependencies of this module by running -->\n"
-                +
-                indent + indent
-                + "<!--     mvn process-resources -Pformat    from the root directory -->\n"
-                + indent + indent + "<mvnd.builder.rule>" + formatRule(expectedRule, indent, newLineDelimited)
-                + "</mvnd.builder.rule>\n";
-    }
-
-    static String formatRule(Set<String> expectedRule, String indent, boolean newLineDelimited) {
-        return newLineDelimited ? ("\n" + indent + indent + indent
-                + expectedRule.stream().collect(Collectors.joining("\n" + indent + indent + indent))
-                + "\n" + indent + indent)
-                : expectedRule.stream().collect(Collectors.joining(","));
-    }
-
-    public static Set<String> findExtensionArtifactIds(Path baseDir, List<ExtensionDir> extensionDirs) {
+            List<ExtensionDir> extensionDirs,
+            Set<String> skipArtifactIds) {
         final Set<String> extensionArtifactIds = new TreeSet<>();
         for (ExtensionDir extDir : extensionDirs) {
             final Path absPath = baseDir.resolve(extDir.getPath());
             CqUtils.findExtensionArtifactIdBases(absPath)
                     .map(artifactIdBase -> extDir.getArtifactIdPrefix() + artifactIdBase)
+                    .filter(artifactId -> !skipArtifactIds.contains(artifactId))
                     .forEach(extensionArtifactIds::add);
         }
         return extensionArtifactIds;
