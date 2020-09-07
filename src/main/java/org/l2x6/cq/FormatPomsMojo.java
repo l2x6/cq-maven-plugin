@@ -42,7 +42,7 @@ import org.l2x6.cq.PomTransformer.Transformation;
  */
 @Mojo(name = "format", requiresProject = true, inheritByDefault = false)
 public class FormatPomsMojo extends AbstractMojo {
-    public static final String VIRTUAL_DEPS_INITIAL_COMMENT = " The following dependencies guarantee that this module is built after them. You can update them by runing `mvn process-resources -Pformat -N` from the source tree root directory ";
+    public static final String VIRTUAL_DEPS_INITIAL_COMMENT = " The following dependencies guarantee that this module is built after them. You can update them by running `mvn process-resources -Pformat -N` from the source tree root directory ";
     public static final String CQ_SORT_MODULES_PATHS = "extensions/pom.xml,integration-tests/pom.xml";
     public static final String CQ_SORT_DEPENDENCY_MANAGEMENT_PATHS = "poms/bom/pom.xml,poms/bom-deployment/pom.xml";
     public static final String CQ_UPDATE_VIRTUAL_DEPENDENCIES_DIRS = "examples,integration-tests";
