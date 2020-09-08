@@ -244,6 +244,75 @@ public class PomTransformerTest {
         asserTransformation(source, Collections.singletonList(Transformation.addModule("new-module")), expected);
     }
 
+
+    @Test
+    void addModuleOutOfOrder() {
+        final String source = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" //
+                + "<project xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns=\"http://maven.apache.org/POM/4.0.0\"\n" //
+                + "         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd\">\n" //
+                + "    <modelVersion>4.0.0</modelVersion>\n" //
+                + "    <groupId>org.acme</groupId>\n" //
+                + "    <artifactId>grand-parent</artifactId>\n" //
+                + "    <version>0.1-SNAPSHOT</version>\n" //
+                + "    <packaging>pom</packaging>\n" //
+                + "\n" //
+                + "    <properties>\n" //
+                + "        <foo>bar</foo>\n" //
+                + "    </properties>\n" //
+                + "\n" //
+                + "    <dependencyManagement>\n" //
+                + "        <dependencies>\n" //
+                + "            <dependency>\n" //
+                + "                <groupId>org.foo</groupId>\n" //
+                + "                <artifactId>bar</artifactId>\n" //
+                + "                <version>${bar.version}</version>\n" //
+                + "            </dependency>\n" //
+                + "        </dependencies>\n" //
+                + "    </dependencyManagement>\n" //
+                + "\n" //
+                + "    <modules>\n" //
+                + "        <!-- build those first -->\n" //
+                + "        <module>module-1</module>\n" //
+                + "    </modules>\n" //
+                + "\n" //
+                + "    <build>\n" //
+                + "    </build>\n" //
+                + "</project>\n";
+        final String expected = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" //
+                + "<project xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns=\"http://maven.apache.org/POM/4.0.0\"\n" //
+                + "         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd\">\n" //
+                + "    <modelVersion>4.0.0</modelVersion>\n" //
+                + "    <groupId>org.acme</groupId>\n" //
+                + "    <artifactId>grand-parent</artifactId>\n" //
+                + "    <version>0.1-SNAPSHOT</version>\n" //
+                + "    <packaging>pom</packaging>\n" //
+                + "\n" //
+                + "    <properties>\n" //
+                + "        <foo>bar</foo>\n" //
+                + "    </properties>\n" //
+                + "\n" //
+                + "    <dependencyManagement>\n" //
+                + "        <dependencies>\n" //
+                + "            <dependency>\n" //
+                + "                <groupId>org.foo</groupId>\n" //
+                + "                <artifactId>bar</artifactId>\n" //
+                + "                <version>${bar.version}</version>\n" //
+                + "            </dependency>\n" //
+                + "        </dependencies>\n" //
+                + "    </dependencyManagement>\n" //
+                + "\n" //
+                + "    <modules>\n" //
+                + "        <!-- build those first -->\n" //
+                + "        <module>module-1</module>\n" //
+                + "        <module>module-2</module>\n" //
+                + "    </modules>\n" //
+                + "\n" //
+                + "    <build>\n" //
+                + "    </build>\n" //
+                + "</project>\n";
+        asserTransformation(source, Collections.singletonList(Transformation.addModule("module-2")), expected);
+    }
+
     @Test
     void addModuleBeforeBuildNoIndent() {
         final String source = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" //

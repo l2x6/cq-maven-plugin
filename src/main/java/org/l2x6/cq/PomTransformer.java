@@ -634,31 +634,36 @@ public class PomTransformer {
             final Map<String, ElementOrderEntry> elementOrdering = getElementOrdering();
             final ElementOrderEntry newEntry = elementOrdering.get(elementName);
             ElementOrderEntry previousProjectChildEntry = null;
+            Node refNode = null;
+            boolean emptyLineBefore = false;
+            boolean emptyLineAfter = false;
             for (WrappedNode<Element> projectChild : project.childElements()) {
                 final String projectChildName = projectChild.node.getNodeName();
                 if (projectChildName.equals(elementName)) {
                     /* No need to insert, return existing */
                     return projectChild.asContainerElement();
                 }
-                final ElementOrderEntry projectChildEntry = elementOrdering.get(projectChildName);
-                if (projectChildEntry != null) {
-                    /* Process only known elements */
-                    if (projectChildEntry.ordinal > newEntry.ordinal) {
-                        final Node refNode = projectChild.previousSiblingInsertionRefNode();
-                        return project.addChildContainerElement(
-                                elementName,
-                                refNode,
-                                previousProjectChildEntry != null && previousProjectChildEntry.groupId != newEntry.groupId,
-                                projectChildEntry != null && projectChildEntry.groupId != newEntry.groupId);
+                if (refNode == null) {
+                    final ElementOrderEntry projectChildEntry = elementOrdering.get(projectChildName);
+                    if (projectChildEntry != null) {
+                        /* Process only known elements */
+                        if (projectChildEntry.ordinal > newEntry.ordinal) {
+                            refNode = projectChild.previousSiblingInsertionRefNode();
+                            emptyLineBefore = previousProjectChildEntry != null && previousProjectChildEntry.groupId != newEntry.groupId;
+                            emptyLineAfter = projectChildEntry != null && projectChildEntry.groupId != newEntry.groupId;
+                        }
+                        previousProjectChildEntry = projectChildEntry;
                     }
-                    previousProjectChildEntry = projectChildEntry;
                 }
+            }
+            if (refNode == null) {
+                emptyLineBefore = previousProjectChildEntry != null && previousProjectChildEntry.groupId != newEntry.groupId;
             }
             return project.addChildContainerElement(
                     elementName,
-                    null,
-                    previousProjectChildEntry != null && previousProjectChildEntry.groupId != newEntry.groupId,
-                    false);
+                    refNode,
+                    emptyLineBefore,
+                    emptyLineAfter);
         }
 
         public static boolean isEmptyLineNode(Node node) {
