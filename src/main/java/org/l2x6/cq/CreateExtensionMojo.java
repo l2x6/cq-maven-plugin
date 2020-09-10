@@ -79,7 +79,7 @@ public class CreateExtensionMojo extends AbstractMojo {
      * @since 0.1.0
      */
     @Parameter(property = "cq.basedir", defaultValue = "${project.basedir}")
-    File baseDir;
+    File basedir;
     private Path basePath;
 
     /**
@@ -373,7 +373,7 @@ public class CreateExtensionMojo extends AbstractMojo {
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
-        basePath = baseDir.toPath().toAbsolutePath().normalize();
+        basePath = basedir.toPath().toAbsolutePath().normalize();
         if (extensionsDir == null) {
             extensionsDir = nativeSupported ? basePath.resolve(CQ_EXTENSIONS_DIR).toFile()
                     : basePath.resolve(CQ_EXTENSIONS_JVM_DIR).toFile();

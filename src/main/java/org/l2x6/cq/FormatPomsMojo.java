@@ -21,10 +21,10 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -33,6 +33,8 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
+import org.apache.maven.shared.model.fileset.FileSet;
+import org.apache.maven.shared.model.fileset.util.FileSetManager;
 import org.l2x6.cq.PomTransformer.Transformation;
 
 /**
@@ -111,7 +113,7 @@ public class FormatPomsMojo extends AbstractMojo {
      */
     @Parameter(property = "cq.skipArtifactIdBases")
     Set<String> skipArtifactIdBases;
-    private Set<String> skipArtifactIds;
+    Set<String> skipArtifactIds;
 
     /**
      * Skip the execution of this mojo.
@@ -129,6 +131,14 @@ public class FormatPomsMojo extends AbstractMojo {
     @Parameter(defaultValue = CqUtils.DEFAULT_ENCODING, required = true, property = "cq.encoding")
     String encoding;
     Charset charset;
+
+    /**
+     * A FileSet to select `application.properties` files that should be removed if empty.
+     *
+     * @since 0.19.0
+     */
+    @Parameter(property = "cq.removeEmptyApplicationProperties")
+    FileSet removeEmptyApplicationProperties;
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
@@ -192,5 +202,22 @@ public class FormatPomsMojo extends AbstractMojo {
                                         Transformation.removeContainerElementIfEmpty(true, true, true, "properties"));
                     });
         }
+
+        if (removeEmptyApplicationProperties != null) {
+            final FileSetManager fileSetManager = new FileSetManager();
+            final Path dir = Paths.get(removeEmptyApplicationProperties.getDirectory());
+            final String[] includedFiles = fileSetManager.getIncludedFiles(removeEmptyApplicationProperties);
+            for (String includedFile : includedFiles) {
+                final Path propsFilePath = dir.resolve(includedFile);
+                if (Files.isRegularFile(propsFilePath) && CqUtils.isEmptyPropertiesFile(propsFilePath)) {
+                    try {
+                        Files.delete(propsFilePath);
+                    } catch (IOException e) {
+                        throw new RuntimeException("Could not remove " + propsFilePath, e);
+                    }
+                }
+            }
+        }
+
     }
 }

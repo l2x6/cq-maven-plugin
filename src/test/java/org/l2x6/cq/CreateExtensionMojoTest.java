@@ -17,7 +17,6 @@
 package org.l2x6.cq;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -26,10 +25,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import org.apache.maven.model.Build;
 import org.apache.maven.model.Dependency;
@@ -46,7 +42,7 @@ public class CreateExtensionMojoTest {
         final CreateExtensionMojo mojo = new CreateExtensionMojo();
         mojo.project = new MavenProject();
         final Path basePath = projectDir.toAbsolutePath().normalize();
-        mojo.baseDir = basePath.toFile();
+        mojo.basedir = basePath.toFile();
         mojo.nativeSupported = true;
 
         final Path pom = projectDir.resolve("pom.xml");
@@ -107,77 +103,42 @@ public class CreateExtensionMojoTest {
         return mojo;
     }
 
-    private static Path createProjectFromTemplate(String testProjectName, String copyPrefix) throws IOException {
-        final Path srcDir = Paths.get("src/test/resources/projects/" + testProjectName);
-        /*
-         * We want to run on the same project multiple times with different args so let's create a copy with a random
-         * suffix
-         */
-        final Path copyDir = newProjectDir(copyPrefix);
-        Files.walk(srcDir).forEach(source -> {
-            final Path dest = copyDir.resolve(srcDir.relativize(source));
-            try {
-                Files.copy(source, dest);
-            } catch (IOException e) {
-                if (!Files.isDirectory(dest)) {
-                    throw new RuntimeException(e);
-                }
-            }
-        });
-        return copyDir;
-    }
-
-    private static Path newProjectDir(String copyPrefix) throws IOException {
-        int count = 0;
-        while (count < 100) {
-            Path path = Paths.get("target/test-classes/projects/" + copyPrefix);// + "-" + UUID.randomUUID().toString().substring(0, 7));
-            if (!Files.exists(path)) {
-                Files.createDirectories(path);
-                return path;
-            }
-            count++;
-        }
-
-        // if we have tried too many times we just give up instead of looping forever which could cause the test to never end
-        throw new RuntimeException("Unable to create a directory for copying the test application into");
-    }
-
     @Test
     void createExtensionComponent() throws MojoExecutionException, MojoFailureException,
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
         final String testName = "create-extension-component";
-        final CreateExtensionMojo mojo = initMojo(createProjectFromTemplate("create-extension-pom", testName));
+        final CreateExtensionMojo mojo = initMojo(TestUtils.createProjectFromTemplate("create-extension-pom", testName));
         mojo.artifactIdBase = "dozer";
         mojo.execute();
 
-        assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
-                mojo.baseDir.toPath());
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
+                mojo.basedir.toPath());
     }
 
     @Test
     void createExtensionComponentJvm() throws MojoExecutionException, MojoFailureException,
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
         final String testName = "create-extension-component-jvm";
-        final CreateExtensionMojo mojo = initMojo(createProjectFromTemplate("create-extension-pom", testName));
+        final CreateExtensionMojo mojo = initMojo(TestUtils.createProjectFromTemplate("create-extension-pom", testName));
         mojo.artifactIdBase = "dozer";
         mojo.nativeSupported = false;
         mojo.execute();
 
-        assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
-                mojo.baseDir.toPath());
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
+                mojo.basedir.toPath());
     }
 
     @Test
     void createExtensionDataformat() throws MojoExecutionException, MojoFailureException,
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
         final String testName = "create-extension-dataformat";
-        final CreateExtensionMojo mojo = initMojo(createProjectFromTemplate("create-extension-pom", testName));
+        final CreateExtensionMojo mojo = initMojo(TestUtils.createProjectFromTemplate("create-extension-pom", testName));
         mojo.artifactIdBase = "base64";
 
         mojo.execute();
 
-        assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
-                mojo.baseDir.toPath());
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
+                mojo.basedir.toPath());
     }
 
 
@@ -185,51 +146,51 @@ public class CreateExtensionMojoTest {
     void createExtensionDataformatJvm() throws MojoExecutionException, MojoFailureException,
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
         final String testName = "create-extension-dataformat-jvm";
-        final CreateExtensionMojo mojo = initMojo(createProjectFromTemplate("create-extension-pom", testName));
+        final CreateExtensionMojo mojo = initMojo(TestUtils.createProjectFromTemplate("create-extension-pom", testName));
         mojo.artifactIdBase = "base64";
         mojo.nativeSupported = false;
 
         mojo.execute();
 
-        assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
-                mojo.baseDir.toPath());
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
+                mojo.basedir.toPath());
     }
 
     @Test
     void createExtensionLanguage() throws MojoExecutionException, MojoFailureException,
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
         final String testName = "create-extension-language";
-        final CreateExtensionMojo mojo = initMojo(createProjectFromTemplate("create-extension-pom", testName));
+        final CreateExtensionMojo mojo = initMojo(TestUtils.createProjectFromTemplate("create-extension-pom", testName));
         mojo.artifactIdBase = "xpath";
         mojo.execute();
 
-        assertTreesMatch(Paths.get("src/test/resources/expected/" + testName ),
-                mojo.baseDir.toPath());
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName ),
+                mojo.basedir.toPath());
     }
 
     @Test
     void createExtensionLanguageJvm() throws MojoExecutionException, MojoFailureException,
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
         final String testName = "create-extension-language-jvm";
-        final CreateExtensionMojo mojo = initMojo(createProjectFromTemplate("create-extension-pom", testName));
+        final CreateExtensionMojo mojo = initMojo(TestUtils.createProjectFromTemplate("create-extension-pom", testName));
         mojo.artifactIdBase = "xpath";
         mojo.nativeSupported = false;
         mojo.execute();
 
-        assertTreesMatch(Paths.get("src/test/resources/expected/" + testName ),
-                mojo.baseDir.toPath());
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName ),
+                mojo.basedir.toPath());
     }
 
     @Test
     void createExtensionOther() throws MojoExecutionException, MojoFailureException,
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
         final String testName = "create-extension-other";
-        final CreateExtensionMojo mojo = initMojo(createProjectFromTemplate("create-extension-pom", testName));
+        final CreateExtensionMojo mojo = initMojo(TestUtils.createProjectFromTemplate("create-extension-pom", testName));
         mojo.artifactIdBase = "attachments";
         mojo.execute();
 
-        assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
-                mojo.baseDir.toPath());
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
+                mojo.basedir.toPath());
     }
 
 
@@ -237,57 +198,20 @@ public class CreateExtensionMojoTest {
     void createExtensionOtherJvm() throws MojoExecutionException, MojoFailureException,
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
         final String testName = "create-extension-other-jvm";
-        final CreateExtensionMojo mojo = initMojo(createProjectFromTemplate("create-extension-pom", testName));
+        final CreateExtensionMojo mojo = initMojo(TestUtils.createProjectFromTemplate("create-extension-pom", testName));
         mojo.artifactIdBase = "attachments";
         mojo.nativeSupported = false;
         mojo.execute();
 
-        assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
-                mojo.baseDir.toPath());
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
+                mojo.basedir.toPath());
     }
-    static void assertTreesMatch(Path expected, Path actual) throws IOException {
-        final Set<Path> expectedFiles = new LinkedHashSet<>();
-        Files.walk(expected).filter(Files::isRegularFile).forEach(p -> {
-            final Path relative = expected.relativize(p);
-            expectedFiles.add(relative);
-            final Path actualPath = actual.resolve(relative);
-            org.assertj.core.api.Assertions.assertThat(actualPath).hasSameTextualContentAs(p, StandardCharsets.UTF_8);
-        });
-
-        final Set<Path> unexpectedFiles = new LinkedHashSet<>();
-        Files.walk(actual).filter(Files::isRegularFile).forEach(p -> {
-            final Path relative = actual.relativize(p);
-            if (!expectedFiles.contains(relative)) {
-                unexpectedFiles.add(relative);
-            }
-        });
-        if (!unexpectedFiles.isEmpty()) {
-            fail(String.format("Files found under [%s] but not defined as expected under [%s]:%s", actual,
-                    expected, unexpectedFiles.stream().map(Path::toString).collect(Collectors.joining("\n    "))));
-        }
-    }
-
     @Test
     void getPackage() throws IOException {
         assertEquals("org.apache.camel.quarkus.aws.sns.deployment", CqUtils
                 .getJavaPackage("org.apache.camel.quarkus", null, "camel-quarkus-aws-sns-deployment"));
         assertEquals("org.apache.camel.quarkus.component.aws.sns.deployment", CqUtils
                 .getJavaPackage("org.apache.camel.quarkus", "component", "camel-quarkus-aws-sns-deployment"));
-    }
-
-    @Test
-    void toCapCamelCase() throws IOException {
-        assertEquals("FooBarBaz", CqUtils.toCapCamelCase("foo+-bar.baz"));
-    }
-
-    @Test
-    void toSnakeCase() throws IOException {
-        assertEquals("foo_bar_baz", CqUtils.toSnakeCase("Foo+-bar.baz"));
-    }
-
-    @Test
-    void toKebabCase() throws IOException {
-        assertEquals("foo-bar-baz", CqUtils.toKebabCase("foo+-BAR.baZ"));
     }
 
 }

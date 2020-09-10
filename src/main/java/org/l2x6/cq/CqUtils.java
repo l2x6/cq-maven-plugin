@@ -23,12 +23,14 @@ import java.io.Reader;
 import java.io.Writer;
 import java.net.URL;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Properties;
 import java.util.Set;
 import java.util.Stack;
 import java.util.function.Consumer;
@@ -316,6 +318,16 @@ public class CqUtils {
             throw new RuntimeException("Could not create temp file", e);
         }
         return result;
+    }
+
+    public static boolean isEmptyPropertiesFile(Path file) {
+        final Properties props = new Properties();
+        try (InputStream in = Files.newInputStream(file)) {
+            props.load(in);
+        } catch (IOException e) {
+            throw new RuntimeException("Could not read " + file, e);
+        }
+        return props.isEmpty();
     }
 
 }

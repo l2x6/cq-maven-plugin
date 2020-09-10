@@ -36,7 +36,7 @@ public class PomSorterTest {
         final Path baseDir = Paths.get("target/test-classes/projects/pom-sorter/dependency-management");
         PomSorter.sortDependencyManagement(baseDir, Arrays.asList("pom1.xml"));
         final Path expected = Paths.get("src/test/resources/expected/pom-sorter/dependency-management");
-        CreateExtensionMojoTest.assertTreesMatch(expected, baseDir);
+        TestUtils.assertTreesMatch(expected, baseDir);
     }
 
     @Test
@@ -44,7 +44,7 @@ public class PomSorterTest {
         final Path baseDir = Paths.get("target/test-classes/projects/pom-sorter/modules");
         PomSorter.sortModules(baseDir, Arrays.asList("pom1.xml"));
         final Path expected = Paths.get("src/test/resources/expected/pom-sorter/modules");
-        CreateExtensionMojoTest.assertTreesMatch(expected, baseDir);
+        TestUtils.assertTreesMatch(expected, baseDir);
     }
 
     @Test
@@ -71,6 +71,6 @@ public class PomSorterTest {
         }
 
         final Path expected = Paths.get("src/test/resources/expected/pom-sorter/mvnd-rules");
-        CreateExtensionMojoTest.assertTreesMatch(expected, baseDir.resolve("mvnd-rules"));
+        TestUtils.assertTreesMatch(expected, baseDir.resolve("mvnd-rules"));
     }
 }
