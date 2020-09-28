@@ -35,6 +35,7 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
+import org.apache.maven.project.MavenProject;
 import org.l2x6.cq.PomTransformer.Transformation;
 
 import freemarker.template.Configuration;
@@ -84,6 +85,12 @@ public class PromoteExtensionMojo extends AbstractMojo {
      */
     @Parameter(defaultValue = CqUtils.DEFAULT_TEMPLATES_URI_BASE, required = true, property = "cq.templatesUriBase")
     String templatesUriBase;
+
+    /**
+     * The Camel Quarkus version, expected to be something like 1.2.0-SNAPSHOT.
+     */
+    @Parameter(defaultValue = "${project.version}", required = true, readonly = true)
+    String camelQuarkusVersion;
 
     private final static Pattern RELATIVE_PATH_PATTERN = Pattern.compile("[ \t\r\n]*<relativePath>([^<]+)</relativePath>");
     private final static Pattern NAME_PATTERN = Pattern.compile("<name>Camel Quarkus :: ([^<]+) :: Integration Test</name>");
@@ -147,6 +154,12 @@ public class PromoteExtensionMojo extends AbstractMojo {
         final Path destExtensionsPomPath = extensionsPath.resolve("pom.xml");
         new PomTransformer(destExtensionsPomPath, charset).transform(Transformation.addModule(artifactIdBase));
         PomSorter.sortModules(destExtensionsPomPath);
+
+        /* Set the camel.quarkus.nativeSince property in the runtime POM */
+        final Path runtimePomPath = destParentDir.resolve("runtime/pom.xml");
+        final String camelQuarkusNativeSinceVersion = camelQuarkusVersion.replaceAll("-SNAPSHOT", "");
+        Transformation addNativeSinceProperty = Transformation.addProperty("camel.quarkus.nativeSince", camelQuarkusNativeSinceVersion);
+        new PomTransformer(runtimePomPath, charset).transform(addNativeSinceProperty);
 
         // Remove the warning build step from
         // extensions/${EXT}/deployment/src/main/java/org/apache/camel/quarkus/component/${EXT}/deployment/${EXT}Processor.java:

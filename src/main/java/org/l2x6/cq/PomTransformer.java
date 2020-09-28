@@ -864,7 +864,7 @@ public class PomTransformer {
         public static Transformation addProperty(String name, String value) {
             return (Document document, TransformationContext context) -> {
                 final ContainerElement props = context.getOrAddContainerElement("properties");
-                props.addChildTextElement("name", value);
+                props.addChildTextElement(name, value);
             };
         }
 
