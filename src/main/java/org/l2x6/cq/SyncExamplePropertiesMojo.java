@@ -61,6 +61,14 @@ public class SyncExamplePropertiesMojo extends AbstractMojo {
     String encoding;
     Charset charset;
 
+    /**
+     * The Camel Quarkus version to sync with
+     *
+     * @since 0.22.0
+     */
+    @Parameter(property = "camel-quarkus.version")
+    String cqVersion;
+
     @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
     String localRepository;
 
@@ -73,12 +81,15 @@ public class SyncExamplePropertiesMojo extends AbstractMojo {
         final Path pomXmlPath = basePath.resolve("pom.xml");
         final Model exampleModel = CqUtils.readPom(pomXmlPath, charset);
         final Properties exampleProps = exampleModel.getProperties();
-        final String cqVersion = exampleProps.getProperty("camel-quarkus.version");
+        if (cqVersion == null) {
+            cqVersion = exampleProps.getProperty("camel-quarkus.version");
+        }
 
         final Path cqPomPath = CqUtils.copyArtifact(localRepositoryPath, "org.apache.camel.quarkus", "camel-quarkus", cqVersion,
                 "pom");
         final Model cqModel = CqUtils.readPom(cqPomPath, charset);
         final Properties cqProps = cqModel.getProperties();
+        cqProps.put("camel-quarkus.version", cqVersion);
 
         final Map<String, String> changeProps = new LinkedHashMap<>();
         for (Entry<Object, Object> exampleProp : exampleProps.entrySet()) {
@@ -86,6 +97,7 @@ public class SyncExamplePropertiesMojo extends AbstractMojo {
             final String cqVal = (String) cqProps.get(key);
             if (cqVal != null) {
                 if (!cqVal.equals(exampleProp.getValue())) {
+                    getLog().info("Updating property " + key + " " + exampleProp.getValue() + " -> " + cqVal);
                     changeProps.put(key, cqVal);
                 }
             }
