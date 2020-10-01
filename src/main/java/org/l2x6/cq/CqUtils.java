@@ -296,8 +296,12 @@ public class CqUtils {
     }
 
     static Path copyJar(Path localRepository, String groupId, String artifactId, String version) {
+        return copyArtifact(localRepository, groupId, artifactId, version, "jar");
+    }
+
+    static Path copyArtifact(Path localRepository, String groupId, String artifactId, String version, String type) {
         final String relativeJarPath = groupId.replace('.', '/') + "/" + artifactId + "/" + version + "/" + artifactId + "-"
-                + version + ".jar";
+                + version + "." + type;
         final Path localPath = localRepository.resolve(relativeJarPath);
         final boolean localExists = Files.exists(localPath);
         final String remoteUri = "https://repository.apache.org/content/groups/public/" + relativeJarPath;

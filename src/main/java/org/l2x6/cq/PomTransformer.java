@@ -416,6 +416,16 @@ public class PomTransformer {
             }
         }
 
+        public void addOrSetChildTextElement(String name, String value) {
+            for(WrappedNode<Element> prop : childElements()) {
+                if (prop.node.getNodeName().equals(name)) {
+                    prop.node.setTextContent(value);
+                    return;
+                }
+            }
+            addChildTextElement(name, value, getOrAddLastIndent());
+        }
+
         public void addGavtcs(Gavtcs gavtcs) {
             addGavtcs(gavtcs, getOrAddLastIndent());
         }
@@ -865,6 +875,13 @@ public class PomTransformer {
             return (Document document, TransformationContext context) -> {
                 final ContainerElement props = context.getOrAddContainerElement("properties");
                 props.addChildTextElement(name, value);
+            };
+        }
+
+        public static Transformation addOrSetProperty(String name, String value) {
+            return (Document document, TransformationContext context) -> {
+                final ContainerElement props = context.getOrAddContainerElement("properties");
+                props.addOrSetChildTextElement(name, value);
             };
         }
 
