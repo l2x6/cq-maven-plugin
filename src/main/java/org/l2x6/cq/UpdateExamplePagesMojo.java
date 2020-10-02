@@ -37,16 +37,18 @@ import org.apache.maven.plugins.annotations.Parameter;
  *
  * @since 0.23.0
  */
-@Mojo(name = "update-example-partials", requiresProject = false, inheritByDefault = false)
-public class UpdateExamplePartialsMojo extends AbstractMojo {
+@Mojo(name = "update-example-pages", requiresProject = false, inheritByDefault = false)
+public class UpdateExamplePagesMojo extends AbstractMojo {
+
+    private static final String DESCRIPTION_PREFIX = ":cq-example-description: An example that ";
 
     /**
      * Where the generated partials should be stored
      *
      * @since 0.23.0
      */
-    @Parameter(property = "cq.partialsDir", required = true, defaultValue = "docs/modules/ROOT/partials/examples")
-    File partialsDir;
+    @Parameter(property = "cq.pagesDir", required = true, defaultValue = "docs/modules/ROOT/pages")
+    File pagesDir;
 
     /**
      * Where to look for example Maven modules
@@ -66,7 +68,7 @@ public class UpdateExamplePartialsMojo extends AbstractMojo {
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
-        final Path partialsDirPath = partialsDir.toPath();
+        final Path partialsDirPath = pagesDir.toPath();
         final Path examplesDirPath = examplesDir.toPath();
         final Charset charset = Charset.forName(encoding);
 
@@ -95,8 +97,12 @@ public class UpdateExamplePartialsMojo extends AbstractMojo {
                             for (String line : readmeLines) {
                                 line = line.trim();
                                 if (line.startsWith("= ")) {
+                                    sb.append(line + "\n");
                                     final String title = line.substring(2).replace(": A Camel Quarkus example", "");
                                     sb.append(":cq-example-title: " + title + "\n");
+                                } else if (line.startsWith(DESCRIPTION_PREFIX)) {
+                                    final String shortDescription = line.substring(DESCRIPTION_PREFIX.length(), line.length());
+                                    sb.append(":cq-example-description: ").append(Character.toUpperCase(shortDescription.charAt(0))).append(shortDescription.substring(1)).append('\n');
                                 } else if (line.startsWith(":")) {
                                     sb.append(line + "\n");
                                 } else if (line.isEmpty()) {
