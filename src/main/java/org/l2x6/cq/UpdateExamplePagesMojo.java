@@ -33,7 +33,7 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 
 /**
- * Updates AsciiDoc partial files that contain example metadata.
+ * Updates AsciiDoc pages that contain example metadata.
  *
  * @since 0.23.0
  */
@@ -43,11 +43,11 @@ public class UpdateExamplePagesMojo extends AbstractMojo {
     private static final String DESCRIPTION_PREFIX = ":cq-example-description: An example that ";
 
     /**
-     * Where the generated partials should be stored
+     * Where the generated pages should be stored
      *
      * @since 0.23.0
      */
-    @Parameter(property = "cq.pagesDir", required = true, defaultValue = "docs/modules/ROOT/pages")
+    @Parameter(property = "cq.pagesDir", required = true, defaultValue = "docs/modules/ROOT/pages/examples")
     File pagesDir;
 
     /**
@@ -68,17 +68,17 @@ public class UpdateExamplePagesMojo extends AbstractMojo {
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
-        final Path partialsDirPath = pagesDir.toPath();
+        final Path pagesDirPath = pagesDir.toPath();
         final Path examplesDirPath = examplesDir.toPath();
         final Charset charset = Charset.forName(encoding);
 
         try {
-            Files.createDirectories(partialsDirPath);
+            Files.createDirectories(pagesDirPath);
         } catch (IOException e) {
-            throw new RuntimeException("Could not create "+ partialsDirPath, e);
+            throw new RuntimeException("Could not create "+ pagesDirPath, e);
         }
 
-        final Set<String> wantedPartials = new HashSet<>();
+        final Set<String> wantedPages = new HashSet<>();
         try (Stream<Path> examples = Files.list(examplesDirPath)) {
 
             examples
@@ -87,8 +87,8 @@ public class UpdateExamplePagesMojo extends AbstractMojo {
                     .forEach(p -> {
 
                         final String dirName = p.getFileName().toString();
-                        final String partialFileName = dirName + ".adoc";
-                        wantedPartials.add(partialFileName);
+                        final String pageFileName = dirName + ".adoc";
+                        wantedPages.add(pageFileName);
 
                         final Path readmePath = p.resolve("README.adoc");
                         try {
@@ -113,9 +113,9 @@ public class UpdateExamplePagesMojo extends AbstractMojo {
                             }
                             sb.append(":cq-example-url: https://github.com/apache/camel-quarkus-examples/tree/master/"+ dirName +"\n");
 
-                            final Path partialPath = partialsDirPath.resolve(partialFileName);
-                            getLog().info("Updating " + partialPath);
-                            Files.write(partialPath, sb.toString().getBytes(charset));
+                            final Path pagePath = pagesDirPath.resolve(pageFileName);
+                            getLog().info("Updating " + pagePath);
+                            Files.write(pagePath, sb.toString().getBytes(charset));
                         } catch (IOException e) {
                             throw new RuntimeException("Could not read " + readmePath, e);
                         }
@@ -127,21 +127,21 @@ public class UpdateExamplePagesMojo extends AbstractMojo {
         }
 
         /* Remove the stale files */
-        try (Stream<Path> partials = Files.list(partialsDirPath)) {
-            partials
+        try (Stream<Path> pages = Files.list(pagesDirPath)) {
+            pages
                     .filter(p -> p.getFileName().toString().endsWith(".adoc"))
-                    .filter(p -> !wantedPartials.contains(p.getFileName().toString()))
+                    .filter(p -> !wantedPages.contains(p.getFileName().toString()))
                     .forEach(p -> {
-                        final Path partialPath = partialsDirPath.resolve(p);
-                        getLog().info("Deleting a stale partial " + partialPath);
+                        final Path pagePath = pagesDirPath.resolve(p);
+                        getLog().info("Deleting a stale page " + pagePath);
                         try {
-                            Files.delete(partialPath);
+                            Files.delete(pagePath);
                         } catch (IOException e) {
                             throw new RuntimeException("Could not delete " + p, e);
                         }
                     });
         } catch (IOException e) {
-            throw new RuntimeException("Could not list " + partialsDirPath, e);
+            throw new RuntimeException("Could not list " + pagesDirPath, e);
         }
 
     }
