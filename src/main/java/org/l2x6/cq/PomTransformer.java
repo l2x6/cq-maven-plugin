@@ -280,8 +280,7 @@ public class PomTransformer {
             if (removePrecedingComments || removePrecedingWhitespace) {
                 Node prevSibling = null;
                 while ((prevSibling = node.getPreviousSibling()) != null
-                        && (
-                                (removePrecedingWhitespace && TransformationContext.isWhiteSpaceNode(prevSibling))
+                        && ((removePrecedingWhitespace && TransformationContext.isWhiteSpaceNode(prevSibling))
                                 || (removePrecedingComments && prevSibling.getNodeType() == Node.COMMENT_NODE))) {
                     /* remove any preceding whitespace or comments */
                     prevSibling.getParentNode().removeChild(prevSibling);
@@ -417,7 +416,7 @@ public class PomTransformer {
         }
 
         public void addOrSetChildTextElement(String name, String value) {
-            for(WrappedNode<Element> prop : childElements()) {
+            for (WrappedNode<Element> prop : childElements()) {
                 if (prop.node.getNodeName().equals(name)) {
                     prop.node.setTextContent(value);
                     return;
@@ -659,7 +658,8 @@ public class PomTransformer {
                         /* Process only known elements */
                         if (projectChildEntry.ordinal > newEntry.ordinal) {
                             refNode = projectChild.previousSiblingInsertionRefNode();
-                            emptyLineBefore = previousProjectChildEntry != null && previousProjectChildEntry.groupId != newEntry.groupId;
+                            emptyLineBefore = previousProjectChildEntry != null
+                                    && previousProjectChildEntry.groupId != newEntry.groupId;
                             emptyLineAfter = projectChildEntry != null && projectChildEntry.groupId != newEntry.groupId;
                         }
                         previousProjectChildEntry = projectChildEntry;
@@ -782,21 +782,21 @@ public class PomTransformer {
 
         public Optional<ContainerElement> findDependency(Gavtcs gavtcs) {
             return getContainerElement("project", "dependencies")
-            .map(depsNode -> depsNode.childElementsStream()
-                    .map(WrappedNode::asContainerElement)
-                    .filter(depNode ->
-                    depNode.asGavtcs().equals(gavtcs))
-                    .findFirst()
-                    .orElse(null)
-            );
+                    .map(depsNode -> depsNode.childElementsStream()
+                            .map(WrappedNode::asContainerElement)
+                            .filter(depNode -> depNode.asGavtcs().equals(gavtcs))
+                            .findFirst()
+                            .orElse(null));
         }
 
-        public void removeDependency(Gavtcs removedDependency, boolean removePrecedingComments, boolean removePrecedingWhitespace) {
+        public void removeDependency(Gavtcs removedDependency, boolean removePrecedingComments,
+                boolean removePrecedingWhitespace) {
             getContainerElement("project", "dependencies")
                     .ifPresent(deps -> deps.childElementsStream()
                             .filter(wrappedDepNode -> wrappedDepNode.asContainerElement().asGavtcs().equals(removedDependency))
                             .findFirst()
-                            .ifPresent(wrappedDepNode -> wrappedDepNode.remove(removePrecedingComments, removePrecedingWhitespace)));
+                            .ifPresent(wrappedDepNode -> wrappedDepNode.remove(removePrecedingComments,
+                                    removePrecedingWhitespace)));
         }
 
         public void addDependencyIfNeeded(Gavtcs gavtcs, Comparator<Gavtcs> comparator) {
@@ -820,7 +820,8 @@ public class PomTransformer {
             deps.addGavtcs(gavtcs, refNode);
         }
 
-        public void removeNode(String xPathExpression, boolean removePrecedingComments, boolean removePrecedingWhitespace, boolean onlyIfEmpty) {
+        public void removeNode(String xPathExpression, boolean removePrecedingComments, boolean removePrecedingWhitespace,
+                boolean onlyIfEmpty) {
             try {
                 Node deletedNode = (Node) getXPath().evaluate(xPathExpression, document, XPathConstants.NODE);
                 if (deletedNode != null) {
@@ -830,8 +831,7 @@ public class PomTransformer {
                     if (removePrecedingComments || removePrecedingWhitespace) {
                         Node prevSibling = null;
                         while ((prevSibling = deletedNode.getPreviousSibling()) != null
-                                && (
-                                        (removePrecedingWhitespace && TransformationContext.isWhiteSpaceNode(prevSibling))
+                                && ((removePrecedingWhitespace && TransformationContext.isWhiteSpaceNode(prevSibling))
                                         || (removePrecedingComments && prevSibling.getNodeType() == Node.COMMENT_NODE))) {
                             /* remove any preceding whitespace or comments */
                             prevSibling.getParentNode().removeChild(prevSibling);
@@ -890,7 +890,8 @@ public class PomTransformer {
                     furtherNames);
         }
 
-        public static Transformation removeContainerElementIfEmpty(boolean removePrecedingComments, boolean removePrecedingWhitespace, boolean onlyIfEmpty, String elementName, String... furtherNames) {
+        public static Transformation removeContainerElementIfEmpty(boolean removePrecedingComments,
+                boolean removePrecedingWhitespace, boolean onlyIfEmpty, String elementName, String... furtherNames) {
             return (Document document, TransformationContext context) -> {
                 final String[] path = new String[furtherNames.length + 2];
                 int i = 0;
@@ -941,9 +942,9 @@ public class PomTransformer {
 
                 /* Remove stale mapped deps */
                 deps.stream()
-                    .filter(isSubsetMember)
-                    .filter(dep -> !newMappedDeps.contains(dep))
-                    .forEach(dep -> context.removeDependency(dep, true, true));
+                        .filter(isSubsetMember)
+                        .filter(dep -> !newMappedDeps.contains(dep))
+                        .forEach(dep -> context.removeDependency(dep, true, true));
 
                 if (initialComment != null && !newMappedDeps.isEmpty()) {
                     final Gavtcs firstMappedNode = newMappedDeps.iterator().next();
@@ -987,16 +988,27 @@ public class PomTransformer {
             };
         }
 
-        public static Transformation removeModule(boolean removePrecedingComments, boolean removePrecedingWhitespace, String module) {
+        public static Transformation removeModule(boolean removePrecedingComments, boolean removePrecedingWhitespace,
+                String module) {
             return (Document document, TransformationContext context) -> {
                 final String xPath = anyNs("project", "modules", "module") + "[text() = '" + module + "']";
                 context.removeNode(xPath, removePrecedingComments, removePrecedingWhitespace, false);
             };
         }
 
-        public static Transformation removeProperty(boolean removePrecedingComments, boolean removePrecedingWhitespace, String propertyName) {
+        public static Transformation removeProperty(boolean removePrecedingComments, boolean removePrecedingWhitespace,
+                String propertyName) {
             return (Document document, TransformationContext context) -> {
                 final String xPath = anyNs("project", "properties", propertyName);
+                context.removeNode(xPath, removePrecedingComments, removePrecedingWhitespace, false);
+            };
+        }
+
+        public static Transformation removePlugin(boolean removePrecedingComments, boolean removePrecedingWhitespace, String groupId, String artifactId) {
+            return (Document document, TransformationContext context) -> {
+                final String xPath = anyNs("project", "build", "plugins", "plugin")
+                        + "[." + anyNs("groupId") + "/text() = '" + groupId + "' and ." + anyNs("artifactId") + "/text() = '"
+                        + artifactId + "']";
                 context.removeNode(xPath, removePrecedingComments, removePrecedingWhitespace, false);
             };
         }
