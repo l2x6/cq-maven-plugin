@@ -63,6 +63,7 @@ import org.apache.maven.model.Plugin;
 import org.w3c.dom.Comment;
 import org.w3c.dom.DOMException;
 import org.w3c.dom.Document;
+import org.w3c.dom.DocumentFragment;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -425,6 +426,19 @@ public class PomTransformer {
             addChildTextElement(name, value, getOrAddLastIndent());
         }
 
+        public void addFragment(DocumentFragment fragment) {
+            addFragment(fragment, getOrAddLastIndent());
+        }
+
+        public void addFragment(DocumentFragment fragment, Node refNode) {
+            final NodeList children = fragment.getChildNodes();
+            for (int i = 0; i < children.getLength(); i++) {
+                final Node child = children.item(i);
+                final Node imported = node.getOwnerDocument().importNode(child, true);
+                node.insertBefore(imported, refNode);
+            }
+        }
+
         public void addGavtcs(Gavtcs gavtcs) {
             addGavtcs(gavtcs, getOrAddLastIndent());
         }
@@ -642,6 +656,10 @@ public class PomTransformer {
         public ContainerElement getOrAddContainerElement(String elementName) {
             final Map<String, ElementOrderEntry> elementOrdering = getElementOrdering();
             final ElementOrderEntry newEntry = elementOrdering.get(elementName);
+            if (newEntry == null) {
+                throw new IllegalArgumentException("Unexpected child of <project>: " + elementName + "; expected any of " +
+                        elementOrdering.keySet().stream().collect(Collectors.joining(", ")));
+            }
             ElementOrderEntry previousProjectChildEntry = null;
             Node refNode = null;
             boolean emptyLineBefore = false;
@@ -1074,6 +1092,13 @@ public class PomTransformer {
                 pluginElement.addChildTextElement("groupId", plugin.getGroupId());
                 pluginElement.addChildTextElement("artifactId", plugin.getArtifactId());
                 pluginElement.addChildTextElement("version", plugin.getVersion());
+            };
+        }
+
+        public static Transformation addFragment(DocumentFragment fragment, String parentPathFirst, String... parentPathOther) {
+            return (Document document, TransformationContext context) -> {
+                final ContainerElement parent = context.getOrAddContainerElements(parentPathFirst, parentPathOther);
+                parent.addFragment(fragment);
             };
         }
 

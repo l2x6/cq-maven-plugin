@@ -20,6 +20,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.io.StringReader;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.Charset;
@@ -30,6 +31,12 @@ import java.nio.file.StandardCopyOption;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.TransformerFactoryConfigurationError;
+import javax.xml.transform.dom.DOMResult;
+import javax.xml.transform.stream.StreamSource;
+
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -37,6 +44,12 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.l2x6.cq.PomTransformer.Transformation;
+import org.l2x6.cq.PomTransformer.TransformationContext;
+import org.w3c.dom.Document;
+import org.w3c.dom.DocumentFragment;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 import freemarker.template.Configuration;
 
@@ -212,17 +225,18 @@ public class PromoteExtensionMojo extends AbstractMojo {
             src = RELATIVE_PATH_PATTERN.matcher(src).replaceFirst("");
             src = src.replace("<artifactId>camel-quarkus-build-parent-it</artifactId>",
                     "<artifactId>camel-quarkus-integration-tests</artifactId>");
-
-            /* Add the native profile at the end of integration-tests/${EXT}/pom.xml: */
-            final String nativeProfileSource = loadNativeProfileSource(charset, templatesUriBase + "/integration-test-pom.xml");
-            src = src.replaceFirst("</build>", "</build>" + nativeProfileSource);
             Files.write(path, src.getBytes(charset));
         } catch (IOException e) {
             throw new RuntimeException("Could not read or write path " + path, e);
         }
+
+        /* Add the native profile at the end of integration-tests/${EXT}/pom.xml: */
+        final DocumentFragment nativeProfile = loadNativeProfile(charset, templatesUriBase + "/integration-test-pom.xml");
+        new PomTransformer(path, charset).transform(Transformation.addFragment(nativeProfile, "profiles"));
+
     }
 
-    static String loadNativeProfileSource(Charset charset, String uri) {
+    static DocumentFragment loadNativeProfile(Charset charset, String uri) {
         final URL url;
         if (uri.startsWith(CqUtils.CLASSPATH_PREFIX)) {
             final String resourcePath = uri.substring(CqUtils.CLASSPATH_PREFIX.length());
@@ -249,10 +263,34 @@ public class PromoteExtensionMojo extends AbstractMojo {
             throw new RuntimeException("Could not read " + uri);
         }
         final String src = sb.toString();
-        final Pattern pattern = Pattern.compile("[ \t\n\r]*<profiles>.*</profiles>", Pattern.DOTALL);
+        final Pattern pattern = Pattern.compile("<profiles>.*</profiles>", Pattern.DOTALL);
         final Matcher m = pattern.matcher(src);
         if (m.find()) {
-            return m.group();
+
+            final String profilesSource = m.group().replace("<profiles>", "<profiles xmlns=\"http://maven.apache.org/POM/4.0.0\">");
+            final Document document;
+            try {
+                final DOMResult domResult = new DOMResult();
+                TransformerFactory.newInstance().newTransformer()
+                        .transform(new StreamSource(new StringReader(profilesSource)), domResult);
+                document = (Document) domResult.getNode();
+
+                Element profiles = document.getDocumentElement();
+                final NodeList children = profiles.getChildNodes();
+                final DocumentFragment result = document.createDocumentFragment();
+                while (children.getLength() > 0) {
+                    result.appendChild(children.item(0));
+                }
+                final Node lastChild = result.getLastChild();
+                if (TransformationContext.isWhiteSpaceNode(lastChild)) {
+                    result.removeChild(lastChild);
+                }
+                return result;
+            } catch (TransformerException | TransformerFactoryConfigurationError e) {
+                throw new RuntimeException(String.format("Could not read DOM from [%s]", profilesSource), e);
+            }
+
+
         } else {
             throw new IllegalStateException("Could not find " + pattern.pattern() + " in " + uri);
         }
