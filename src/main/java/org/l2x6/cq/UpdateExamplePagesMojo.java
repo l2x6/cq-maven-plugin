@@ -76,27 +76,27 @@ public class UpdateExamplePagesMojo extends AbstractMojo {
     String encoding;
 
     private static class Example {
-    	private String title;
-    	private String description;
-    	private String link;
+        private String title;
+        private String description;
+        private String link;
 
-		public String toJson() {
-			final StringBuilder json = new StringBuilder();
-			json.append('{');
-			json.append("\"title\":\"");
-			json.append(title);
-			json.append("\",\"description\":\"");
-			json.append(description);
-			json.append("\",\"link\":\"");
-			json.append(link);
-			json.append("\"}");
+        public String toJson() {
+            final StringBuilder json = new StringBuilder();
+            json.append('{');
+            json.append("\"title\":\"");
+            json.append(title);
+            json.append("\",\"description\":\"");
+            json.append(description);
+            json.append("\",\"link\":\"");
+            json.append(link);
+            json.append("\"}");
 
-			return json.toString();
-		}
+            return json.toString();
+        }
 
-		public String title() {
-			return title;
-		}
+        public String title() {
+            return title;
+        }
     }
 
     @Override
@@ -108,7 +108,7 @@ public class UpdateExamplePagesMojo extends AbstractMojo {
         try {
             Files.createDirectories(attachmentsDirPath);
         } catch (IOException e) {
-            throw new RuntimeException("Could not create "+ attachmentsDirPath, e);
+            throw new RuntimeException("Could not create " + attachmentsDirPath, e);
         }
 
         final Set<String> wantedPages = new HashSet<>();
@@ -132,14 +132,15 @@ public class UpdateExamplePagesMojo extends AbstractMojo {
                                     example.title = line.substring(2).replace(": A Camel Quarkus example", "");
                                 } else if (line.startsWith(DESCRIPTION_PREFIX)) {
                                     final String shortDescription = line.substring(DESCRIPTION_PREFIX.length(), line.length());
-                                    example.description = Character.toUpperCase(shortDescription.charAt(0)) + shortDescription.substring(1);
+                                    example.description = Character.toUpperCase(shortDescription.charAt(0))
+                                            + shortDescription.substring(1);
                                 } else if (line.startsWith(":") || line.isEmpty()) {
                                     /* ignore */
                                 } else {
                                     break;
                                 }
                             }
-                            example.link = "https://github.com/apache/camel-quarkus-examples/tree/master/"+ dirName;
+                            example.link = "https://github.com/apache/camel-quarkus-examples/tree/master/" + dirName;
 
                             return example;
                         } catch (IOException e) {
@@ -154,11 +155,12 @@ public class UpdateExamplePagesMojo extends AbstractMojo {
 
         final Path examplesDataJsonPath = attachmentsDirPath.resolve("examples.json");
         try {
-			final String json = exampleData.stream().sorted(Comparator.comparing(Example::title)).map(Example::toJson).collect(Collectors.joining(",", "[", "]"));
-			Files.write(examplesDataJsonPath, Collections.singleton(json));
-		} catch (IOException e) {
-			throw new UncheckedIOException("Could not write to " + examplesDataJsonPath, e);
-		}
+            final String json = exampleData.stream().sorted(Comparator.comparing(Example::title)).map(Example::toJson)
+                    .collect(Collectors.joining(",", "[", "]"));
+            Files.write(examplesDataJsonPath, Collections.singleton(json));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not write to " + examplesDataJsonPath, e);
+        }
     }
 
 }
