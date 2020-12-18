@@ -18,14 +18,23 @@ package org.l2x6.cq;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.StringWriter;
+import java.io.UncheckedIOException;
+import java.io.Writer;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.StringJoiner;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.apache.camel.util.json.Jsonable;
+import org.apache.camel.util.json.Jsoner;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -47,8 +56,8 @@ public class UpdateExamplePagesMojo extends AbstractMojo {
      *
      * @since 0.23.0
      */
-    @Parameter(property = "cq.pagesDir", required = true, defaultValue = "docs/modules/ROOT/pages/examples")
-    File pagesDir;
+    @Parameter(property = "cq.attachmentsDir", required = true, defaultValue = "docs/modules/ROOT/attachments")
+    File attachmentsDir;
 
     /**
      * Where to look for example Maven modules
@@ -66,84 +75,90 @@ public class UpdateExamplePagesMojo extends AbstractMojo {
     @Parameter(defaultValue = CqUtils.DEFAULT_ENCODING, required = true, property = "cq.encoding")
     String encoding;
 
+    private static class Example {
+    	private String title;
+    	private String description;
+    	private String link;
+
+		public String toJson() {
+			final StringBuilder json = new StringBuilder();
+			json.append('{');
+			json.append("\"title\":\"");
+			json.append(title);
+			json.append("\",\"description\":\"");
+			json.append(description);
+			json.append("\",\"link\":\"");
+			json.append(link);
+			json.append("\"}");
+
+			return json.toString();
+		}
+
+		public String title() {
+			return title;
+		}
+    }
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
-        final Path pagesDirPath = pagesDir.toPath();
+        final Path attachmentsDirPath = attachmentsDir.toPath();
         final Path examplesDirPath = examplesDir.toPath();
         final Charset charset = Charset.forName(encoding);
 
         try {
-            Files.createDirectories(pagesDirPath);
+            Files.createDirectories(attachmentsDirPath);
         } catch (IOException e) {
-            throw new RuntimeException("Could not create "+ pagesDirPath, e);
+            throw new RuntimeException("Could not create "+ attachmentsDirPath, e);
         }
 
         final Set<String> wantedPages = new HashSet<>();
+        final List<Example> exampleData;
         try (Stream<Path> examples = Files.list(examplesDirPath)) {
-
-            examples
+            exampleData = examples
                     .map(p -> examplesDirPath.resolve(p)) // absolutize
                     .filter(p -> Files.isRegularFile(p.resolve("pom.xml")))
-                    .forEach(p -> {
-
+                    .map(p -> {
                         final String dirName = p.getFileName().toString();
                         final String pageFileName = dirName + ".adoc";
                         wantedPages.add(pageFileName);
 
+                        Example example = new Example();
                         final Path readmePath = p.resolve("README.adoc");
                         try {
                             final List<String> readmeLines = Files.readAllLines(readmePath, charset);
-                            final StringBuilder sb = new StringBuilder();
                             for (String line : readmeLines) {
                                 line = line.trim();
                                 if (line.startsWith("= ")) {
-                                    sb.append(line + "\n");
-                                    final String title = line.substring(2).replace(": A Camel Quarkus example", "");
-                                    sb.append(":cq-example-title: " + title + "\n");
+                                    example.title = line.substring(2).replace(": A Camel Quarkus example", "");
                                 } else if (line.startsWith(DESCRIPTION_PREFIX)) {
                                     final String shortDescription = line.substring(DESCRIPTION_PREFIX.length(), line.length());
-                                    sb.append(":cq-example-description: ").append(Character.toUpperCase(shortDescription.charAt(0))).append(shortDescription.substring(1)).append('\n');
-                                } else if (line.startsWith(":")) {
-                                    sb.append(line + "\n");
-                                } else if (line.isEmpty()) {
+                                    example.description = Character.toUpperCase(shortDescription.charAt(0)) + shortDescription.substring(1);
+                                } else if (line.startsWith(":") || line.isEmpty()) {
                                     /* ignore */
                                 } else {
                                     break;
                                 }
                             }
-                            sb.append(":cq-example-url: https://github.com/apache/camel-quarkus-examples/tree/master/"+ dirName +"\n");
+                            example.link = "https://github.com/apache/camel-quarkus-examples/tree/master/"+ dirName;
 
-                            final Path pagePath = pagesDirPath.resolve(pageFileName);
-                            getLog().info("Updating " + pagePath);
-                            Files.write(pagePath, sb.toString().getBytes(charset));
+                            return example;
                         } catch (IOException e) {
                             throw new RuntimeException("Could not read " + readmePath, e);
                         }
 
-                    });
-
+                    })
+                    .collect(Collectors.toList());
         } catch (IOException e) {
             throw new RuntimeException("Could not list " + examplesDirPath, e);
         }
 
-        /* Remove the stale files */
-        try (Stream<Path> pages = Files.list(pagesDirPath)) {
-            pages
-                    .filter(p -> p.getFileName().toString().endsWith(".adoc"))
-                    .filter(p -> !wantedPages.contains(p.getFileName().toString()))
-                    .forEach(p -> {
-                        final Path pagePath = pagesDirPath.resolve(p);
-                        getLog().info("Deleting a stale page " + pagePath);
-                        try {
-                            Files.delete(pagePath);
-                        } catch (IOException e) {
-                            throw new RuntimeException("Could not delete " + p, e);
-                        }
-                    });
-        } catch (IOException e) {
-            throw new RuntimeException("Could not list " + pagesDirPath, e);
-        }
-
+        final Path examplesDataJsonPath = attachmentsDirPath.resolve("examples.json");
+        try {
+			final String json = exampleData.stream().sorted(Comparator.comparing(Example::title)).map(Example::toJson).collect(Collectors.joining(",", "[", "]"));
+			Files.write(examplesDataJsonPath, Collections.singleton(json));
+		} catch (IOException e) {
+			throw new UncheckedIOException("Could not write to " + examplesDataJsonPath, e);
+		}
     }
 
 }
