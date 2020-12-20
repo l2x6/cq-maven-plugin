@@ -18,51 +18,51 @@ package org.l2x6.cq;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.StringWriter;
 import java.io.UncheckedIOException;
 import java.io.Writer;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
-import java.util.StringJoiner;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import org.apache.camel.util.json.Jsonable;
-import org.apache.camel.util.json.Jsoner;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 
+import com.google.gson.GsonBuilder;
+
 /**
- * Updates AsciiDoc pages that contain example metadata.
+ * Stores example metadata into an {@code examples.json} file.
  *
- * @since 0.23.0
+ * @since 0.25.0
  */
-@Mojo(name = "update-example-pages", requiresProject = false, inheritByDefault = false)
-public class UpdateExamplePagesMojo extends AbstractMojo {
+@Mojo(name = "update-examples-json", requiresProject = false, inheritByDefault = false)
+public class UpdateExamplesJsonMojo extends AbstractMojo {
+
+    static final String DEFAULT_EXAMPLES_JSON = "docs/modules/ROOT/attachments/examples.json";
 
     private static final String DESCRIPTION_PREFIX = ":cq-example-description: An example that ";
 
     /**
-     * Where the generated pages should be stored
+     * Where the generated {@code examples.json} file should be stored
      *
-     * @since 0.23.0
+     * @since 0.25.0
      */
-    @Parameter(property = "cq.attachmentsDir", required = true, defaultValue = "docs/modules/ROOT/attachments")
-    File attachmentsDir;
+    @Parameter(property = "cq.examplesJsonFile", required = true, defaultValue = DEFAULT_EXAMPLES_JSON)
+    File examplesJsonFile;
 
     /**
      * Where to look for example Maven modules
      *
-     * @since 0.23.0
+     * @since 0.25.0
      */
     @Parameter(property = "cq.examplesDir", required = true, defaultValue = ".")
     File examplesDir;
@@ -70,45 +70,21 @@ public class UpdateExamplePagesMojo extends AbstractMojo {
     /**
      * Encoding to read and write files in the current source tree
      *
-     * @since 0.23.0
+     * @since 0.25.0
      */
     @Parameter(defaultValue = CqUtils.DEFAULT_ENCODING, required = true, property = "cq.encoding")
     String encoding;
 
-    private static class Example {
-        private String title;
-        private String description;
-        private String link;
-
-        public String toJson() {
-            final StringBuilder json = new StringBuilder();
-            json.append('{');
-            json.append("\"title\":\"");
-            json.append(title);
-            json.append("\",\"description\":\"");
-            json.append(description);
-            json.append("\",\"link\":\"");
-            json.append(link);
-            json.append("\"}");
-
-            return json.toString();
-        }
-
-        public String title() {
-            return title;
-        }
-    }
-
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
-        final Path attachmentsDirPath = attachmentsDir.toPath();
+        final Path examplesJsonPath = examplesJsonFile.toPath();
         final Path examplesDirPath = examplesDir.toPath();
         final Charset charset = Charset.forName(encoding);
 
         try {
-            Files.createDirectories(attachmentsDirPath);
+            Files.createDirectories(examplesJsonPath.getParent());
         } catch (IOException e) {
-            throw new RuntimeException("Could not create " + attachmentsDirPath, e);
+            throw new RuntimeException("Could not create " + examplesJsonPath.getParent(), e);
         }
 
         final Set<String> wantedPages = new HashSet<>();
@@ -141,26 +117,52 @@ public class UpdateExamplePagesMojo extends AbstractMojo {
                                 }
                             }
                             example.link = "https://github.com/apache/camel-quarkus-examples/tree/master/" + dirName;
-
-                            return example;
-                        } catch (IOException e) {
+                            return example.validate();
+                        } catch (Exception e) {
                             throw new RuntimeException("Could not read " + readmePath, e);
                         }
 
                     })
+                    .sorted()
                     .collect(Collectors.toList());
         } catch (IOException e) {
             throw new RuntimeException("Could not list " + examplesDirPath, e);
         }
 
-        final Path examplesDataJsonPath = attachmentsDirPath.resolve("examples.json");
-        try {
-            final String json = exampleData.stream().sorted(Comparator.comparing(Example::title)).map(Example::toJson)
-                    .collect(Collectors.joining(",", "[", "]"));
-            Files.write(examplesDataJsonPath, Collections.singleton(json));
+        try (Writer w = Files.newBufferedWriter(examplesJsonPath, charset)) {
+            new GsonBuilder().setPrettyPrinting().create().toJson(exampleData, w);
         } catch (IOException e) {
-            throw new UncheckedIOException("Could not write to " + examplesDataJsonPath, e);
+            throw new UncheckedIOException("Could not write to " + examplesJsonPath, e);
         }
+    }
+
+    static class Example implements Comparable<Example> {
+        private static final Comparator<Example> BY_TITLE = Comparator.comparing(e -> e.title);
+        private String title;
+        private String description;
+        private String link;
+
+        @Override
+        public int compareTo(Example o) {
+            return BY_TITLE.compare(this, o);
+        }
+
+        public Example validate() {
+            Objects.requireNonNull(title, "title cannot be null in "+ this);
+            Objects.requireNonNull(description, "description cannot be null in "+ this);
+            Objects.requireNonNull(link, "link cannot be null in "+ this);
+            return this;
+        }
+
+        @Override
+        public String toString() {
+            return "Example [title=" + title + ", description=" + description + ", link=" + link + "]";
+        }
+
+        public static Comparator<Example> getByTitle() {
+            return BY_TITLE;
+        }
+
     }
 
 }
