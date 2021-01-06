@@ -23,7 +23,6 @@ import java.io.Reader;
 import java.io.Writer;
 import java.net.URL;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -45,6 +44,7 @@ import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.apache.maven.plugin.logging.Log;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
+import org.l2x6.cq.TemplateParams.ExtensionStatus;
 
 import freemarker.cache.ClassTemplateLoader;
 import freemarker.cache.FileTemplateLoader;
@@ -174,6 +174,7 @@ public class CqUtils {
             boolean unlisted,
             boolean deprecated,
             boolean isNativeSupported,
+            ExtensionStatus status,
             Path rootDir,
             Log log,
             List<String> errors) {
@@ -228,6 +229,7 @@ public class CqUtils {
                 .unlisted(unlisted)
                 .deprecated(deprecated)
                 .nativeSupported(isNativeSupported)
+                .status(status)
                 .guideUrl(CqUtils.extensionDocUrl(artifactIdBase))
                 .categories(org.l2x6.cq.CqUtils.DEFAULT_CATEGORIES)
                 .build();

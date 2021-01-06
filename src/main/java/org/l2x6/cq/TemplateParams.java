@@ -25,11 +25,18 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.apache.camel.tooling.model.ArtifactModel;
+import org.eclipse.aether.metadata.Metadata.Nature;
 
 import freemarker.template.TemplateMethodModelEx;
 import freemarker.template.TemplateModelException;
 
 public class TemplateParams {
+    public enum ExtensionStatus {preview, stable;
+
+    static ExtensionStatus of(boolean nativeSupported) {
+        return nativeSupported ? stable : preview;
+    }}
+
     private final boolean nativeSupported;
     private final boolean unlisted;
     private final boolean deprecated;
@@ -56,6 +63,7 @@ public class TemplateParams {
     private final List<String> categories;
     private final String kind;
     private final List<ArtifactModel<?>> models;
+    private final ExtensionStatus status;
     private final TemplateMethodModelEx toCapCamelCase = new TemplateMethodModelEx() {
         @Override
         public Object exec(List arguments) throws TemplateModelException {
@@ -114,6 +122,7 @@ public class TemplateParams {
         this.guideUrl = builder.guideUrl;
         this.categories = new ArrayList<>(builder.categories);
         this.kind = builder.kind;
+        this.status = builder.status != null ? builder.status : ExtensionStatus.of(builder.nativeSupported);
         this.models = new ArrayList<>(builder.models);
     }
 
@@ -240,6 +249,7 @@ public class TemplateParams {
 
 
     public static class Builder {
+        public ExtensionStatus status;
         private boolean nativeSupported;
         private String itestParentRelativePath;
         private String itestParentVersion;
@@ -397,6 +407,11 @@ public class TemplateParams {
             return this;
         }
 
+        public Builder status(ExtensionStatus status) {
+            this.status = status;
+            return this;
+        }
+
         public Builder models(List<ArtifactModel<?>> model) {
             this.models = model;
             return this;
@@ -460,6 +475,12 @@ public class TemplateParams {
             this.deprecated = deprecated;
             return this;
         }
+    }
+
+
+
+    public ExtensionStatus getStatus() {
+        return status;
     }
 
 }

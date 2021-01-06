@@ -40,6 +40,7 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.l2x6.cq.CqCatalog.Flavor;
 import org.l2x6.cq.PomTransformer.Transformation;
+import org.l2x6.cq.TemplateParams.ExtensionStatus;
 
 import freemarker.template.Configuration;
 
@@ -513,7 +514,7 @@ public class CreateExtensionMojo extends AbstractMojo {
         final boolean deprecated = models.stream().anyMatch(ArtifactModel::isDeprecated);
 
         final TemplateParams quarkusExtensionYamlParams = CqUtils.quarkusExtensionYamlParams(models, artifactIdBase, nameBase,
-                description, keywords, !nativeSupported, deprecated, nativeSupported,
+                description, keywords, !nativeSupported, deprecated, nativeSupported, ExtensionStatus.of(nativeSupported),
                 runtimeBomPath.getParent().getParent().getParent(), getLog(), new ArrayList<>());
         final Path metaInfDir = extensionRuntimeBaseDir.resolve("src/main/resources/META-INF");
         try {
