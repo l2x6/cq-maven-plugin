@@ -34,8 +34,8 @@ public class FormatMojoTest {
         mojo.basedir = basePath.toFile();
         mojo.sortDependencyManagementPaths = Collections.emptyList();
         mojo.sortModulesPaths = Collections.emptyList();
-        mojo.updateVirtualDependenciesDirs = Collections.emptyList();
-        mojo.updateVirtualDependenciesAllExtensionsDirs = Collections.emptyList();
+        mojo.updateVirtualDependencies = Collections.emptyList();
+        mojo.updateVirtualDependenciesAllExtensions = Collections.emptyList();
         mojo.extensionDirs = Collections.emptyList();
         mojo.skipArtifactIds = Collections.emptySet();
         mojo.encoding = CqUtils.DEFAULT_ENCODING;

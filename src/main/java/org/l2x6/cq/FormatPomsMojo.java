@@ -35,6 +35,7 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.shared.model.fileset.FileSet;
 import org.apache.maven.shared.model.fileset.util.FileSetManager;
+import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.l2x6.cq.PomTransformer.Transformation;
 
 /**
@@ -48,7 +49,6 @@ public class FormatPomsMojo extends AbstractMojo {
     public static final String CQ_SORT_MODULES_PATHS = "extensions/pom.xml,integration-tests/pom.xml";
     public static final String CQ_SORT_DEPENDENCY_MANAGEMENT_PATHS = "poms/bom/pom.xml,poms/bom-deployment/pom.xml";
     public static final String CQ_UPDATE_VIRTUAL_DEPENDENCIES_DIRS = "examples,integration-tests";
-    public static final String CQ_UPDATE_VIRTUAL_DEPENDENCIES_ALL_EXTENSIONS_DIRS = "catalog";
 
     /**
      * Directory where the changes should be performed. Default is the current directory of the current Java process.
@@ -77,15 +77,15 @@ public class FormatPomsMojo extends AbstractMojo {
     List<String> sortDependencyManagementPaths;
 
     /**
-     * A list of directory paths relative to the current module's {@code baseDir} containing Maven modules in which
-     * virtual dependencies should be updated. After running this mojo, the selected {@code pom.xml} files will depend
-     * on artifacts with type {@code pom} and scope {@code test} of runtime extension modules available as dependencies
-     * in the given {@code pom.xml}.
+     * A list of {@link DirectoryScanner}s selecting {@code pom.xml} files in which virtual dependencies should be
+     * updated. After running this mojo, the selected {@code pom.xml} files will depend on artifacts with type
+     * {@code pom} and scope {@code test} of runtime extension modules available as dependencies in the given
+     * {@code pom.xml}.
      *
      * @since 0.0.1
      */
-    @Parameter(property = "cq.updateVirtualDependenciesDirs", defaultValue = CQ_UPDATE_VIRTUAL_DEPENDENCIES_DIRS)
-    List<String> updateVirtualDependenciesDirs;
+    @Parameter
+    List<DirectoryScanner> updateVirtualDependencies;
 
     /**
      * A list of directory paths relative to the current module's {@code baseDir} containing Maven modules in which
@@ -95,8 +95,8 @@ public class FormatPomsMojo extends AbstractMojo {
      *
      * @since 0.18.0
      */
-    @Parameter(property = "cq.updateVirtualDependenciesAllExtensionsDirs", defaultValue = CQ_UPDATE_VIRTUAL_DEPENDENCIES_ALL_EXTENSIONS_DIRS)
-    List<String> updateVirtualDependenciesAllExtensionsDirs;
+    @Parameter
+    List<DirectoryScanner> updateVirtualDependenciesAllExtensions;
 
     /**
      * A list of directory paths relative to the current module's {@code baseDir} containing Quarkus extensions.
@@ -161,47 +161,24 @@ public class FormatPomsMojo extends AbstractMojo {
         final Set<Gavtcs> allExtensions = PomSorter.findExtensionArtifactIds(basePath, extensionDirs, skipArtifactIds).stream()
                 .map(artifactId -> new Gavtcs("org.apache.camel.quarkus", artifactId, null))
                 .collect(Collectors.toSet());
-        for (String updateVirtualDependenciesDir : updateVirtualDependenciesDirs) {
-            try (Stream<Path> extDirs = Files.list(basePath.resolve(updateVirtualDependenciesDir))) {
-                extDirs
-                        .filter(p -> Files.isDirectory(p) && !"support".equals(p.getFileName().toString()))
-                        .sorted()
-                        .map(p -> p.resolve("pom.xml"))
-                        .filter(p -> Files.exists(p))
-                        .forEach(pomXmlPath -> {
-                            new PomTransformer(pomXmlPath, charset)
-                                    .transform(
-                                            Transformation.updateMappedDependencies(
-                                                    Gavtcs::isVirtualDeployment,
-                                                    Gavtcs.deploymentVitualMapper(gavtcs -> allExtensions.contains(gavtcs)),
-                                                    Gavtcs.scopeAndTypeFirstComparator(),
-                                                    VIRTUAL_DEPS_INITIAL_COMMENT),
-                                            Transformation.removeProperty(true, true, "mvnd.builder.rule"),
-                                            Transformation.removeContainerElementIfEmpty(true, true, true, "properties"));
-                        });
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+        for (DirectoryScanner scanner : updateVirtualDependencies) {
+            scanner.scan();
+            final Path base = scanner.getBasedir().toPath();
+            for (String pomXmlRelPath : scanner.getIncludedFiles()) {
+                final Path pomXmlPath = base.resolve(pomXmlRelPath);
+                new PomTransformer(pomXmlPath, charset)
+                        .transform(
+                                Transformation.updateMappedDependencies(
+                                        Gavtcs::isVirtualDeployment,
+                                        Gavtcs.deploymentVitualMapper(gavtcs -> allExtensions.contains(gavtcs)),
+                                        Gavtcs.scopeAndTypeFirstComparator(),
+                                        VIRTUAL_DEPS_INITIAL_COMMENT),
+                                Transformation.removeProperty(true, true, "mvnd.builder.rule"),
+                                Transformation.removeContainerElementIfEmpty(true, true, true, "properties"));
             }
         }
 
-        if (updateVirtualDependenciesAllExtensionsDirs != null) {
-            final Set<Gavtcs> allVirtualExtensions = allExtensions.stream()
-                    .map(gavtcs -> gavtcs.toVirtual())
-                    .collect(Collectors.toSet());
-            updateVirtualDependenciesAllExtensionsDirs.stream()
-                    .map(p -> basePath.resolve(p).resolve("pom.xml"))
-                    .forEach(pomXmlPath -> {
-                        new PomTransformer(pomXmlPath, charset)
-                                .transform(
-                                        Transformation.updateDependencySubset(
-                                                gavtcs -> gavtcs.isVirtual(),
-                                                allVirtualExtensions,
-                                                Gavtcs.scopeAndTypeFirstComparator(),
-                                                VIRTUAL_DEPS_INITIAL_COMMENT),
-                                        Transformation.removeProperty(true, true, "mvnd.builder.rule"),
-                                        Transformation.removeContainerElementIfEmpty(true, true, true, "properties"));
-                    });
-        }
+        updateVirtualDependenciesAllExtensions(updateVirtualDependenciesAllExtensions, allExtensions, charset);
 
         if (removeEmptyApplicationProperties != null) {
             final FileSetManager fileSetManager = new FileSetManager();
@@ -219,5 +196,29 @@ public class FormatPomsMojo extends AbstractMojo {
             }
         }
 
+    }
+
+    public static void updateVirtualDependenciesAllExtensions(List<DirectoryScanner> updateVirtualDependenciesAllExtensions, final Set<Gavtcs> allExtensions, Charset charset) {
+        if (updateVirtualDependenciesAllExtensions != null) {
+            final Set<Gavtcs> allVirtualExtensions = allExtensions.stream()
+                    .map(gavtcs -> gavtcs.toVirtual())
+                    .collect(Collectors.toSet());
+            for (DirectoryScanner scanner : updateVirtualDependenciesAllExtensions) {
+                scanner.scan();
+                final Path base = scanner.getBasedir().toPath();
+                for (String pomXmlRelPath : scanner.getIncludedFiles()) {
+                    final Path pomXmlPath = base.resolve(pomXmlRelPath);
+                    new PomTransformer(pomXmlPath, charset)
+                            .transform(
+                                    Transformation.updateDependencySubset(
+                                            gavtcs -> gavtcs.isVirtual(),
+                                            allVirtualExtensions,
+                                            Gavtcs.scopeAndTypeFirstComparator(),
+                                            VIRTUAL_DEPS_INITIAL_COMMENT),
+                                    Transformation.removeProperty(true, true, "mvnd.builder.rule"),
+                                    Transformation.removeContainerElementIfEmpty(true, true, true, "properties"));
+                }
+            }
+        }
     }
 }

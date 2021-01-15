@@ -38,6 +38,7 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
+import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.l2x6.cq.CqCatalog.Flavor;
 import org.l2x6.cq.PomTransformer.Transformation;
 import org.l2x6.cq.TemplateParams.ExtensionStatus;
@@ -364,8 +365,8 @@ public class CreateExtensionMojo extends AbstractMojo {
      *
      * @since 0.18.0
      */
-    @Parameter(property = "cq.updateVirtualDependenciesAllExtensionsDirs", defaultValue = FormatPomsMojo.CQ_UPDATE_VIRTUAL_DEPENDENCIES_ALL_EXTENSIONS_DIRS)
-    List<String> updateVirtualDependenciesAllExtensionsDirs;
+    @Parameter
+    List<DirectoryScanner> updateVirtualDependenciesAllExtensions;
 
     List<ArtifactModel<?>> models;
     ArtifactModel<?> model;
@@ -469,21 +470,10 @@ public class CreateExtensionMojo extends AbstractMojo {
         }
         generateItest(cfg, templateParams);
 
-        if (updateVirtualDependenciesAllExtensionsDirs != null) {
-            final Set<Gavtcs> allVirtualExtensions = PomSorter.findExtensionArtifactIds(basePath, extensionDirs, skipArtifactIds).stream()
-                    .map(artifactId -> Gavtcs.virtual("org.apache.camel.quarkus", artifactId, "${project.version}"))
-                    .collect(Collectors.toSet());
-            updateVirtualDependenciesAllExtensionsDirs.stream()
-                    .map(p -> basePath.resolve(p).resolve("pom.xml"))
-                    .forEach(pomXmlPath -> {
-                        new PomTransformer(pomXmlPath, charset)
-                                .transform(Transformation.updateDependencySubset(
-                                        gavtcs -> gavtcs.isVirtual(),
-                                        allVirtualExtensions,
-                                        Gavtcs.scopeAndTypeFirstComparator(),
-                                        FormatPomsMojo.VIRTUAL_DEPS_INITIAL_COMMENT));
-                    });
-        }
+        final Set<Gavtcs> allExtensions = PomSorter.findExtensionArtifactIds(basePath, extensionDirs, skipArtifactIds).stream()
+                .map(artifactId -> new Gavtcs("org.apache.camel.quarkus", artifactId, null))
+                .collect(Collectors.toSet());
+        FormatPomsMojo.updateVirtualDependenciesAllExtensions(updateVirtualDependenciesAllExtensions, allExtensions, charset);
 
     }
 
