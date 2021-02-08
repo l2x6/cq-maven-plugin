@@ -19,6 +19,7 @@ package org.l2x6.cq;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,6 +27,8 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.maven.model.Build;
 import org.apache.maven.model.Dependency;
@@ -86,7 +89,6 @@ public class CreateExtensionMojoTest {
             build.setPluginManagement(new PluginManagement());
         }
         mojo.runtimeBom = basePath.resolve("boms/runtime/pom.xml").toFile();
-        mojo.deploymentBom = basePath.resolve("boms/deployment/pom.xml").toFile();
         mojo.encoding = CqUtils.DEFAULT_ENCODING;
         mojo.templatesUriBase = CqUtils.DEFAULT_TEMPLATES_URI_BASE;
         mojo.quarkusVersion = CreateExtensionMojo.DEFAULT_QUARKUS_VERSION;
@@ -213,5 +215,6 @@ public class CreateExtensionMojoTest {
         assertEquals("org.apache.camel.quarkus.component.aws.sns.deployment", CqUtils
                 .getJavaPackage("org.apache.camel.quarkus", "component", "camel-quarkus-aws-sns-deployment"));
     }
+
 
 }
