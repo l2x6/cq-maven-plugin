@@ -25,6 +25,9 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
+import org.apache.maven.model.Dependency;
 
 /**
  * A Maven dependency defined by {@code groupId}, {@code artifactId}, {@code version}, etc.
@@ -116,6 +119,19 @@ public class Gavtcs {
 
     public static Gavtcs testJar(String groupId, String artifactId, String version) {
         return new Gavtcs(groupId, artifactId, version, null, null, "test");
+    }
+
+    public static Gavtcs of(Dependency dep) {
+        return new Gavtcs(
+                dep.getGroupId(),
+                dep.getArtifactId(),
+                dep.getVersion(),
+                dep.getType(),
+                dep.getClassifier(),
+                dep.getScope(),
+                dep.getExclusions().stream()
+                        .map(e -> new Ga(e.getGroupId(), e.getArtifactId()))
+                        .collect(Collectors.toList()));
     }
 
     public static Gavtcs of(String rawGavtcs) {
@@ -216,7 +232,6 @@ public class Gavtcs {
     public SortedSet<Ga> getExclusions() {
         return exclusions;
     }
-
 
     public static Function<Gavtcs, Optional<Gavtcs>> deploymentVitualMapper(Predicate<Gavtcs> isExtension) {
         return gavtcs -> isExtension.test(gavtcs)

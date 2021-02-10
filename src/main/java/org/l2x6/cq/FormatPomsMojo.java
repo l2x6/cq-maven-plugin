@@ -18,16 +18,21 @@ package org.l2x6.cq;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.apache.maven.model.Model;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -37,6 +42,8 @@ import org.apache.maven.shared.model.fileset.FileSet;
 import org.apache.maven.shared.model.fileset.util.FileSetManager;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.l2x6.cq.PomTransformer.Transformation;
+import org.l2x6.cq.PomTransformer.TransformationContext;
+import org.w3c.dom.Document;
 
 /**
  * Formats the {@code pom.xml} files in the source tree.
@@ -140,6 +147,18 @@ public class FormatPomsMojo extends AbstractMojo {
     @Parameter(property = "cq.removeEmptyApplicationProperties")
     FileSet removeEmptyApplicationProperties;
 
+    /**
+     * A list of {@link PomSet}s
+     *
+     * <pre>
+     *
+     * </pre>
+     *
+     * @since 0.29.0
+     */
+    @Parameter
+    List<PomSet> mergePoms;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         if (skip) {
@@ -158,6 +177,36 @@ public class FormatPomsMojo extends AbstractMojo {
 
         PomSorter.sortDependencyManagement(basePath, sortDependencyManagementPaths);
         PomSorter.sortModules(basePath, sortModulesPaths);
+
+        if (mergePoms != null && !mergePoms.isEmpty()) {
+            for (PomSet pomSet : mergePoms) {
+
+                final FileSetManager fileSetManager = new FileSetManager();
+                FileSet sourcePoms = pomSet.getSourcePoms();
+                final Path dir = Paths.get(sourcePoms.getDirectory());
+                final String[] includedFiles = fileSetManager.getIncludedFiles(sourcePoms);
+                final Set<Gavtcs> allDeps = new TreeSet<>(Gavtcs.scopeAndTypeFirstComparator());
+
+                final List<Transformation> transformers = new ArrayList<>();
+                transformers.add(Transformation.removeDependency(true, true, dep -> allDeps.contains(dep)));
+
+                for (String includedFile : includedFiles) {
+                    final Path pomPath = dir.resolve(includedFile);
+                    Model pom = CqUtils.readPom(pomPath, charset);
+                    pom.getDependencies().stream()
+                            .map(Gavtcs::of)
+                            .peek(allDeps::add)
+                            .filter(gavtcs -> !gavtcs.isVirtual())
+                            .map(gavtcs -> Transformation.addDependencyIfNeeded(gavtcs, Gavtcs.scopeAndTypeFirstComparator()))
+                            .forEach(transformers::add);
+                }
+
+                final Path destPath = Paths.get(pomSet.getDestinationPom());
+                new PomTransformer(destPath, charset).transform(transformers);
+
+            }
+        }
+
         final Set<Gavtcs> allExtensions = PomSorter.findExtensionArtifactIds(basePath, extensionDirs, skipArtifactIds).stream()
                 .map(artifactId -> new Gavtcs("org.apache.camel.quarkus", artifactId, null))
                 .collect(Collectors.toSet());
@@ -198,7 +247,8 @@ public class FormatPomsMojo extends AbstractMojo {
 
     }
 
-    public static void updateVirtualDependenciesAllExtensions(List<DirectoryScanner> updateVirtualDependenciesAllExtensions, final Set<Gavtcs> allExtensions, Charset charset) {
+    public static void updateVirtualDependenciesAllExtensions(List<DirectoryScanner> updateVirtualDependenciesAllExtensions,
+            final Set<Gavtcs> allExtensions, Charset charset) {
         if (updateVirtualDependenciesAllExtensions != null) {
             final Set<Gavtcs> allVirtualExtensions = allExtensions.stream()
                     .map(gavtcs -> gavtcs.toVirtual())
@@ -219,6 +269,27 @@ public class FormatPomsMojo extends AbstractMojo {
                                     Transformation.removeContainerElementIfEmpty(true, true, true, "properties"));
                 }
             }
+        }
+    }
+
+    public static class PomSet {
+        private FileSet sourcePoms;
+        private String destinationPom;
+
+        public FileSet getSourcePoms() {
+            return sourcePoms;
+        }
+
+        public void setSourcePoms(FileSet sourcePoms) {
+            this.sourcePoms = sourcePoms;
+        }
+
+        public String getDestinationPom() {
+            return destinationPom;
+        }
+
+        public void setDestinationPom(String destinationPom) {
+            this.destinationPom = destinationPom;
         }
     }
 }

@@ -448,7 +448,9 @@ public class PomTransformer {
             dep.addChildTextElement("groupId", gavtcs.getGroupId());
             dep.addChildTextElement("artifactId", gavtcs.getArtifactId());
             dep.addChildTextElement("version", gavtcs.getVersion());
-            dep.addChildTextElement("type", gavtcs.getType());
+            if (!"jar".equals(gavtcs.getType())) {
+                dep.addChildTextElement("type", gavtcs.getType());
+            }
             dep.addChildTextElement("classifier", gavtcs.getClassifier());
             dep.addChildTextElement("scope", gavtcs.getScope());
             final SortedSet<Ga> exclusions = gavtcs.getExclusions();
@@ -1022,12 +1024,22 @@ public class PomTransformer {
             };
         }
 
-        public static Transformation removePlugin(boolean removePrecedingComments, boolean removePrecedingWhitespace, String groupId, String artifactId) {
+        public static Transformation removePlugin(boolean removePrecedingComments, boolean removePrecedingWhitespace,
+                String groupId, String artifactId) {
             return (Document document, TransformationContext context) -> {
                 final String xPath = anyNs("project", "build", "plugins", "plugin")
                         + "[." + anyNs("groupId") + "/text() = '" + groupId + "' and ." + anyNs("artifactId") + "/text() = '"
                         + artifactId + "']";
                 context.removeNode(xPath, removePrecedingComments, removePrecedingWhitespace, false);
+            };
+        }
+
+        public static Transformation removeDependency(boolean removePrecedingComments, boolean removePrecedingWhitespace,
+                Predicate<Gavtcs> predicate) {
+            return (Document document, TransformationContext context) -> {
+                context.getDependencies().stream()
+                        .filter(predicate)
+                        .forEach(dep -> context.removeDependency(dep, removePrecedingComments, removePrecedingWhitespace));
             };
         }
 
