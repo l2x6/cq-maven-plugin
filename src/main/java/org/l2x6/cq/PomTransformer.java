@@ -1114,6 +1114,30 @@ public class PomTransformer {
             };
         }
 
+        public static Transformation keepFirst(String xPath, boolean removePrecedingWhitespace) {
+            return (Document document, TransformationContext context) -> {
+                try {
+                    NodeList nodes = (NodeList) context.getXPath().evaluate(xPath, document, XPathConstants.NODESET);
+                    if (nodes.getLength() > 1) {
+                        for (int i = 1; i < nodes.getLength(); i++) {
+                            Node deletedNode = nodes.item(i);
+                            if (removePrecedingWhitespace) {
+                                Node prevSibling = null;
+                                while ((prevSibling = deletedNode.getPreviousSibling()) != null
+                                        && TransformationContext.isWhiteSpaceNode(prevSibling)) {
+                                    /* remove any preceding whitespace or comments */
+                                    prevSibling.getParentNode().removeChild(prevSibling);
+                                }
+                            }
+                            deletedNode.getParentNode().removeChild(deletedNode);
+                        }
+                    }
+                } catch (XPathExpressionException | DOMException e) {
+                    throw new RuntimeException("Could not evaluate " + xPath, e);
+                }
+            };
+        }
+
         /**
          * Perform this {@link Transformation} on the given {@code document}
          *

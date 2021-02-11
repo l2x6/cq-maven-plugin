@@ -1068,6 +1068,62 @@ public class PomTransformerTest {
                 "</project>", "\t", "\n");
     }
 
+    @Test
+    void keepFirst() {
+        final String source = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" //
+                + "<project xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns=\"http://maven.apache.org/POM/4.0.0\"\n" //
+                + "         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd\">\n" //
+                + "    <modelVersion>4.0.0</modelVersion>\n" //
+                + "    <groupId>org.acme</groupId>\n" //
+                + "    <artifactId>bom</artifactId>\n" //
+                + "    <version>0.1-SNAPSHOT</version>\n" //
+                + "    <packaging>pom</packaging>\n" //
+                + "    <dependencies>\n" //
+                + "\n" //
+                + "        <!-- The following dependencies guarantee that this module is built after them. You can update them by running `mvn process-resources -Pformat -N` from the source tree root directory -->\n" //
+                + "        <dependency>\n" //
+                + "            <groupId>org.acme</groupId>\n" //
+                + "            <artifactId>a1</artifactId>\n" //
+                + "            <version>1.2.3</version>\n" //
+                + "        </dependency>\n" //
+                + "\n" //
+                + "        <!-- The following dependencies guarantee that this module is built after them. You can update them by running `mvn process-resources -Pformat -N` from the source tree root directory -->\n" //
+                + "        <dependency>\n" //
+                + "            <groupId>org.acme</groupId>\n" //
+                + "            <artifactId>a2</artifactId>\n" //
+                + "            <version>1.2.3</version>\n" //
+                + "        </dependency>\n" //
+                + "    </dependencies>\n" //
+                + "</project>\n";
+        final String expected = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" //
+                + "<project xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns=\"http://maven.apache.org/POM/4.0.0\"\n" //
+                + "         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd\">\n" //
+                + "    <modelVersion>4.0.0</modelVersion>\n" //
+                + "    <groupId>org.acme</groupId>\n" //
+                + "    <artifactId>bom</artifactId>\n" //
+                + "    <version>0.1-SNAPSHOT</version>\n" //
+                + "    <packaging>pom</packaging>\n" //
+                + "    <dependencies>\n" //
+                + "\n" //
+                + "        <!-- The following dependencies guarantee that this module is built after them. You can update them by running `mvn process-resources -Pformat -N` from the source tree root directory -->\n" //
+                + "        <dependency>\n" //
+                + "            <groupId>org.acme</groupId>\n" //
+                + "            <artifactId>a1</artifactId>\n" //
+                + "            <version>1.2.3</version>\n" //
+                + "        </dependency>\n" //
+                + "        <dependency>\n" //
+                + "            <groupId>org.acme</groupId>\n" //
+                + "            <artifactId>a2</artifactId>\n" //
+                + "            <version>1.2.3</version>\n" //
+                + "        </dependency>\n" //
+                + "    </dependencies>\n" //
+                + "</project>\n";
+        asserTransformation(source,
+                Collections.singletonList(
+                        Transformation.keepFirst(FormatPomsMojo.virtualDepsCommentXPath(), true)),
+                expected);
+    }
+
     static void assertFormat(String xml, String expectedIndent, String expectedEol)
             throws TransformerConfigurationException, TransformerException, TransformerFactoryConfigurationError {
         final XPath xPath = XPathFactory.newInstance().newXPath();

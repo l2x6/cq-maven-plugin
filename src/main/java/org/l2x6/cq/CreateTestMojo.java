@@ -379,11 +379,13 @@ public class CreateTestMojo extends AbstractMojo {
 
         final Set<String> extensionArtifactIds = PomSorter.findExtensionArtifactIds(basePath, extensionDirs, skipArtifactIds);
         new PomTransformer(itestPomPath, charset)
-                .transform(Transformation.updateMappedDependencies(
-                        Gavtcs::isVirtualDeployment,
-                        Gavtcs.deploymentVitualMapper(gavtcs -> extensionArtifactIds.contains(gavtcs.getArtifactId())),
-                        Gavtcs.scopeAndTypeFirstComparator(),
-                        FormatPomsMojo.VIRTUAL_DEPS_INITIAL_COMMENT));
+                .transform(
+                        Transformation.updateMappedDependencies(
+                                Gavtcs::isVirtualDeployment,
+                                Gavtcs.deploymentVitualMapper(gavtcs -> extensionArtifactIds.contains(gavtcs.getArtifactId())),
+                                Gavtcs.scopeAndTypeFirstComparator(),
+                                FormatPomsMojo.VIRTUAL_DEPS_INITIAL_COMMENT),
+                        Transformation.keepFirst(FormatPomsMojo.virtualDepsCommentXPath(), true));
 
         if (nativeSupported) {
             evalTemplate(cfg, "integration-test-application.properties",

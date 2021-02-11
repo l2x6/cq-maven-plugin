@@ -222,6 +222,7 @@ public class FormatPomsMojo extends AbstractMojo {
                                         Gavtcs.deploymentVitualMapper(gavtcs -> allExtensions.contains(gavtcs)),
                                         Gavtcs.scopeAndTypeFirstComparator(),
                                         VIRTUAL_DEPS_INITIAL_COMMENT),
+                                Transformation.keepFirst(virtualDepsCommentXPath(), true),
                                 Transformation.removeProperty(true, true, "mvnd.builder.rule"),
                                 Transformation.removeContainerElementIfEmpty(true, true, true, "properties"));
             }
@@ -245,6 +246,10 @@ public class FormatPomsMojo extends AbstractMojo {
             }
         }
 
+    }
+
+    public static String virtualDepsCommentXPath() {
+        return "//comment()[contains(.,'"+ FormatPomsMojo.VIRTUAL_DEPS_INITIAL_COMMENT +"')]";
     }
 
     public static void updateVirtualDependenciesAllExtensions(List<DirectoryScanner> updateVirtualDependenciesAllExtensions,
