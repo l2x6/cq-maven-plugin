@@ -26,6 +26,8 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -188,18 +190,32 @@ public class FormatPomsMojo extends AbstractMojo {
                 final Set<Gavtcs> allDeps = new TreeSet<>(Gavtcs.scopeAndTypeFirstComparator());
 
                 final List<Transformation> transformers = new ArrayList<>();
-                transformers.add(Transformation.removeDependency(true, true, dep -> allDeps.contains(dep)));
 
                 for (String includedFile : includedFiles) {
                     final Path pomPath = dir.resolve(includedFile);
                     Model pom = CqUtils.readPom(pomPath, charset);
                     pom.getDependencies().stream()
                             .map(Gavtcs::of)
-                            .peek(allDeps::add)
                             .filter(gavtcs -> !gavtcs.isVirtual())
-                            .map(gavtcs -> Transformation.addDependencyIfNeeded(gavtcs, Gavtcs.scopeAndTypeFirstComparator()))
-                            .forEach(transformers::add);
+                            .forEach(allDeps::add);
                 }
+
+                Iterator<Gavtcs> it = allDeps.iterator();
+                while (it.hasNext()) {
+                    final Gavtcs gavtcs = it.next();
+                    if ("test".equals(gavtcs.getScope())
+                            && "software.amazon.awssdk".equals(gavtcs.getGroupId())
+                            && allDeps.stream()
+                                    .anyMatch(gav -> "org.apache.camel.quarkus".equals(gav.getGroupId())
+                                            && ("camel-quarkus-aws2-" + gavtcs.getArtifactId()).equals(gav.getArtifactId()))) {
+                        it.remove();
+                    }
+                }
+
+                transformers.add(Transformation.removeDependency(true, true, dep -> allDeps.contains(dep)));
+                allDeps.stream()
+                        .map(gavtcs -> Transformation.addDependencyIfNeeded(gavtcs, Gavtcs.scopeAndTypeFirstComparator()))
+                        .forEach(transformers::add);
 
                 final Path destPath = Paths.get(pomSet.getDestinationPom());
                 new PomTransformer(destPath, charset).transform(transformers);
@@ -249,7 +265,7 @@ public class FormatPomsMojo extends AbstractMojo {
     }
 
     public static String virtualDepsCommentXPath() {
-        return "//comment()[contains(.,'"+ FormatPomsMojo.VIRTUAL_DEPS_INITIAL_COMMENT +"')]";
+        return "//comment()[contains(.,'" + FormatPomsMojo.VIRTUAL_DEPS_INITIAL_COMMENT + "')]";
     }
 
     public static void updateVirtualDependenciesAllExtensions(List<DirectoryScanner> updateVirtualDependenciesAllExtensions,
