@@ -83,14 +83,16 @@ public class ExportComponentCsvMojo extends AbstractMojo {
             CqCatalog.kinds().forEach(kind -> {
                 final Path outputFile = outputPath.resolve(kind.name() + "s.csv");
                 try (Writer out = Files.newBufferedWriter(outputFile, StandardCharsets.UTF_8)) {
-                    out.write("Priority\tName\tScheme\tartifactId\tKind\tDeprecated\tLabel\tGroup\tCQ community\tProduct\tCommunity issue\tIntegration test\tSprint\tComment\n");
+                    out.write("Priority\tGA product target\tTP2 done\tName\tScheme\tartifactId\tKind\tDeprecated\tCQ community\tProduct\tCommunity issue\tIntegration test\tSprint\tComment\n");
                     camelCatalog.models(kind)
                             .filter(CqCatalog::isFirstScheme)
                             .sorted(CqCatalog.compareArtifactId().thenComparing(BaseModel.compareTitle()))
                             .forEach(model -> {
                                 // prio
                                 try {
-                                    out.write("\t");
+                                    out.write("\t"); // empty prio
+                                    out.write("\t"); // empty GA product target
+                                    out.write("\t"); // TP2 done
                                     out.write(model.getTitle());
                                     out.write('\t');
                                     out.write(model.getName());
@@ -100,10 +102,6 @@ public class ExportComponentCsvMojo extends AbstractMojo {
                                     out.write(model.getKind());
                                     out.write('\t');
                                     out.write(String.valueOf(model.isDeprecated()));
-                                    out.write('\t');
-                                    out.write(model.getLabel() != null ? model.getLabel() : "");
-                                    out.write('\t');
-                                    out.write(primaryGroup(kind, model.getLabel(), model.getName()));
                                     out.write('\t');
                                     out.write(quarkusCommunitySupport(camelQuarkusCatalog, kind, model));
                                     out.write('\n');
