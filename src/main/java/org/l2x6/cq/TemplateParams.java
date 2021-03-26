@@ -25,13 +25,12 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.apache.camel.tooling.model.ArtifactModel;
-import org.eclipse.aether.metadata.Metadata.Nature;
 
 import freemarker.template.TemplateMethodModelEx;
 import freemarker.template.TemplateModelException;
 
 public class TemplateParams {
-    public enum ExtensionStatus {preview, stable;
+    public enum ExtensionStatus {preview, stable, experimental;
 
     static ExtensionStatus of(boolean nativeSupported) {
         return nativeSupported ? stable : preview;
