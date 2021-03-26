@@ -24,7 +24,7 @@
 name: "Camel [=nameBase]"
 description: "[=description]"
 metadata:
-[#if !nativeSupported ]  unlisted: true
+[#if unlisted ]  unlisted: true
 [/#if]
 [#if keywords?size > 0 ]  keywords:
 [#list keywords as keyword]
