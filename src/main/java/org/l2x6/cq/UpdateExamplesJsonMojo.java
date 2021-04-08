@@ -116,7 +116,7 @@ public class UpdateExamplesJsonMojo extends AbstractMojo {
                                     break;
                                 }
                             }
-                            example.link = "https://github.com/apache/camel-quarkus-examples/tree/master/" + dirName;
+                            example.link = "https://github.com/apache/camel-quarkus-examples/tree/main/" + dirName;
                             return example.validate();
                         } catch (Exception e) {
                             throw new RuntimeException("Could not read " + readmePath, e);
