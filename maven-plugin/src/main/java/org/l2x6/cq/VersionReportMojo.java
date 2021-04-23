@@ -29,8 +29,9 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
-import org.l2x6.cq.CqCatalog.Flavor;
-import org.l2x6.cq.CqCatalog.GavCqCatalog;
+import org.l2x6.cq.common.CqCatalog;
+import org.l2x6.cq.common.CqCatalog.Flavor;
+import org.l2x6.cq.common.CqCatalog.GavCqCatalog;
 
 /**
  * Prepares a report upon releasing a new Camel Quarkus version.

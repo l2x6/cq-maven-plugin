@@ -171,7 +171,7 @@ public class CreateExtensionMojo extends CreateTestMojo {
             this.guideUrl = CqUtils.extensionDocUrl(artifactIdBase);
         }
         if (this.categories == null || this.categories.isEmpty()) {
-            this.categories = org.l2x6.cq.CqUtils.DEFAULT_CATEGORIES;
+            this.categories = CqUtils.DEFAULT_CATEGORIES;
         }
 
         final TemplateParams.Builder templateParams = getTemplateParams();

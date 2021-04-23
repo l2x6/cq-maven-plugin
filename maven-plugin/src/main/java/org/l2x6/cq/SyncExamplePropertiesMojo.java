@@ -34,6 +34,7 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.l2x6.cq.PomTransformer.Transformation;
+import org.l2x6.cq.common.CqCommonUtils;
 
 /**
  * Synchronizes the properties in an example project with the properties in Camel Quarkus
@@ -85,7 +86,7 @@ public class SyncExamplePropertiesMojo extends AbstractMojo {
             cqVersion = exampleProps.getProperty("camel-quarkus.version");
         }
 
-        final Path cqPomPath = CqUtils.copyArtifact(localRepositoryPath, "org.apache.camel.quarkus", "camel-quarkus", cqVersion,
+        final Path cqPomPath = CqCommonUtils.copyArtifact(localRepositoryPath, "org.apache.camel.quarkus", "camel-quarkus", cqVersion,
                 "pom");
         final Model cqModel = CqUtils.readPom(cqPomPath, charset);
         final Properties cqProps = cqModel.getProperties();

@@ -297,43 +297,5 @@ public class CqUtils {
                 .collect(Collectors.joining("."));
     }
 
-    static Path copyJar(Path localRepository, String groupId, String artifactId, String version) {
-        return copyArtifact(localRepository, groupId, artifactId, version, "jar");
-    }
-
-    static Path copyArtifact(Path localRepository, String groupId, String artifactId, String version, String type) {
-        final String relativeJarPath = groupId.replace('.', '/') + "/" + artifactId + "/" + version + "/" + artifactId + "-"
-                + version + "." + type;
-        final Path localPath = localRepository.resolve(relativeJarPath);
-        final boolean localExists = Files.exists(localPath);
-        final String remoteUri = "https://repository.apache.org/content/groups/public/" + relativeJarPath;
-        Path result;
-        try {
-            result = Files.createTempFile(null, localPath.getFileName().toString());
-            try (InputStream in = (localExists ? Files.newInputStream(localPath) : new URL(remoteUri).openStream());
-                    OutputStream out = Files.newOutputStream(result)) {
-                final byte[] buf = new byte[4096];
-                int len;
-                while ((len = in.read(buf)) >= 0) {
-                    out.write(buf, 0, len);
-                }
-            } catch (IOException e) {
-                throw new RuntimeException("Could not copy " + (localExists ? localPath : remoteUri) + " to " + result, e);
-            }
-        } catch (IOException e) {
-            throw new RuntimeException("Could not create temp file", e);
-        }
-        return result;
-    }
-
-    public static boolean isEmptyPropertiesFile(Path file) {
-        final Properties props = new Properties();
-        try (InputStream in = Files.newInputStream(file)) {
-            props.load(in);
-        } catch (IOException e) {
-            throw new RuntimeException("Could not read " + file, e);
-        }
-        return props.isEmpty();
-    }
 
 }

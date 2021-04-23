@@ -24,7 +24,7 @@
     <version>0.34.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <name>CQ Tools</name>
+    <name>CQ</name>
     <description>A Maven plugin to perform various tasks related to Camel Quarkus</description>
 
     <url>https://github.com/l2x6/cq-maven-plugin</url>
@@ -143,11 +143,18 @@
     </properties>
 
     <modules>
+        <module>common</module>
         <module>maven-plugin</module>
     </modules>
 
     <dependencyManagement>
         <dependencies>
+
+            <dependency>
+                <groupId>org.l2x6.cq</groupId>
+                <artifactId>cq-common</artifactId>
+                <version>0.34.0-SNAPSHOT</version>
+            </dependency>
 
             <dependency>
                 <groupId>com.google.code.gson</groupId>

@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.l2x6.cq;
+package org.l2x6.cq.common;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -325,7 +325,7 @@ public class CqCatalog {
         private final FileSystem jarFileSystem;
 
         public static GavCqCatalog open(Path localRepository, Flavor flavor, String version) {
-            final Path jarPath = CqUtils.copyJar(localRepository, flavor.getGroupId(), flavor.getArtifactId(), version);
+            final Path jarPath = CqCommonUtils.copyJar(localRepository, flavor.getGroupId(), flavor.getArtifactId(), version);
             try {
                 final FileSystem fs = FileSystems.newFileSystem(jarPath, (ClassLoader) null);
                 return new GavCqCatalog(fs, flavor);

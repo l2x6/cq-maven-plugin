@@ -32,8 +32,9 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
-import org.l2x6.cq.CqCatalog.Flavor;
 import org.l2x6.cq.PomTransformer.Transformation;
+import org.l2x6.cq.common.CqCatalog;
+import org.l2x6.cq.common.CqCatalog.Flavor;
 
 import freemarker.template.Configuration;
 

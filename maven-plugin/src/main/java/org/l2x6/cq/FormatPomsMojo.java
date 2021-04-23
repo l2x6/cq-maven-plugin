@@ -45,6 +45,7 @@ import org.apache.maven.shared.model.fileset.util.FileSetManager;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.l2x6.cq.PomTransformer.Transformation;
 import org.l2x6.cq.PomTransformer.TransformationContext;
+import org.l2x6.cq.common.CqCommonUtils;
 import org.w3c.dom.Document;
 
 /**
@@ -252,7 +253,7 @@ public class FormatPomsMojo extends AbstractMojo {
             final String[] includedFiles = fileSetManager.getIncludedFiles(removeEmptyApplicationProperties);
             for (String includedFile : includedFiles) {
                 final Path propsFilePath = dir.resolve(includedFile);
-                if (Files.isRegularFile(propsFilePath) && CqUtils.isEmptyPropertiesFile(propsFilePath)) {
+                if (Files.isRegularFile(propsFilePath) && CqCommonUtils.isEmptyPropertiesFile(propsFilePath)) {
                     try {
                         Files.delete(propsFilePath);
                     } catch (IOException e) {
