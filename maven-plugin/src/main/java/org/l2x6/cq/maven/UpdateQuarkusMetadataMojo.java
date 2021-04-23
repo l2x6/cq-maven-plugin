@@ -36,6 +36,7 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.l2x6.cq.common.CqCatalog;
 import org.l2x6.cq.common.CqCatalog.Flavor;
+import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.maven.TemplateParams.ExtensionStatus;
 
 import freemarker.template.Configuration;
@@ -85,7 +86,7 @@ public class UpdateQuarkusMetadataMojo extends AbstractExtensionListMojo {
                             .resolve("runtime/src/main/resources/META-INF/quarkus-extension.yaml");
                     getLog().info("Regenerating " + rootDir.toPath().relativize(quarkusExtensionsYamlPath));
                     final List<ArtifactModel<?>> models = catalog.primaryModel(artifactIdBase);
-                    final Model runtimePom = CqUtils.readPom(extModule.getRuntimePomPath(), StandardCharsets.UTF_8);
+                    final Model runtimePom = CqCommonUtils.readPom(extModule.getRuntimePomPath(), StandardCharsets.UTF_8);
                     final Path relativeRuntimePomPath = rootDir.toPath().relativize(extModule.getRuntimePomPath());
 
                     final String name = runtimePom.getName();

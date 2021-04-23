@@ -34,6 +34,7 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.l2x6.cq.common.CqCatalog;
 import org.l2x6.cq.common.CqCatalog.Flavor;
+import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.maven.PomTransformer.Transformation;
 
 import freemarker.template.Configuration;
@@ -296,7 +297,7 @@ public class CreateTestMojo extends AbstractMojo {
         }
 
         extensionsPomPath = this.extensionsPath.resolve("pom.xml");
-        extensionsModel = CqUtils.readPom(extensionsPomPath, charset);
+        extensionsModel = CqCommonUtils.readPom(extensionsPomPath, charset);
         this.groupId = getGroupId(extensionsModel);
         this.version = CqUtils.getVersion(extensionsModel);
 
@@ -358,7 +359,7 @@ public class CreateTestMojo extends AbstractMojo {
             itestDir = itestParentPath.getParent().resolve("integration-test");
         }
 
-        final Model itestParent = CqUtils.readPom(itestParentPath, charset);
+        final Model itestParent = CqCommonUtils.readPom(itestParentPath, charset);
         if (!"pom".equals(itestParent.getPackaging())) {
             throw new RuntimeException(
                     "Can add an extension integration test only under a project with packagin 'pom'; found: "

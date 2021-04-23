@@ -194,7 +194,7 @@ public class FormatPomsMojo extends AbstractMojo {
 
                 for (String includedFile : includedFiles) {
                     final Path pomPath = dir.resolve(includedFile);
-                    Model pom = CqUtils.readPom(pomPath, charset);
+                    Model pom = CqCommonUtils.readPom(pomPath, charset);
                     pom.getDependencies().stream()
                             .map(Gavtcs::of)
                             .filter(gavtcs -> !gavtcs.isVirtual())

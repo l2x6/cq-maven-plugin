@@ -38,6 +38,7 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.project.MavenProject;
 import org.junit.jupiter.api.Test;
+import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.maven.CqUtils;
 import org.l2x6.cq.maven.CreateExtensionMojo;
 import org.l2x6.cq.maven.ExtensionDir;
@@ -54,7 +55,7 @@ public class CreateExtensionMojoTest {
         final Path pom = projectDir.resolve("pom.xml");
         if (Files.exists(pom)) {
             mojo.project.setFile(pom.toFile());
-            final Model rawModel = CqUtils.readPom(pom, StandardCharsets.UTF_8);
+            final Model rawModel = CqCommonUtils.readPom(pom, StandardCharsets.UTF_8);
             // the project would have an interpolated model at runtime, which we can't fully init here
             // here are just some key parts
             if (rawModel.getDependencyManagement() != null) {

@@ -80,7 +80,7 @@ public class SyncExamplePropertiesMojo extends AbstractMojo {
         final Path localRepositoryPath = Paths.get(localRepository);
 
         final Path pomXmlPath = basePath.resolve("pom.xml");
-        final Model exampleModel = CqUtils.readPom(pomXmlPath, charset);
+        final Model exampleModel = CqCommonUtils.readPom(pomXmlPath, charset);
         final Properties exampleProps = exampleModel.getProperties();
         if (cqVersion == null) {
             cqVersion = exampleProps.getProperty("camel-quarkus.version");
@@ -88,7 +88,7 @@ public class SyncExamplePropertiesMojo extends AbstractMojo {
 
         final Path cqPomPath = CqCommonUtils.copyArtifact(localRepositoryPath, "org.apache.camel.quarkus", "camel-quarkus", cqVersion,
                 "pom");
-        final Model cqModel = CqUtils.readPom(cqPomPath, charset);
+        final Model cqModel = CqCommonUtils.readPom(cqPomPath, charset);
         final Properties cqProps = cqModel.getProperties();
         cqProps.put("camel-quarkus.version", cqVersion);
 

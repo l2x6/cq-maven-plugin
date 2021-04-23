@@ -19,10 +19,17 @@ package org.l2x6.cq.common;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.Reader;
 import java.net.URL;
+import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Properties;
+
+import org.apache.camel.catalog.Kind;
+import org.apache.maven.model.Model;
+import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
+import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 
 public class CqCommonUtils {
 
@@ -67,4 +74,36 @@ public class CqCommonUtils {
         }
         return props.isEmpty();
     }
+
+    public static Model readPom(final Path path, Charset charset) {
+        try (Reader r = Files.newBufferedReader(path, charset)) {
+            return new MavenXpp3Reader().read(r);
+        } catch (XmlPullParserException | IOException e) {
+            throw new RuntimeException("Could not parse " + path, e);
+        }
+    }
+
+    public static String humanPlural(Kind kind) {
+        switch (kind) {
+        case eip:
+            return "EIPs";
+        default:
+            return firstCap(kind.name()) + "s";
+        }
+    }
+    public static String firstCap(String in) {
+        if (in == null) {
+            return null;
+        }
+        if (in.isEmpty()) {
+            return in;
+        }
+        final StringBuilder sb = new StringBuilder(in.length());
+        sb.append(Character.toUpperCase(in.charAt(0)));
+        if (in.length() > 1) {
+            sb.append(in.substring(1));
+        }
+        return sb.toString();
+    }
+
 }

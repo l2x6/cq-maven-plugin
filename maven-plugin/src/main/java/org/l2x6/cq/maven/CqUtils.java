@@ -19,10 +19,8 @@ package org.l2x6.cq.maven;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.Reader;
 import java.io.Writer;
 import java.net.URL;
-import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -41,9 +39,7 @@ import javax.lang.model.SourceVersion;
 
 import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.maven.model.Model;
-import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.apache.maven.plugin.logging.Log;
-import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.l2x6.cq.maven.TemplateParams.ExtensionStatus;
 
 import freemarker.cache.ClassTemplateLoader;
@@ -132,14 +128,6 @@ public class CqUtils {
                 : basePom.getParent() != null && basePom.getParent().getVersion() != null
                         ? basePom.getParent().getVersion()
                         : null;
-    }
-
-    public static Model readPom(final Path path, Charset charset) {
-        try (Reader r = Files.newBufferedReader(path, charset)) {
-            return new MavenXpp3Reader().read(r);
-        } catch (XmlPullParserException | IOException e) {
-            throw new RuntimeException("Could not parse " + path, e);
-        }
     }
 
     public static String extensionDocUrl(String artifactIdBase) {

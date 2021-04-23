@@ -115,7 +115,10 @@ public class CqCatalog {
     public List<ArtifactModel<?>> primaryModel(String cqArtifactIdBase) {
         final List<ArtifactModel<?>> models = filterModels(cqArtifactIdBase)
                 .filter(CqCatalog::isFirstScheme)
-                .filter(m -> !m.getName().startsWith("google-") || !m.getName().endsWith("-stream")) // ignore the google stream component variants
+                .filter(m -> !m.getName().startsWith("google-") || !m.getName().endsWith("-stream")) // ignore the
+                                                                                                     // google stream
+                                                                                                     // component
+                                                                                                     // variants
                 .collect(Collectors.toList());
         if (models.size() > 1) {
             List<ArtifactModel<?>> componentModels = models.stream()
@@ -141,6 +144,17 @@ public class CqCatalog {
     public static Stream<org.apache.camel.catalog.Kind> kinds() {
         return Stream.of(org.apache.camel.catalog.Kind.values())
                 .filter(kind -> kind != org.apache.camel.catalog.Kind.eip);
+    }
+
+    /**
+     * Normally schemes not available in Camel need to be removed from Camel Quarkus. This method provides a way to
+     * maintain a list of exceptions to that rule.
+     *
+     * @param scheme the scheme to check
+     * @return {@code true} if the given scheme is known not to be available in Camel by design; {@code false} otherwise
+     */
+    public static boolean isCamelQuarkusOrphan(String scheme) {
+        return "qute".equals(scheme);
     }
 
     public static boolean isFirstScheme(ArtifactModel<?> model) {
@@ -330,7 +344,7 @@ public class CqCatalog {
                 final FileSystem fs = FileSystems.newFileSystem(jarPath, (ClassLoader) null);
                 return new GavCqCatalog(fs, flavor);
             } catch (IOException e) {
-                throw new RuntimeException("Could not open file system "+ jarPath, e);
+                throw new RuntimeException("Could not open file system " + jarPath, e);
             }
         }
 
@@ -344,7 +358,7 @@ public class CqCatalog {
             try {
                 jarFileSystem.close();
             } catch (IOException e) {
-                throw new RuntimeException("Could not close catalog "+ this.baseDir, e);
+                throw new RuntimeException("Could not close catalog " + this.baseDir, e);
             }
         }
     }
