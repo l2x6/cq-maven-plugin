@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.l2x6.cq;
+package org.l2x6.cq.maven;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -34,9 +34,9 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
-import org.l2x6.cq.TemplateParams.ExtensionStatus;
 import org.l2x6.cq.common.CqCatalog;
 import org.l2x6.cq.common.CqCatalog.Flavor;
+import org.l2x6.cq.maven.TemplateParams.ExtensionStatus;
 
 import freemarker.template.Configuration;
 

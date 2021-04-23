@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.l2x6.cq;
+package org.l2x6.cq.maven;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -27,7 +27,11 @@ import java.util.TreeSet;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
-import org.l2x6.cq.PomTransformer.Transformation;
+import org.l2x6.cq.maven.FormatPomsMojo;
+import org.l2x6.cq.maven.Gavtcs;
+import org.l2x6.cq.maven.PomSorter;
+import org.l2x6.cq.maven.PomTransformer;
+import org.l2x6.cq.maven.PomTransformer.Transformation;
 
 public class PomSorterTest {
 

@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.l2x6.cq;
+package org.l2x6.cq.maven;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -44,7 +44,7 @@ import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.apache.maven.plugin.logging.Log;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
-import org.l2x6.cq.TemplateParams.ExtensionStatus;
+import org.l2x6.cq.maven.TemplateParams.ExtensionStatus;
 
 import freemarker.cache.ClassTemplateLoader;
 import freemarker.cache.FileTemplateLoader;
@@ -231,7 +231,7 @@ public class CqUtils {
                 .nativeSupported(isNativeSupported)
                 .status(status)
                 .guideUrl(CqUtils.extensionDocUrl(artifactIdBase))
-                .categories(org.l2x6.cq.CqUtils.DEFAULT_CATEGORIES)
+                .categories(org.l2x6.cq.maven.CqUtils.DEFAULT_CATEGORIES)
                 .build();
     }
 

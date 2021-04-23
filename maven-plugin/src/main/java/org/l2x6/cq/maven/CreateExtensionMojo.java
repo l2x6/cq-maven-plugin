@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.l2x6.cq;
+package org.l2x6.cq.maven;
 
 import java.io.File;
 import java.io.IOException;
@@ -34,9 +34,9 @@ import org.apache.maven.model.Model;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
-import org.l2x6.cq.PomTransformer.Transformation;
-import org.l2x6.cq.TemplateParams.Builder;
-import org.l2x6.cq.TemplateParams.ExtensionStatus;
+import org.l2x6.cq.maven.PomTransformer.Transformation;
+import org.l2x6.cq.maven.TemplateParams.Builder;
+import org.l2x6.cq.maven.TemplateParams.ExtensionStatus;
 
 import freemarker.template.Configuration;
 

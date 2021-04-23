@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.l2x6.cq;
+package org.l2x6.cq.maven;
 
 import java.io.File;
 import java.io.IOException;
@@ -43,9 +43,9 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.shared.model.fileset.FileSet;
 import org.apache.maven.shared.model.fileset.util.FileSetManager;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
-import org.l2x6.cq.PomTransformer.Transformation;
-import org.l2x6.cq.PomTransformer.TransformationContext;
 import org.l2x6.cq.common.CqCommonUtils;
+import org.l2x6.cq.maven.PomTransformer.Transformation;
+import org.l2x6.cq.maven.PomTransformer.TransformationContext;
 import org.w3c.dom.Document;
 
 /**

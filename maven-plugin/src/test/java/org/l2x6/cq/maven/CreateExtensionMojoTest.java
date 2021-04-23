@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.l2x6.cq;
+package org.l2x6.cq.maven;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -38,6 +38,9 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.project.MavenProject;
 import org.junit.jupiter.api.Test;
+import org.l2x6.cq.maven.CqUtils;
+import org.l2x6.cq.maven.CreateExtensionMojo;
+import org.l2x6.cq.maven.ExtensionDir;
 
 public class CreateExtensionMojoTest {
 

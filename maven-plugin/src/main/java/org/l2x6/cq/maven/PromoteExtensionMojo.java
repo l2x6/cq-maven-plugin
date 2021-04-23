@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.l2x6.cq;
+package org.l2x6.cq.maven;
 
 import java.io.File;
 import java.io.IOException;
@@ -43,8 +43,8 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
-import org.l2x6.cq.PomTransformer.Transformation;
-import org.l2x6.cq.PomTransformer.TransformationContext;
+import org.l2x6.cq.maven.PomTransformer.Transformation;
+import org.l2x6.cq.maven.PomTransformer.TransformationContext;
 import org.w3c.dom.Document;
 import org.w3c.dom.DocumentFragment;
 import org.w3c.dom.Element;

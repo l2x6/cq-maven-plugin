@@ -14,27 +14,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.l2x6.cq;
+package org.l2x6.cq.maven;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class PatternSet {
-    private final List<Pattern> patterns;
+import java.io.IOException;
 
-    PatternSet(Collection<String> rawPatterns) {
-        this.patterns = rawPatterns.stream()
-                .map(Pattern::compile)
-                .collect(Collectors.toList());
+import org.junit.jupiter.api.Test;
+import org.l2x6.cq.maven.CqUtils;
+
+public class CqUtilsTest {
+
+    @Test
+    void toCapCamelCase() throws IOException {
+        assertEquals("FooBarBaz", CqUtils.toCapCamelCase("foo+-bar.baz"));
     }
 
-    public boolean matchesAny(String string) {
-        if (patterns.isEmpty()) {
-            return false;
-        }
-        return patterns.stream()
-                .anyMatch(pat -> pat.matcher(string).matches());
+    @Test
+    void toSnakeCase() throws IOException {
+        assertEquals("foo_bar_baz", CqUtils.toSnakeCase("Foo+-bar.baz"));
     }
+
+    @Test
+    void toKebabCase() throws IOException {
+        assertEquals("foo-bar-baz", CqUtils.toKebabCase("foo+-BAR.baZ"));
+    }
+
 }
