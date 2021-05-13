@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -30,16 +31,21 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.camel.catalog.Kind;
 import org.apache.camel.tooling.model.ArtifactModel;
@@ -57,6 +63,7 @@ import org.l2x6.cq.common.CqCatalog;
 import org.l2x6.cq.common.CqCatalog.Flavor;
 import org.l2x6.cq.common.CqCatalog.GavCqCatalog;
 import org.l2x6.cq.common.CqCommonUtils;
+import org.l2x6.cq.maven.prod.SyncExtensionListMojo.Sheet.Record;
 
 import com.google.api.client.auth.oauth2.Credential;
 import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp;
@@ -104,6 +111,8 @@ public class SyncExtensionListMojo extends AbstractMojo {
     @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
     String localRepository;
 
+    private static final Set<String> PRIMARY_LABELS = new LinkedHashSet<>(Arrays.asList("eip", "dataformat", "language", "rest", "configuration", "error"));
+
     /**
      * Execute goal.
      *
@@ -131,39 +140,11 @@ public class SyncExtensionListMojo extends AbstractMojo {
                     GavCqCatalog camelQuarkusCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camelQuarkus,
                             camelQuarkusVersion)) {
 
-                {
-                    final Kind kind = Kind.eip;
-                    getLog().info("Updating " + CqCommonUtils.humanPlural(kind));
-                    final Set<String> allSchemes = new LinkedHashSet<>();
-
-                    final Map<String, EipModel> camelModels = new LinkedHashMap<>();
-                    camelCatalog.eips()
-                            .sorted(BaseModel.compareTitle())
-                            .forEach(m -> {
-                                camelModels.put(m.getName(), m);
-                                allSchemes.add(m.getName());
-                            });
-
-                    final Map<String, EipModel> cqModels = new LinkedHashMap<>();
-//                    camelQuarkusCatalog.eips()
-//                            .sorted(BaseModel.compareTitle())
-//                            .forEach(m -> {
-//                                cqModels.put(m.getName(), m);
-//                                allSchemes.add(m.getName());
-//                            });
-
-                    /* Go through extensions available in the spreadsheet and update them */
-                    final Sheet sheet = Sheet.read(service, googleSpreadsheetId, kind, getLog(), Column.eipColumns());
-
-                    for (String scheme : allSchemes) {
-                        sheet.updateBase(scheme, camelModels.get(scheme), cqModels.get(scheme));
-                    }
-
-                    sheet.update();
-                }
+                Map<Kind, Map<String, NativeSupport>> nativeSupportsMap = new HashMap<>();
 
                 CqCatalog.kinds().forEach(kind -> {
-
+                    Map<String, NativeSupport> nativeSupports = new HashMap<>();
+                    nativeSupportsMap.put(kind, nativeSupports);
                     getLog().info("Updating " + CqCommonUtils.humanPlural(kind));
                     final Set<String> allSchemes = new LinkedHashSet<>();
 
@@ -186,18 +167,104 @@ public class SyncExtensionListMojo extends AbstractMojo {
                             });
 
                     /* Go through extensions available in the spreadsheet and update them */
-                    final Sheet sheet = Sheet.read(service, googleSpreadsheetId, kind, getLog(), Column.values());
+                    final Sheet sheet = Sheet.read(service, googleSpreadsheetId, kind, getLog(), Column.artifactModelColumns());
 
                     for (String scheme : allSchemes) {
-                        sheet.update(scheme, camelModels.get(scheme), cqModels.get(scheme));
+                        sheet.update(scheme, camelModels.get(scheme), cqModels.get(scheme), nativeSupportsMap);
                     }
 
-                    sheet.update();
+                    sheet.update(Comparator.comparing(Record::getArtifactIdBase).thenComparing(Record::getScheme));
                 });
+
+                {
+                    final Kind kind = Kind.eip;
+                    getLog().info("Updating " + CqCommonUtils.humanPlural(kind));
+                    final Set<String> allSchemes = new LinkedHashSet<>();
+
+                    final Map<String, EipModel> camelModels = new LinkedHashMap<>();
+                    camelCatalog.eips()
+                            .sorted(BaseModel.compareTitle())
+                            .forEach(m -> {
+                                camelModels.put(m.getName(), m);
+                                allSchemes.add(m.getName());
+                            });
+
+                    final Map<String, EipModel> cqModels = new LinkedHashMap<>();
+//                    camelQuarkusCatalog.eips()
+//                            .sorted(BaseModel.compareTitle())
+//                            .forEach(m -> {
+//                                cqModels.put(m.getName(), m);
+//                                allSchemes.add(m.getName());
+//                            });
+
+                    Map<String, Set<String>> occurrences = findOccurrences(allSchemes, Paths.get("."), getLog());
+
+                    /* Go through extensions available in the spreadsheet and update them */
+                    final Sheet sheet = Sheet.read(service, googleSpreadsheetId, kind, getLog(), Column.eipColumns());
+
+                    for (String scheme : allSchemes) {
+                        sheet.updateBase(scheme, camelModels.get(scheme), cqModels.get(scheme), occurrences.get(scheme), nativeSupportsMap);
+                    }
+
+                    sheet.update(Comparator.comparing(Record::getKind).thenComparing(Record::getScheme));
+                }
+
             }
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    static Map<String, Set<String>> findOccurrences(final Set<String> allSchemes, Path baseDir, Log log) {
+
+        final Path itestsDir = baseDir.resolve("integration-tests");
+        if (!Files.isDirectory(itestsDir)) {
+            return null;
+        }
+        final Map<String, Set<String>> occurrences = new LinkedHashMap<>();
+        for (String scheme : allSchemes) {
+            occurrences.put(scheme, new TreeSet<>());
+        }
+        try (Stream<Path> files = Files.walk(itestsDir)) {
+            files
+                    .filter(Files::isRegularFile)
+                    .forEach(p -> {
+                        final String fileName = p.getFileName().toString();
+                        final boolean isJava = fileName.endsWith(".java");
+                        final boolean isXml = fileName.endsWith(".xml") && !"pom.xml".equals(fileName);
+                        if (isJava || isXml) {
+                            final Path absPath = p;
+                            try {
+                                String src = new String(Files.readAllBytes(absPath), StandardCharsets.UTF_8);
+                                src = src.toLowerCase(Locale.ROOT);
+                                for (Entry<String, Set<String>> en : occurrences.entrySet()) {
+                                    final String lcSearch = en.getKey().toLowerCase(Locale.ROOT).replace("-", "");
+                                    final String search = isJava ? "." + lcSearch + "(" : "<" + lcSearch + ">";
+                                    if (src.contains(search)) {
+                                        final Path relPath = baseDir.relativize(absPath);
+                                        en.getValue().add("https://github.com/apache/camel-quarkus/tree/main/"
+                                                + relPath.toString().replace('\\', '/'));
+                                    }
+                                }
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+                    });
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        log.info("Found EIP occurrences:");
+        for (Entry<String, Set<String>> en : occurrences.entrySet()) {
+            log.info("  - " + en.getKey());
+            for (String path : en.getValue()) {
+                log.info("    • " + path);
+            }
+        }
+
+        return occurrences;
     }
 
     String findCamelVersion(Path localRepositoryPath) {
@@ -270,7 +337,8 @@ public class SyncExtensionListMojo extends AbstractMojo {
         Kind,
         Deprecated,
         CQ_Community("CQ Community"),
-        Community_issue("Community issue");
+        Community_issue("Community issue"),
+        Occurrences_in_tests("Occurrences in tests");
 
         private final String title;
 
@@ -279,7 +347,12 @@ public class SyncExtensionListMojo extends AbstractMojo {
         }
 
         public static Column[] eipColumns() {
-            return new Column[] {Name, Scheme, Kind, Deprecated, CQ_Community, Community_issue};
+            return new Column[] { Name, Scheme, Kind, Deprecated, CQ_Community, Community_issue, Occurrences_in_tests };
+        }
+
+        public static Column[] artifactModelColumns() {
+            return new Column[] { Name, Scheme, Camel_artifactId, CQ_artifactId, Kind, Deprecated, CQ_Community,
+                    Community_issue };
         }
 
         private Column(String title) {
@@ -336,7 +409,7 @@ public class SyncExtensionListMojo extends AbstractMojo {
         final private Set<String> updatedSchemes = new HashSet<>();
         final private List<String> newSchemes = new ArrayList<>();
 
-        public Record updateBase(String scheme, BaseModel<?> camelModel, BaseModel<?> cqModel) {
+        public Record updateBase(String scheme, BaseModel<?> camelModel, BaseModel<?> cqModel, Set<String> occurrences, Map<Kind, Map<String, NativeSupport>> nativeSupportsMap) {
             Record row = findRecord(scheme);
             if (row == null) {
                 row = addRecord(scheme);
@@ -344,15 +417,35 @@ public class SyncExtensionListMojo extends AbstractMojo {
             }
             BaseModel<?> model = cqModel != null ? cqModel : camelModel;
             row.set(Column.Name, model.getTitle());
-            row.set(Column.Kind, model.getKind());
-
-            NativeSupport nativeSupport = row.getNativeSupport();
-            if (nativeSupport != NativeSupport.Rejected) {
-                if (cqModel == null) {
-                    row.setNativeSupport(NativeSupport.na);
-                } else {
-                    row.setNativeSupport(cqModel.isNativeSupported() ? NativeSupport.Native : NativeSupport.JVM);
+            if (occurrences != null) {
+                final String serializedOccurrences = occurrences.stream().collect(Collectors.joining("\n"));
+                row.set(Column.Occurrences_in_tests, serializedOccurrences);
+                String kind = eipKind(model);
+                row.set(Column.Kind, kind);
+                NativeSupport nativeSupport = row.getNativeSupport();
+                if (nativeSupport != NativeSupport.Rejected) {
+                    if ("dataformat".equals(kind) || "language".equals(kind)) {
+                        final Kind k = Kind.valueOf(kind);
+                        final NativeSupport ns = nativeSupportsMap.get(k).get(scheme);
+                        row.setNativeSupport(ns == null ? NativeSupport.na : ns);
+                    } else {
+                        row.setNativeSupport(occurrences.isEmpty() ? NativeSupport.na : NativeSupport.Native);
+                    }
                 }
+            } else {
+                NativeSupport nativeSupport = row.getNativeSupport();
+                if (nativeSupport != NativeSupport.Rejected) {
+                    if (cqModel == null) {
+                        nativeSupport = NativeSupport.na;
+                    } else {
+                        nativeSupport = cqModel.isNativeSupported() ? NativeSupport.Native : NativeSupport.JVM;
+                    }
+                }
+                row.setNativeSupport(nativeSupport);
+                final String kind = model.getKind();
+                row.set(Column.Kind, kind);
+                final Kind k = Kind.valueOf(model.getKind());
+                nativeSupportsMap.get(k).put(scheme, nativeSupport);
             }
 
             final boolean deprecated = (camelModel != null && camelModel.isDeprecated())
@@ -363,9 +456,27 @@ public class SyncExtensionListMojo extends AbstractMojo {
             return row;
         }
 
-        public void update(String scheme, ArtifactModel<?> camelModel, ArtifactModel<?> cqModel) {
+        public String eipKind(BaseModel<?> model) {
+            Set<String> labels = new LinkedHashSet<>();
+            if (model.getLabel() != null) {
+                Stream.of(model.getLabel().split(",")).forEach(labels::add);
+            }
+            String kind = null;
+            for (String primaryLabel : PRIMARY_LABELS) {
+                if (labels.contains(primaryLabel)) {
+                    kind = primaryLabel;
+                    break;
+                }
+            }
+            if (kind == null) {
+                kind = model.getLabel();
+            }
+            return kind;
+        }
 
-            final Record row = updateBase(scheme, camelModel, cqModel);
+        public void update(String scheme, ArtifactModel<?> camelModel, ArtifactModel<?> cqModel, Map<Kind, Map<String, NativeSupport>> nativeSupportsMap) {
+
+            final Record row = updateBase(scheme, camelModel, cqModel, null, nativeSupportsMap);
 
             row.set(Column.Camel_artifactId, camelModel != null ? camelModel.getArtifactId() : "");
             row.set(Column.CQ_artifactId, cqModel != null ? cqModel.getArtifactId() : "");
@@ -428,7 +539,7 @@ public class SyncExtensionListMojo extends AbstractMojo {
             return rows.size();
         }
 
-        public void update() {
+        public void update(Comparator<Record> comparator) {
 
             markRemovedRows();
 
@@ -436,7 +547,7 @@ public class SyncExtensionListMojo extends AbstractMojo {
             newValues.add(headers);
 
             rows.stream()
-                    .sorted(Comparator.comparing(Record::getArtifactIdBase).thenComparing(Record::getScheme))
+                    .sorted(comparator)
                     .map(r -> r.row)
                     .forEach(newValues::add);
 
@@ -510,9 +621,16 @@ public class SyncExtensionListMojo extends AbstractMojo {
                 }
                 return "ZZZZZZZZZZZZZZZZZZZ";
             }
+            public String getKind() {
+                final String kind = getString(Column.Kind);
+                return kind == null ? "ZZZZZZZZZZZZZZZZZZZ" : kind;
+            }
 
             public void set(Column col, Object value) {
                 final int i = colMap.get(col);
+                while (row.size() <= i) {
+                    row.add("");
+                }
                 Object old = row.get(i);
                 if (old != value && (old == null || !old.equals(value))) {
                     log.info(" - Updating " + get(Column.Scheme) + "[" + col.title + "]: " + old + " -> " + value);
