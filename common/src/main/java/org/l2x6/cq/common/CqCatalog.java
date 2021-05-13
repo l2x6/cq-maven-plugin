@@ -34,11 +34,13 @@ import org.apache.camel.catalog.CamelCatalog;
 import org.apache.camel.catalog.DefaultCamelCatalog;
 import org.apache.camel.catalog.DefaultRuntimeProvider;
 import org.apache.camel.catalog.DefaultVersionManager;
+import org.apache.camel.catalog.Kind;
 import org.apache.camel.catalog.RuntimeProvider;
 import org.apache.camel.catalog.impl.CatalogHelper;
 import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.camel.tooling.model.BaseModel;
 import org.apache.camel.tooling.model.ComponentModel;
+import org.apache.camel.tooling.model.EipModel;
 
 public class CqCatalog {
 
@@ -139,6 +141,10 @@ public class CqCatalog {
 
     public Stream<ArtifactModel<?>> models(org.apache.camel.catalog.Kind kind) {
         return catalog.findNames(kind).stream().map(name -> (ArtifactModel<?>) catalog.model(kind, name));
+    }
+
+    public Stream<EipModel> eips() {
+        return catalog.findNames(Kind.eip).stream().map(name -> catalog.eipModel(name));
     }
 
     public static Stream<org.apache.camel.catalog.Kind> kinds() {

@@ -26,6 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -43,6 +44,7 @@ import java.util.stream.Collectors;
 import org.apache.camel.catalog.Kind;
 import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.camel.tooling.model.BaseModel;
+import org.apache.camel.tooling.model.EipModel;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -128,6 +130,38 @@ public class SyncExtensionListMojo extends AbstractMojo {
             try (GavCqCatalog camelCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camel, camelVersion);
                     GavCqCatalog camelQuarkusCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camelQuarkus,
                             camelQuarkusVersion)) {
+
+                {
+                    final Kind kind = Kind.eip;
+                    getLog().info("Updating " + CqCommonUtils.humanPlural(kind));
+                    final Set<String> allSchemes = new LinkedHashSet<>();
+
+                    final Map<String, EipModel> camelModels = new LinkedHashMap<>();
+                    camelCatalog.eips()
+                            .sorted(BaseModel.compareTitle())
+                            .forEach(m -> {
+                                camelModels.put(m.getName(), m);
+                                allSchemes.add(m.getName());
+                            });
+
+                    final Map<String, EipModel> cqModels = new LinkedHashMap<>();
+//                    camelQuarkusCatalog.eips()
+//                            .sorted(BaseModel.compareTitle())
+//                            .forEach(m -> {
+//                                cqModels.put(m.getName(), m);
+//                                allSchemes.add(m.getName());
+//                            });
+
+                    /* Go through extensions available in the spreadsheet and update them */
+                    final Sheet sheet = Sheet.read(service, googleSpreadsheetId, kind, getLog(), Column.eipColumns());
+
+                    for (String scheme : allSchemes) {
+                        sheet.updateBase(scheme, camelModels.get(scheme), cqModels.get(scheme));
+                    }
+
+                    sheet.update();
+                }
+
                 CqCatalog.kinds().forEach(kind -> {
 
                     getLog().info("Updating " + CqCommonUtils.humanPlural(kind));
@@ -152,7 +186,7 @@ public class SyncExtensionListMojo extends AbstractMojo {
                             });
 
                     /* Go through extensions available in the spreadsheet and update them */
-                    final Sheet sheet = Sheet.read(service, googleSpreadsheetId, kind, getLog());
+                    final Sheet sheet = Sheet.read(service, googleSpreadsheetId, kind, getLog(), Column.values());
 
                     for (String scheme : allSchemes) {
                         sheet.update(scheme, camelModels.get(scheme), cqModels.get(scheme));
@@ -244,6 +278,10 @@ public class SyncExtensionListMojo extends AbstractMojo {
             this.title = name();
         }
 
+        public static Column[] eipColumns() {
+            return new Column[] {Name, Scheme, Kind, Deprecated, CQ_Community, Community_issue};
+        }
+
         private Column(String title) {
             this.title = title;
         }
@@ -261,7 +299,7 @@ public class SyncExtensionListMojo extends AbstractMojo {
 
     static class Sheet {
 
-        public static Sheet read(Sheets service, String spreadsheetId, Kind kind, Log log) {
+        public static Sheet read(Sheets service, String spreadsheetId, Kind kind, Log log, Column... requiredColumns) {
             final String sheetName = CqCommonUtils.humanPlural(kind);
             final String rangeSpec = sheetName + "!A1:O";
             final ValueRange range;
@@ -275,21 +313,19 @@ public class SyncExtensionListMojo extends AbstractMojo {
             }
             final List<Object> headers = range.getValues().get(0);
             final EnumMap<Column, Integer> colMap = new EnumMap<>(Column.class);
-            int cnt = 0;
+            final Set<Column> requiredCols = new LinkedHashSet<>(Arrays.asList(requiredColumns));
             for (int i = 0; i < headers.size(); i++) {
                 final String title = String.valueOf(headers.get(i));
                 final Optional<Column> col = Column.ofTitle(title);
                 if (col.isPresent()) {
                     colMap.put(col.get(), i);
-                    cnt++;
+                    requiredCols.remove(col.get());
                 }
             }
-            if (cnt < Column.values().length) {
+            if (!requiredCols.isEmpty()) {
                 throw new IllegalStateException(
                         "Could not find colums [" +
-                                colMap.entrySet().stream()
-                                        .filter(en -> en.getValue() == null)
-                                        .map(Map.Entry::getKey)
+                                requiredCols.stream()
                                         .map(Column::name)
                                         .collect(Collectors.joining(", "))
                                 + "] in sheet " + sheetName);
@@ -300,19 +336,14 @@ public class SyncExtensionListMojo extends AbstractMojo {
         final private Set<String> updatedSchemes = new HashSet<>();
         final private List<String> newSchemes = new ArrayList<>();
 
-        public void update(String scheme, ArtifactModel<?> camelModel, ArtifactModel<?> cqModel) {
-
+        public Record updateBase(String scheme, BaseModel<?> camelModel, BaseModel<?> cqModel) {
             Record row = findRecord(scheme);
             if (row == null) {
                 row = addRecord(scheme);
                 newSchemes.add(scheme);
             }
-
-            ArtifactModel<?> model = cqModel != null ? cqModel : camelModel;
-
+            BaseModel<?> model = cqModel != null ? cqModel : camelModel;
             row.set(Column.Name, model.getTitle());
-            row.set(Column.Camel_artifactId, camelModel != null ? camelModel.getArtifactId() : "");
-            row.set(Column.CQ_artifactId, cqModel != null ? cqModel.getArtifactId() : "");
             row.set(Column.Kind, model.getKind());
 
             NativeSupport nativeSupport = row.getNativeSupport();
@@ -329,6 +360,16 @@ public class SyncExtensionListMojo extends AbstractMojo {
             row.set(Column.Deprecated, String.valueOf(deprecated).toUpperCase(Locale.ROOT));
 
             updatedSchemes.add(scheme);
+            return row;
+        }
+
+        public void update(String scheme, ArtifactModel<?> camelModel, ArtifactModel<?> cqModel) {
+
+            final Record row = updateBase(scheme, camelModel, cqModel);
+
+            row.set(Column.Camel_artifactId, camelModel != null ? camelModel.getArtifactId() : "");
+            row.set(Column.CQ_artifactId, cqModel != null ? cqModel.getArtifactId() : "");
+
         }
 
         public Record addRecord(String scheme) {
@@ -395,9 +436,9 @@ public class SyncExtensionListMojo extends AbstractMojo {
             newValues.add(headers);
 
             rows.stream()
-                .sorted(Comparator.comparing(Record::getArtifactIdBase).thenComparing(Record::getScheme))
-                .map(r -> r.row)
-                .forEach(newValues::add);
+                    .sorted(Comparator.comparing(Record::getArtifactIdBase).thenComparing(Record::getScheme))
+                    .map(r -> r.row)
+                    .forEach(newValues::add);
 
             range.setValues(newValues);
 
@@ -456,13 +497,16 @@ public class SyncExtensionListMojo extends AbstractMojo {
             }
 
             public String getArtifactIdBase() {
-                String cqArtifactId = (String) row.get(colMap.get(Column.CQ_artifactId));
-                if (cqArtifactId != null && !cqArtifactId.isEmpty()) {
-                    return cqArtifactId.substring("camel-quarkus-".length());
-                }
-                String camelArtifactId = (String) row.get(colMap.get(Column.Camel_artifactId));
-                if (camelArtifactId != null && !camelArtifactId.isEmpty()) {
-                    return camelArtifactId.substring("camel-".length());
+                final Integer index = colMap.get(Column.CQ_artifactId);
+                if (index != null) {
+                    String cqArtifactId = (String) row.get(index);
+                    if (cqArtifactId != null && !cqArtifactId.isEmpty()) {
+                        return cqArtifactId.substring("camel-quarkus-".length());
+                    }
+                    String camelArtifactId = (String) row.get(colMap.get(Column.Camel_artifactId));
+                    if (camelArtifactId != null && !camelArtifactId.isEmpty()) {
+                        return camelArtifactId.substring("camel-".length());
+                    }
                 }
                 return "ZZZZZZZZZZZZZZZZZZZ";
             }
