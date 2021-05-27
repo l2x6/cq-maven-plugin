@@ -21,7 +21,7 @@
 
     <groupId>org.l2x6.cq</groupId>
     <artifactId>cq</artifactId>
-    <version>0.36.0</version>
+    <version>0.37.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>CQ</name>
@@ -53,7 +53,7 @@
         <connection>scm:git:git@github.com:l2x6/cq-maven-plugin.git</connection>
         <developerConnection>scm:git:git@github.com:l2x6/cq-maven-plugin.git</developerConnection>
         <url>https://github.com/l2x6/cq-maven-plugin</url>
-        <tag>0.36.0</tag>
+        <tag>head</tag>
     </scm>
     <issueManagement>
         <system>GitHub Issues</system>
@@ -171,7 +171,7 @@
             <dependency>
                 <groupId>org.l2x6.cq</groupId>
                 <artifactId>cq-common</artifactId>
-                <version>0.36.0</version>
+                <version>0.37.0-SNAPSHOT</version>
             </dependency>
 
             <dependency>
