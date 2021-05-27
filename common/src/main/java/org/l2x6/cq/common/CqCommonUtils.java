@@ -20,11 +20,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Reader;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
 import org.apache.camel.catalog.Kind;
 import org.apache.maven.model.Model;
@@ -32,6 +37,10 @@ import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 
 public class CqCommonUtils {
+
+    private static final List<String> REPOS = Collections.unmodifiableList(Arrays.asList(
+            "https://repo1.maven.org/maven2/",
+            "https://repository.apache.org/content/groups/public/"));
 
     private CqCommonUtils() {
     }
@@ -45,11 +54,10 @@ public class CqCommonUtils {
                 + version + "." + type;
         final Path localPath = localRepository.resolve(relativeJarPath);
         final boolean localExists = Files.exists(localPath);
-        final String remoteUri = "https://repository.apache.org/content/groups/public/" + relativeJarPath;
         Path result;
         try {
             result = Files.createTempFile(null, localPath.getFileName().toString());
-            try (InputStream in = (localExists ? Files.newInputStream(localPath) : new URL(remoteUri).openStream());
+            try (InputStream in = (localExists ? Files.newInputStream(localPath) : openFirst(relativeJarPath));
                     OutputStream out = Files.newOutputStream(result)) {
                 final byte[] buf = new byte[4096];
                 int len;
@@ -57,12 +65,24 @@ public class CqCommonUtils {
                     out.write(buf, 0, len);
                 }
             } catch (IOException e) {
-                throw new RuntimeException("Could not copy " + (localExists ? localPath : remoteUri) + " to " + result, e);
+                throw new RuntimeException("Could not copy " + (localExists ? localPath : relativeJarPath) + " to " + result, e);
             }
         } catch (IOException e) {
             throw new RuntimeException("Could not create temp file", e);
         }
         return result;
+    }
+
+    public static InputStream openFirst(final String relativePath) throws IOException, MalformedURLException {
+        for (String repo : REPOS) {
+            try {
+                return new URL(repo + relativePath).openStream();
+            } catch (IOException e) {
+                // continue
+            }
+        }
+        throw new RuntimeException("Could not get " + relativePath + " from any of "
+                + REPOS.stream().map(r -> r + relativePath).collect(Collectors.joining(", ")));
     }
 
     public static boolean isEmptyPropertiesFile(Path file) {
@@ -91,6 +111,7 @@ public class CqCommonUtils {
             return firstCap(kind.name()) + "s";
         }
     }
+
     public static String firstCap(String in) {
         if (in == null) {
             return null;

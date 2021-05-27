@@ -301,6 +301,25 @@ public class PomTransformer {
             node.getParentNode().insertBefore(result, refNode);
             return result;
         }
+
+        public Comment nextSiblingCommentNode() {
+            Node currentNode = this.node;
+            while (true) {
+                Node next = currentNode.getNextSibling();
+                if (next == null) {
+                    return null;
+                }
+                switch (next.getNodeType()) {
+                case Node.COMMENT_NODE:
+                    return (Comment) next;
+                case Node.TEXT_NODE:
+                    break;
+                default:
+                    return null;
+                }
+                currentNode = next;
+            }
+        }
     }
 
     public static class ContainerElement extends WrappedNode<Element> {
