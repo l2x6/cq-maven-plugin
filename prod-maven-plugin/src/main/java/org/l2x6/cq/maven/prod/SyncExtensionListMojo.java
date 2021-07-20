@@ -418,8 +418,19 @@ public class SyncExtensionListMojo extends AbstractMojo {
             BaseModel<?> model = cqModel != null ? cqModel : camelModel;
             row.set(Column.Name, model.getTitle());
             if (occurrences != null) {
-                final String serializedOccurrences = occurrences.stream().collect(Collectors.joining("\n"));
-                row.set(Column.Occurrences_in_tests, serializedOccurrences);
+                final StringBuilder serializedOccurrences = new StringBuilder();
+                for (String occ : occurrences) {
+                    int newLength = serializedOccurrences.length() + 1 + occ.length();
+                    if (newLength > 50000) {
+                        /* More than max chars in a google sheets cell */
+                        break;
+                    }
+                    if (serializedOccurrences.length() > 0) {
+                        serializedOccurrences.append('\n');
+                    }
+                    serializedOccurrences.append(occ);
+                }
+                row.set(Column.Occurrences_in_tests, serializedOccurrences.toString());
                 String kind = eipKind(model);
                 row.set(Column.Kind, kind);
                 NativeSupport nativeSupport = row.getNativeSupport();
