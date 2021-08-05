@@ -43,6 +43,7 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
+import org.l2x6.cq.maven.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.cq.maven.PomTransformer.Transformation;
 import org.l2x6.cq.maven.PomTransformer.TransformationContext;
 import org.w3c.dom.Document;
@@ -105,6 +106,14 @@ public class PromoteExtensionMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.version}", required = true, readonly = true)
     String camelQuarkusVersion;
 
+    /**
+     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
+     *
+     * @since 0.38.0
+     */
+    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "EMPTY")
+    SimpleElementWhitespace simpleElementWhitespace;
+
     private final static Pattern RELATIVE_PATH_PATTERN = Pattern.compile("[ \t\r\n]*<relativePath>([^<]+)</relativePath>");
     private final static Pattern NAME_PATTERN = Pattern.compile("<name>Camel Quarkus :: ([^<]+) :: Integration Test</name>");
     private final static Pattern ARTIFACT_ID_PATTERN = Pattern
@@ -142,14 +151,14 @@ public class PromoteExtensionMojo extends AbstractMojo {
 
         /* Remove the test module from the extension parent */
         final Path srcParentPomPath = srcParentDir.resolve("pom.xml");
-        new PomTransformer(srcParentPomPath, charset).transform(Transformation.removeModule(true, true, "integration-test"));
+        new PomTransformer(srcParentPomPath, charset, simpleElementWhitespace).transform(Transformation.removeModule(true, true, "integration-test"));
 
         /* Adjust the names in the test POM */
-        adjustTestPom(artifactIdBase, destItestDir.resolve("pom.xml"), charset, templatesUriBase);
+        adjustTestPom(artifactIdBase, destItestDir.resolve("pom.xml"), charset, templatesUriBase, simpleElementWhitespace);
 
         /* Add the test module to its new parent module */
         final Path integrationTestsPomPath = sourceRootPath.resolve("integration-tests/pom.xml");
-        new PomTransformer(integrationTestsPomPath, charset).transform(Transformation.addModule(artifactIdBase));
+        new PomTransformer(integrationTestsPomPath, charset, simpleElementWhitespace).transform(Transformation.addModule(artifactIdBase));
         PomSorter.sortModules(integrationTestsPomPath);
 
         /* Move the extension */
@@ -161,18 +170,18 @@ public class PromoteExtensionMojo extends AbstractMojo {
 
         /* Remove the extension module from the extensions-jvm POM */
         final Path extensionsJvmPomPath = sourceRootPath.resolve("extensions-jvm/pom.xml");
-        new PomTransformer(extensionsJvmPomPath, charset).transform(Transformation.removeModule(false, true, artifactIdBase));
+        new PomTransformer(extensionsJvmPomPath, charset, simpleElementWhitespace).transform(Transformation.removeModule(false, true, artifactIdBase));
 
         /* Add the extension module to its new parent module */
         final Path destExtensionsPomPath = extensionsPath.resolve("pom.xml");
-        new PomTransformer(destExtensionsPomPath, charset).transform(Transformation.addModule(artifactIdBase));
+        new PomTransformer(destExtensionsPomPath, charset, simpleElementWhitespace).transform(Transformation.addModule(artifactIdBase));
         PomSorter.sortModules(destExtensionsPomPath);
 
         /* Set the camel.quarkus.nativeSince property in the runtime POM */
         final Path runtimePomPath = destParentDir.resolve("runtime/pom.xml");
         final String camelQuarkusNativeSinceVersion = camelQuarkusVersion.replaceAll("-SNAPSHOT", "");
         Transformation addNativeSinceProperty = Transformation.addProperty("camel.quarkus.nativeSince", camelQuarkusNativeSinceVersion);
-        new PomTransformer(runtimePomPath, charset).transform(addNativeSinceProperty);
+        new PomTransformer(runtimePomPath, charset, simpleElementWhitespace).transform(addNativeSinceProperty);
 
         // Remove the warning build step from
         // extensions/${EXT}/deployment/src/main/java/org/apache/camel/quarkus/component/${EXT}/deployment/${EXT}Processor.java:
@@ -217,7 +226,7 @@ public class PromoteExtensionMojo extends AbstractMojo {
 
     }
 
-    static void adjustTestPom(String baseArtifactId, Path path, Charset charset, String templatesUriBase) {
+    static void adjustTestPom(String baseArtifactId, Path path, Charset charset, String templatesUriBase, SimpleElementWhitespace simpleElementWhitespace) {
         try {
             String src = new String(Files.readAllBytes(path), charset);
             src = ARTIFACT_ID_PATTERN.matcher(src).replaceFirst("<artifactId>camel-quarkus-integration-test-$1</artifactId>");
@@ -232,7 +241,7 @@ public class PromoteExtensionMojo extends AbstractMojo {
 
         /* Add the native profile at the end of integration-tests/${EXT}/pom.xml: */
         final DocumentFragment nativeProfile = loadNativeProfile(charset, templatesUriBase + "/integration-test-pom.xml");
-        new PomTransformer(path, charset).transform(Transformation.addFragment(nativeProfile, "profiles"));
+        new PomTransformer(path, charset, simpleElementWhitespace).transform(Transformation.addFragment(nativeProfile, "profiles"));
 
     }
 

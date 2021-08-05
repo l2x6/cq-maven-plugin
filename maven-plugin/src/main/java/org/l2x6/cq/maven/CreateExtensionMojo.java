@@ -211,7 +211,7 @@ public class CreateExtensionMojo extends CreateTestMojo {
         final Set<Gavtcs> allExtensions = PomSorter.findExtensionArtifactIds(basePath, extensionDirs, skipArtifactIds).stream()
                 .map(artifactId -> new Gavtcs("org.apache.camel.quarkus", artifactId, null))
                 .collect(Collectors.toSet());
-        FormatPomsMojo.updateVirtualDependenciesAllExtensions(updateVirtualDependenciesAllExtensions, allExtensions, charset);
+        FormatPomsMojo.updateVirtualDependenciesAllExtensions(updateVirtualDependenciesAllExtensions, allExtensions, charset, simpleElementWhitespace);
 
     }
 

@@ -35,6 +35,7 @@ import org.apache.maven.project.MavenProject;
 import org.l2x6.cq.common.CqCatalog;
 import org.l2x6.cq.common.CqCatalog.Flavor;
 import org.l2x6.cq.common.CqCommonUtils;
+import org.l2x6.cq.maven.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.cq.maven.PomTransformer.Transformation;
 
 import freemarker.template.Configuration;
@@ -244,6 +245,14 @@ public class CreateTestMojo extends AbstractMojo {
     Set<String> skipArtifactIdBases;
     Set<String> skipArtifactIds;
 
+    /**
+     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
+     *
+     * @since 0.38.0
+     */
+    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "EMPTY")
+    SimpleElementWhitespace simpleElementWhitespace;
+
     List<ArtifactModel<?>> models;
     ArtifactModel<?> model;
 
@@ -317,7 +326,7 @@ public class CreateTestMojo extends AbstractMojo {
     }
 
     PomTransformer pomTransformer(Path basePomXml) {
-        return new PomTransformer(basePomXml, charset);
+        return new PomTransformer(basePomXml, charset, simpleElementWhitespace);
     }
 
     TemplateParams.Builder getTemplateParams() {
@@ -380,7 +389,7 @@ public class CreateTestMojo extends AbstractMojo {
         evalTemplate(cfg, "integration-test-pom.xml", itestPomPath, model.build());
 
         final Set<String> extensionArtifactIds = PomSorter.findExtensionArtifactIds(basePath, extensionDirs, skipArtifactIds);
-        new PomTransformer(itestPomPath, charset)
+        new PomTransformer(itestPomPath, charset, simpleElementWhitespace)
                 .transform(
                         Transformation.updateMappedDependencies(
                                 Gavtcs::isVirtualDeployment,

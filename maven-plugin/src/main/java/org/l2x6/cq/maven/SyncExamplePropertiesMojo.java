@@ -36,6 +36,7 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.CqCommonUtils;
+import org.l2x6.cq.maven.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.cq.maven.PomTransformer.Transformation;
 
 /**
@@ -74,6 +75,14 @@ public class SyncExamplePropertiesMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
     String localRepository;
+
+    /**
+     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
+     *
+     * @since 0.38.0
+     */
+    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "EMPTY")
+    SimpleElementWhitespace simpleElementWhitespace;
 
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     List<RemoteRepository> repositories;
@@ -117,7 +126,7 @@ public class SyncExamplePropertiesMojo extends AbstractMojo {
             for (Entry<String, String> prop : changeProps.entrySet()) {
                 transformations.add(Transformation.addOrSetProperty(prop.getKey(), prop.getValue()));
             }
-            new PomTransformer(pomXmlPath, charset).transform(transformations);
+            new PomTransformer(pomXmlPath, charset, simpleElementWhitespace).transform(transformations);
         }
 
     }

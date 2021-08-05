@@ -36,7 +36,11 @@ import org.junit.jupiter.api.Test;
 import org.l2x6.cq.maven.FormatPomsMojo;
 import org.l2x6.cq.maven.Gavtcs;
 import org.l2x6.cq.maven.PomTransformer;
+import org.l2x6.cq.maven.PomTransformer.ContainerElement;
+import org.l2x6.cq.maven.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.cq.maven.PomTransformer.Transformation;
+import org.l2x6.cq.maven.PomTransformer.TransformationContext;
+import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 
 public class PomTransformerTest {
@@ -247,7 +251,6 @@ public class PomTransformerTest {
         asserTransformation(source, Collections.singletonList(Transformation.addModule("new-module")), expected);
     }
 
-
     @Test
     void addModuleOutOfOrder() {
         final String source = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" //
@@ -315,8 +318,6 @@ public class PomTransformerTest {
                 + "</project>\n";
         asserTransformation(source, Collections.singletonList(Transformation.addModule("module-2")), expected);
     }
-
-
 
     @Test
     void setProperty() {
@@ -414,7 +415,6 @@ public class PomTransformerTest {
         asserTransformation(source, Collections.singletonList(Transformation.addModule("new-module")), expected);
     }
 
-
     @Test
     void removeModule() {
         final String source = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" //
@@ -511,6 +511,7 @@ public class PomTransformerTest {
                 + "</project>\n";
         asserTransformation(source, Collections.singletonList(Transformation.removeModule(true, true, "module-2")), expected);
     }
+
     @Test
     void removeModuleWithoutComment() {
         final String source = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" //
@@ -545,10 +546,15 @@ public class PomTransformerTest {
         asserTransformation(source, Collections.singletonList(Transformation.removeModule(false, true, "module-2")), expected);
     }
 
+    static void asserTransformation(String src, Collection<Transformation> transformations,
+            SimpleElementWhitespace simpleElementWhitespace, String expected) {
+        PomTransformer.transform(transformations, simpleElementWhitespace, Paths.get("pom.xml"),
+                () -> src, xml -> org.assertj.core.api.Assertions.assertThat(xml).isEqualTo(expected));
+    }
 
     static void asserTransformation(String src, Collection<Transformation> transformations, String expected) {
-        PomTransformer.transform(transformations, Paths.get("pom.xml"),
-                () -> src, xml -> Assertions.assertEquals(expected, xml));
+        PomTransformer.transform(transformations, SimpleElementWhitespace.EMPTY, Paths.get("pom.xml"),
+                () -> src, xml -> org.assertj.core.api.Assertions.assertThat(xml).isEqualTo(expected));
     }
 
     @Test
@@ -745,7 +751,6 @@ public class PomTransformerTest {
                 expected);
     }
 
-
     @Test
     void addDependenciesIfNeededBeforeBuildWithSpace() {
         final String source = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" //
@@ -777,6 +782,7 @@ public class PomTransformerTest {
                 Collections.singletonList(Transformation.addContainerElementsIfNeeded("dependencies")),
                 expected);
     }
+
     @Test
     void addDependenciesIfNeededBeforeBuild() {
         final String source = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" //
@@ -807,6 +813,7 @@ public class PomTransformerTest {
                 Collections.singletonList(Transformation.addContainerElementsIfNeeded("dependencies")),
                 expected);
     }
+
     @Test
     void addDependenciesNotNeeded() {
         final String source = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" //
@@ -876,11 +883,10 @@ public class PomTransformerTest {
                 + "    <build/>\n" //
                 + "</project>\n";
         asserTransformation(source,
-                Collections.singletonList(Transformation.addDependencyIfNeeded(new Gavtcs("org.acme", "a1", "1.2.3"), Gavtcs.scopeAndTypeFirstComparator())),
+                Collections.singletonList(Transformation.addDependencyIfNeeded(new Gavtcs("org.acme", "a1", "1.2.3"),
+                        Gavtcs.scopeAndTypeFirstComparator())),
                 expected);
     }
-
-
 
     @Test
     void addDependencyTestAfterCompile() {
@@ -939,7 +945,8 @@ public class PomTransformerTest {
                 + "    <build/>\n" //
                 + "</project>\n";
         asserTransformation(source,
-                Collections.singletonList(Transformation.addDependencyIfNeeded(Gavtcs.testJar("org.acme", "a1", "1.2.3"), Gavtcs.scopeAndTypeFirstComparator())),
+                Collections.singletonList(Transformation.addDependencyIfNeeded(Gavtcs.testJar("org.acme", "a1", "1.2.3"),
+                        Gavtcs.scopeAndTypeFirstComparator())),
                 expected);
     }
 
@@ -987,9 +994,11 @@ public class PomTransformerTest {
                 + "    <build/>\n" //
                 + "</project>\n";
         asserTransformation(source,
-                Collections.singletonList(Transformation.addDependencyIfNeeded(Gavtcs.virtual("org.acme", "a1", "1.2.3"), Gavtcs.scopeAndTypeFirstComparator())),
+                Collections.singletonList(Transformation.addDependencyIfNeeded(Gavtcs.virtual("org.acme", "a1", "1.2.3"),
+                        Gavtcs.scopeAndTypeFirstComparator())),
                 expected);
     }
+
     @Test
     void importBom() {
         final String source = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" //
@@ -1026,6 +1035,108 @@ public class PomTransformerTest {
                 Collections.singletonList(
                         Transformation.addManagedDependency(Gavtcs.importBom("org.acme", "bom", "${bom.version}"))),
                 expected);
+    }
+
+    @Test
+    void elementWhitespace() {
+        final String source = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" //
+                + "<project xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns=\"http://maven.apache.org/POM/4.0.0\"\n" //
+                + "         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd\">\n" //
+                + "    <modelVersion>4.0.0</modelVersion>\n" //
+                + "    <groupId>org.acme</groupId>\n" //
+                + "    <artifactId>bom</artifactId>\n" //
+                + "    <version>0.1-SNAPSHOT</version>\n" //
+                + "    <packaging>pom</packaging>\n" //
+                + "\n" //
+                + "    <properties>\n" //
+                + "        <foo/>\n" //
+                + "    </properties>\n" //
+                + "\n" //
+                + "</project>\n";
+
+        {
+            final String expected = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" //
+                    + "<project xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns=\"http://maven.apache.org/POM/4.0.0\"\n" //
+                    + "         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd\">\n" //
+                    + "    <modelVersion>4.0.0</modelVersion>\n" //
+                    + "    <groupId>org.acme</groupId>\n" //
+                    + "    <artifactId>bom</artifactId>\n" //
+                    + "    <version>0.1-SNAPSHOT</version>\n" //
+                    + "    <packaging>pom</packaging>\n" //
+                    + "\n" //
+                    + "    <properties>\n" //
+                    + "        <foo />\n" //
+                    + "    </properties>\n" //
+                    + "\n" //
+                    + "</project>\n";
+            asserTransformation(source,
+                    Collections.emptyList(),
+                    SimpleElementWhitespace.SPACE,
+                    expected);
+        }
+        {
+            final String expected = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" //
+                    + "<project xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns=\"http://maven.apache.org/POM/4.0.0\"\n" //
+                    + "         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd\">\n" //
+                    + "    <modelVersion>4.0.0</modelVersion>\n" //
+                    + "    <groupId>org.acme</groupId>\n" //
+                    + "    <artifactId>bom</artifactId>\n" //
+                    + "    <version>0.1-SNAPSHOT</version>\n" //
+                    + "    <packaging>pom</packaging>\n" //
+                    + "\n" //
+                    + "    <properties>\n" //
+                    + "        <foo/>\n" //
+                    + "    </properties>\n" //
+                    + "\n" //
+                    + "</project>\n";
+            asserTransformation(source,
+                    Collections.emptyList(),
+                    SimpleElementWhitespace.EMPTY,
+                    expected);
+        }
+    }
+
+    @Test
+    void elementWhitespaceAutodetect() {
+        final String source = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" //
+                + "<project xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns=\"http://maven.apache.org/POM/4.0.0\"\n" //
+                + "         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd\">\n" //
+                + "    <modelVersion>4.0.0</modelVersion>\n" //
+                + "    <groupId>org.acme</groupId>\n" //
+                + "    <artifactId>bom</artifactId>\n" //
+                + "    <version>0.1-SNAPSHOT</version>\n" //
+                + "    <packaging>pom</packaging>\n" //
+                + "\n" //
+                + "    <properties>\n" //
+                + "        <foo />\n" //
+                + "    </properties>\n" //
+                + "\n" //
+                + "</project>\n";
+
+        {
+            final String expected = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" //
+                    + "<project xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns=\"http://maven.apache.org/POM/4.0.0\"\n" //
+                    + "         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd\">\n" //
+                    + "    <modelVersion>4.0.0</modelVersion>\n" //
+                    + "    <groupId>org.acme</groupId>\n" //
+                    + "    <artifactId>bom</artifactId>\n" //
+                    + "    <version>0.1-SNAPSHOT</version>\n" //
+                    + "    <packaging>pom</packaging>\n" //
+                    + "\n" //
+                    + "    <properties>\n" //
+                    + "        <foo />\n" //
+                    + "        <bar />\n" //
+                    + "    </properties>\n" //
+                    + "\n" //
+                    + "</project>\n";
+            asserTransformation(source,
+                    Collections.singletonList((Document document, TransformationContext context) -> {
+                        final ContainerElement props = context.getOrAddContainerElement("properties");
+                        props.addChildElement("bar", props.getOrAddLastIndent());
+                    }),
+                    SimpleElementWhitespace.AUTODETECT_PREFER_EMPTY,
+                    expected);
+        }
     }
 
     @Test

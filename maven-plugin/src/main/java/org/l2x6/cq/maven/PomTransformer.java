@@ -87,14 +87,17 @@ public class PomTransformer {
     static final Pattern EOL_PATTERN = Pattern.compile("\r?\n");
     static final Pattern WS_PATTERN = Pattern.compile("[ \t\n\r]+");
     static final Pattern EMPTY_LINE_PATTERN = Pattern.compile("[ \t]*\r?\n\r?\n[ \t\r\n]*");
+    static final Pattern SIMPLE_ELEM_WS_PATTERN = Pattern.compile("<([^ \t\n\r]+)([ \t\n\r]*)/>");
 
     private final Path path;
     private final Charset charset;
+    private final SimpleElementWhitespace simpleElementWhitespace;
 
-    public PomTransformer(Path path, Charset charset) {
+    public PomTransformer(Path path, Charset charset, SimpleElementWhitespace simpleElementWhitespace) {
         super();
         this.path = path;
         this.charset = charset;
+        this.simpleElementWhitespace = simpleElementWhitespace;
     }
 
     /**
@@ -114,7 +117,7 @@ public class PomTransformer {
      * @param transformations the {@link Transformation}s to apply
      */
     public void transform(Collection<Transformation> transformations) {
-        transform(transformations, path, () -> {
+        transform(transformations, simpleElementWhitespace, path, () -> {
             try {
                 return new String(Files.readAllBytes(path), charset);
             } catch (IOException e) {
@@ -129,7 +132,8 @@ public class PomTransformer {
         });
     }
 
-    static void transform(Collection<Transformation> edits, Path path, Supplier<String> source,
+    static void transform(Collection<Transformation> edits, SimpleElementWhitespace simpleElementWhitespace, Path path,
+            Supplier<String> source,
             Consumer<String> outConsumer) {
         final String src = source.get();
 
@@ -161,17 +165,37 @@ public class PomTransformer {
 
         final String eol = detectEol(src);
         result = EOL_PATTERN.matcher(result).replaceAll(eol);
-        result = postprocess(src, result);
+        result = postprocess(src, result, simpleElementWhitespace);
         outConsumer.accept(result);
     }
 
-    static String postprocess(String src, String result) {
+    static String postprocess(String src, String result, SimpleElementWhitespace simpleElementWhitespace) {
         for (Pattern p : POSTPROCESS_PATTERNS) {
             final Matcher srcMatcher = p.matcher(src);
             if (srcMatcher.find()) {
                 final String replacement = Matcher.quoteReplacement(srcMatcher.group());
                 result = p.matcher(result).replaceFirst(replacement);
             }
+        }
+        final String ws;
+        if (simpleElementWhitespace.autodetect) {
+            final Matcher srcMatcher = SIMPLE_ELEM_WS_PATTERN.matcher(src);
+            if (srcMatcher.find()) {
+                ws = srcMatcher.group(2);
+            } else {
+                ws = simpleElementWhitespace.value;
+            }
+        } else {
+            ws = simpleElementWhitespace.value;
+        }
+        if (!ws.isEmpty()) {
+            final StringBuffer resultBuffer = new StringBuffer(result.length());
+            final Matcher resultMatcher = SIMPLE_ELEM_WS_PATTERN.matcher(result);
+            while (resultMatcher.find()) {
+                resultMatcher.appendReplacement(resultBuffer, "<$1 />");
+            }
+            resultMatcher.appendTail(resultBuffer);
+            result = resultBuffer.toString();
         }
         return result;
     }
@@ -218,6 +242,22 @@ public class PomTransformer {
             sb.append("/*[local-name()='").append(e).append("']");
         }
         return sb.toString();
+    }
+
+    public enum SimpleElementWhitespace {
+        AUTODETECT_PREFER_SPACE(true, " "),
+        AUTODETECT_PREFER_EMPTY(true, ""),
+        SPACE(false, " "),
+        EMPTY(false, "");
+
+        private final boolean autodetect;
+        private final String value;
+
+        private SimpleElementWhitespace(boolean autodetect, String value) {
+            this.autodetect = autodetect;
+            this.value = value;
+        }
+
     }
 
     public static class WrappedNode<T extends Node> {
@@ -433,6 +473,12 @@ public class PomTransformer {
                 final Node result = result1;
                 node.insertBefore(result, refNode);
             }
+        }
+
+        public void addChildElement(String nodeName, Node refNode) {
+            node.insertBefore(context.indent(indentLevel + 1), refNode);
+            final Element result = context.document.createElement(nodeName);
+            node.insertBefore(result, refNode);
         }
 
         public void addOrSetChildTextElement(String name, String value) {

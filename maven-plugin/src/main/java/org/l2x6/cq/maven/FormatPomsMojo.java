@@ -44,6 +44,7 @@ import org.apache.maven.shared.model.fileset.FileSet;
 import org.apache.maven.shared.model.fileset.util.FileSetManager;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.l2x6.cq.common.CqCommonUtils;
+import org.l2x6.cq.maven.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.cq.maven.PomTransformer.Transformation;
 import org.l2x6.cq.maven.PomTransformer.TransformationContext;
 import org.w3c.dom.Document;
@@ -151,6 +152,14 @@ public class FormatPomsMojo extends AbstractMojo {
     FileSet removeEmptyApplicationProperties;
 
     /**
+     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
+     *
+     * @since 0.38.0
+     */
+    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "EMPTY")
+    SimpleElementWhitespace simpleElementWhitespace;
+
+    /**
      * A list of {@link PomSet}s
      *
      * <pre>
@@ -219,7 +228,7 @@ public class FormatPomsMojo extends AbstractMojo {
                         .forEach(transformers::add);
 
                 final Path destPath = Paths.get(pomSet.getDestinationPom());
-                new PomTransformer(destPath, charset).transform(transformers);
+                new PomTransformer(destPath, charset, simpleElementWhitespace).transform(transformers);
 
             }
         }
@@ -232,7 +241,7 @@ public class FormatPomsMojo extends AbstractMojo {
             final Path base = scanner.getBasedir().toPath();
             for (String pomXmlRelPath : scanner.getIncludedFiles()) {
                 final Path pomXmlPath = base.resolve(pomXmlRelPath);
-                new PomTransformer(pomXmlPath, charset)
+                new PomTransformer(pomXmlPath, charset, simpleElementWhitespace)
                         .transform(
                                 Transformation.updateMappedDependencies(
                                         Gavtcs::isVirtualDeployment,
@@ -245,7 +254,7 @@ public class FormatPomsMojo extends AbstractMojo {
             }
         }
 
-        updateVirtualDependenciesAllExtensions(updateVirtualDependenciesAllExtensions, allExtensions, charset);
+        updateVirtualDependenciesAllExtensions(updateVirtualDependenciesAllExtensions, allExtensions, charset, simpleElementWhitespace);
 
         if (removeEmptyApplicationProperties != null) {
             final FileSetManager fileSetManager = new FileSetManager();
@@ -270,7 +279,7 @@ public class FormatPomsMojo extends AbstractMojo {
     }
 
     public static void updateVirtualDependenciesAllExtensions(List<DirectoryScanner> updateVirtualDependenciesAllExtensions,
-            final Set<Gavtcs> allExtensions, Charset charset) {
+            final Set<Gavtcs> allExtensions, Charset charset, SimpleElementWhitespace simpleElementWhitespace) {
         if (updateVirtualDependenciesAllExtensions != null) {
             final Set<Gavtcs> allVirtualExtensions = allExtensions.stream()
                     .map(gavtcs -> gavtcs.toVirtual())
@@ -280,7 +289,7 @@ public class FormatPomsMojo extends AbstractMojo {
                 final Path base = scanner.getBasedir().toPath();
                 for (String pomXmlRelPath : scanner.getIncludedFiles()) {
                     final Path pomXmlPath = base.resolve(pomXmlRelPath);
-                    new PomTransformer(pomXmlPath, charset)
+                    new PomTransformer(pomXmlPath, charset, simpleElementWhitespace)
                             .transform(
                                     Transformation.updateDependencySubset(
                                             gavtcs -> gavtcs.isVirtual(),

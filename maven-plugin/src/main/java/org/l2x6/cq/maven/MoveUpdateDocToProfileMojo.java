@@ -25,6 +25,7 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.l2x6.cq.maven.PomTransformer.ContainerElement;
+import org.l2x6.cq.maven.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.cq.maven.PomTransformer.Transformation;
 import org.l2x6.cq.maven.PomTransformer.TransformationContext;
 import org.w3c.dom.Document;
@@ -49,6 +50,14 @@ public class MoveUpdateDocToProfileMojo extends AbstractExtensionListMojo {
     @Parameter(defaultValue = CqUtils.DEFAULT_ENCODING, required = true, property = "cq.encoding")
     String encoding;
 
+    /**
+     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
+     *
+     * @since 0.38.0
+     */
+    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "EMPTY")
+    SimpleElementWhitespace simpleElementWhitespace;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         final Charset charset = Charset.forName(encoding);
@@ -58,7 +67,7 @@ public class MoveUpdateDocToProfileMojo extends AbstractExtensionListMojo {
                 .forEach(extModule -> {
                     final Path pomPath = extModule.getRuntimePomPath();
 
-                    new PomTransformer(pomPath, charset).transform(
+                    new PomTransformer(pomPath, charset, simpleElementWhitespace).transform(
                             Transformation.removePlugin(true, true, "org.apache.camel.quarkus", "camel-quarkus-maven-plugin"),
                             tf);
                 });

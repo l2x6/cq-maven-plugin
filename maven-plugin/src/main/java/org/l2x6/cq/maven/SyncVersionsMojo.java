@@ -45,6 +45,7 @@ import org.apache.maven.project.MavenProject;
 import org.codehaus.plexus.component.configurator.expression.ExpressionEvaluationException;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.PomModelCache;
+import org.l2x6.cq.maven.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.cq.maven.PomTransformer.Transformation;
 import org.l2x6.cq.maven.PomTransformer.TransformationContext;
 import org.l2x6.cq.maven.PomTransformer.WrappedNode;
@@ -98,6 +99,14 @@ public class SyncVersionsMojo extends AbstractMojo {
     @Parameter(defaultValue = "${session}", readonly = true, required = true)
     protected MavenSession session;
 
+    /**
+     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
+     *
+     * @since 0.38.0
+     */
+    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "EMPTY")
+    SimpleElementWhitespace simpleElementWhitespace;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
 
@@ -114,7 +123,7 @@ public class SyncVersionsMojo extends AbstractMojo {
             final List<String> remoteRepos = repositories.stream()
                     .map(RemoteRepository::getUrl)
                     .collect(Collectors.toList());
-            new PomTransformer(pomXml, charset)
+            new PomTransformer(pomXml, charset, simpleElementWhitespace)
                     .transform(new UpdateVersionsTransformation(new PomModelCache(localRepositoryPath, remoteRepos), evaluator,
                             getLog()));
         } catch (Exception e) {

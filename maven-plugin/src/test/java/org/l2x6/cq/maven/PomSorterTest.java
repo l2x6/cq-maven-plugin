@@ -31,6 +31,7 @@ import org.l2x6.cq.maven.FormatPomsMojo;
 import org.l2x6.cq.maven.Gavtcs;
 import org.l2x6.cq.maven.PomSorter;
 import org.l2x6.cq.maven.PomTransformer;
+import org.l2x6.cq.maven.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.cq.maven.PomTransformer.Transformation;
 
 public class PomSorterTest {
@@ -65,7 +66,7 @@ public class PomSorterTest {
             .map(p -> p.resolve("pom.xml"))
             .filter(p -> Files.exists(p))
             .forEach(pomXmlPath -> {
-                        new PomTransformer(pomXmlPath, StandardCharsets.UTF_8)
+                        new PomTransformer(pomXmlPath, StandardCharsets.UTF_8, SimpleElementWhitespace.EMPTY)
                                 .transform(Transformation.updateMappedDependencies(
                                         Gavtcs::isVirtualDeployment,
                                         Gavtcs.deploymentVitualMapper(gavtcs -> aids.contains(gavtcs.getArtifactId())),

@@ -42,6 +42,7 @@ import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.maven.CqUtils;
 import org.l2x6.cq.maven.CreateExtensionMojo;
 import org.l2x6.cq.maven.ExtensionDir;
+import org.l2x6.cq.maven.PomTransformer.SimpleElementWhitespace;
 
 public class CreateExtensionMojoTest {
 
@@ -105,6 +106,7 @@ public class CreateExtensionMojoTest {
         mojo.additionalRuntimeDependencies = Arrays.asList(CreateExtensionMojo.CQ_ADDITIONAL_RUNTIME_DEPENDENCIES.split(","));
         mojo.extensionDirs = Collections.singletonList(new ExtensionDir("extensions", "camel-quarkus-"));
         mojo.createConvenienceDirs = false;
+        mojo.simpleElementWhitespace = SimpleElementWhitespace.EMPTY;
 
         return mojo;
     }
