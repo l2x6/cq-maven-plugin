@@ -59,6 +59,7 @@ import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
+import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.CqCatalog;
 import org.l2x6.cq.common.CqCatalog.Flavor;
 import org.l2x6.cq.common.CqCatalog.GavCqCatalog;
@@ -110,6 +111,9 @@ public class SyncExtensionListMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
     String localRepository;
+
+    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
+    List<RemoteRepository> repositories;
 
     private static final Set<String> PRIMARY_LABELS = new LinkedHashSet<>(Arrays.asList("eip", "dataformat", "language", "rest", "configuration", "error"));
 
@@ -268,8 +272,11 @@ public class SyncExtensionListMojo extends AbstractMojo {
     }
 
     String findCamelVersion(Path localRepositoryPath) {
+        final List<String> remoteRepos = repositories.stream()
+                .map(RemoteRepository::getUrl)
+                .collect(Collectors.toList());
         final Path cqPomPath = CqCommonUtils.copyArtifact(localRepositoryPath, Flavor.camelQuarkus.getGroupId(),
-                "camel-quarkus", camelQuarkusVersion, "pom");
+                "camel-quarkus", camelQuarkusVersion, "pom", remoteRepos);
         final Model cqPomModel = CqCommonUtils.readPom(cqPomPath, StandardCharsets.UTF_8);
         final String camelMajorMinor = (String) Objects.requireNonNull(cqPomModel.getProperties().get("camel.major.minor"));
         final String camelVersion = (String) Objects.requireNonNull(cqPomModel.getProperties().get("camel.version"));

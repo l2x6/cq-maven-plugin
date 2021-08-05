@@ -25,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.stream.Collectors;
 import java.util.Properties;
 
 import org.apache.maven.model.Model;
@@ -33,6 +34,7 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
+import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.maven.PomTransformer.Transformation;
 
@@ -73,6 +75,9 @@ public class SyncExamplePropertiesMojo extends AbstractMojo {
     @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
     String localRepository;
 
+    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
+    List<RemoteRepository> repositories;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         basePath = basedir.toPath().toAbsolutePath().normalize();
@@ -86,8 +91,11 @@ public class SyncExamplePropertiesMojo extends AbstractMojo {
             cqVersion = exampleProps.getProperty("camel-quarkus.version");
         }
 
+        final List<String> remoteRepos = repositories.stream()
+                .map(RemoteRepository::getUrl)
+                .collect(Collectors.toList());
         final Path cqPomPath = CqCommonUtils.copyArtifact(localRepositoryPath, "org.apache.camel.quarkus", "camel-quarkus", cqVersion,
-                "pom");
+                "pom", remoteRepos);
         final Model cqModel = CqCommonUtils.readPom(cqPomPath, charset);
         final Properties cqProps = cqModel.getProperties();
         cqProps.put("camel-quarkus.version", cqVersion);

@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.lifecycle.internal.MojoDescriptorCreator;
@@ -42,6 +43,7 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.codehaus.plexus.component.configurator.expression.ExpressionEvaluationException;
+import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.PomModelCache;
 import org.l2x6.cq.maven.PomTransformer.Transformation;
 import org.l2x6.cq.maven.PomTransformer.TransformationContext;
@@ -51,7 +53,7 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
 /**
- * Scaffolds a new test.
+ * Synchronizes version properties tagged with <code>@sync</code>.
  *
  * @since 0.36.0
  */
@@ -87,6 +89,9 @@ public class SyncVersionsMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project}", readonly = true)
     MavenProject project;
 
+    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
+    List<RemoteRepository> repositories;
+
     @Component
     private MojoDescriptorCreator mojoDescriptorCreator;
 
@@ -106,8 +111,12 @@ public class SyncVersionsMojo extends AbstractMojo {
             PluginParameterExpressionEvaluator evaluator = new PluginParameterExpressionEvaluator(session,
                     new MojoExecution(mojoDescriptor));
 
+            final List<String> remoteRepos = repositories.stream()
+                    .map(RemoteRepository::getUrl)
+                    .collect(Collectors.toList());
             new PomTransformer(pomXml, charset)
-                    .transform(new UpdateVersionsTransformation(new PomModelCache(localRepositoryPath), evaluator, getLog()));
+                    .transform(new UpdateVersionsTransformation(new PomModelCache(localRepositoryPath, remoteRepos), evaluator,
+                            getLog()));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

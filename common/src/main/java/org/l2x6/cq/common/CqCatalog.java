@@ -43,6 +43,9 @@ import org.apache.camel.tooling.model.ComponentModel;
 import org.apache.camel.tooling.model.EipModel;
 
 public class CqCatalog {
+    private static final List<String> REPOS = Collections.unmodifiableList(Arrays.asList(
+            "https://repo1.maven.org/maven2/",
+            "https://repository.apache.org/content/groups/public/"));
 
     public enum Flavor {
         camel("org.apache.camel", "camel-catalog") {
@@ -345,7 +348,8 @@ public class CqCatalog {
         private final FileSystem jarFileSystem;
 
         public static GavCqCatalog open(Path localRepository, Flavor flavor, String version) {
-            final Path jarPath = CqCommonUtils.copyJar(localRepository, flavor.getGroupId(), flavor.getArtifactId(), version);
+            final Path jarPath = CqCommonUtils.copyJar(localRepository, flavor.getGroupId(), flavor.getArtifactId(), version,
+                    REPOS);
             try {
                 final FileSystem fs = FileSystems.newFileSystem(jarPath, (ClassLoader) null);
                 return new GavCqCatalog(fs, flavor);

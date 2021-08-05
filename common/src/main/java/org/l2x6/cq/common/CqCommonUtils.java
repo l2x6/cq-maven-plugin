@@ -25,8 +25,6 @@ import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.stream.Collectors;
@@ -38,18 +36,17 @@ import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 
 public class CqCommonUtils {
 
-    private static final List<String> REPOS = Collections.unmodifiableList(Arrays.asList(
-            "https://repo1.maven.org/maven2/",
-            "https://repository.apache.org/content/groups/public/"));
 
     private CqCommonUtils() {
     }
 
-    public static Path copyJar(Path localRepository, String groupId, String artifactId, String version) {
-        return copyArtifact(localRepository, groupId, artifactId, version, "jar");
+    public static Path copyJar(Path localRepository, String groupId, String artifactId, String version,
+            List<String> remoteRepositories) {
+        return copyArtifact(localRepository, groupId, artifactId, version, "jar", remoteRepositories);
     }
 
-    public static Path copyArtifact(Path localRepository, String groupId, String artifactId, String version, String type) {
+    public static Path copyArtifact(Path localRepository, String groupId, String artifactId, String version, String type,
+            List<String> remoteRepositories) {
         final String relativeJarPath = groupId.replace('.', '/') + "/" + artifactId + "/" + version + "/" + artifactId + "-"
                 + version + "." + type;
         final Path localPath = localRepository.resolve(relativeJarPath);
@@ -57,7 +54,7 @@ public class CqCommonUtils {
         Path result;
         try {
             result = Files.createTempFile(null, localPath.getFileName().toString());
-            try (InputStream in = (localExists ? Files.newInputStream(localPath) : openFirst(relativeJarPath));
+            try (InputStream in = (localExists ? Files.newInputStream(localPath) : openFirst(remoteRepositories, relativeJarPath));
                     OutputStream out = Files.newOutputStream(result)) {
                 final byte[] buf = new byte[4096];
                 int len;
@@ -73,8 +70,8 @@ public class CqCommonUtils {
         return result;
     }
 
-    public static InputStream openFirst(final String relativePath) throws IOException, MalformedURLException {
-        for (String repo : REPOS) {
+    public static InputStream openFirst(List<String> remoteRepositories, String relativePath) throws IOException, MalformedURLException {
+        for (String repo : remoteRepositories) {
             try {
                 return new URL(repo + relativePath).openStream();
             } catch (IOException e) {
@@ -82,7 +79,7 @@ public class CqCommonUtils {
             }
         }
         throw new RuntimeException("Could not get " + relativePath + " from any of "
-                + REPOS.stream().map(r -> r + relativePath).collect(Collectors.joining(", ")));
+                + remoteRepositories.stream().map(r -> r + relativePath).collect(Collectors.joining(", ")));
     }
 
     public static boolean isEmptyPropertiesFile(Path file) {

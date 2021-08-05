@@ -19,6 +19,7 @@ package org.l2x6.cq.common;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.maven.model.Model;
@@ -27,16 +28,18 @@ public class PomModelCache {
 
     private final Map<String, Model> items = new HashMap<>();
     private final Path localRepositoryPath;
+    private final List<String> remoteRepositories;
 
-    public PomModelCache(Path localRepositoryPath) {
+    public PomModelCache(Path localRepositoryPath, List<String> remoteRepositories) {
         this.localRepositoryPath = localRepositoryPath;
+        this.remoteRepositories = remoteRepositories;
     }
 
     public Model get(String groupId, String artifactId, String version) {
         final String key = groupId + ":" + artifactId + ":" + version;
         return items.computeIfAbsent(key, k -> {
             final Path cqPomPath = CqCommonUtils.copyArtifact(localRepositoryPath, groupId, artifactId, version,
-                    "pom");
+                    "pom", remoteRepositories);
             final Model model = CqCommonUtils.readPom(cqPomPath, StandardCharsets.UTF_8);
             return model;
         });
