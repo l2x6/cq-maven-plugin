@@ -44,9 +44,12 @@ import org.apache.maven.shared.model.fileset.FileSet;
 import org.apache.maven.shared.model.fileset.util.FileSetManager;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.l2x6.cq.common.CqCommonUtils;
-import org.l2x6.cq.maven.PomTransformer.SimpleElementWhitespace;
-import org.l2x6.cq.maven.PomTransformer.Transformation;
-import org.l2x6.cq.maven.PomTransformer.TransformationContext;
+import org.l2x6.maven.utils.Ga;
+import org.l2x6.maven.utils.Gavtcs;
+import org.l2x6.maven.utils.PomTransformer;
+import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.maven.utils.PomTransformer.Transformation;
+import org.l2x6.maven.utils.PomTransformer.TransformationContext;
 import org.w3c.dom.Document;
 
 /**
@@ -205,7 +208,16 @@ public class FormatPomsMojo extends AbstractMojo {
                     final Path pomPath = dir.resolve(includedFile);
                     Model pom = CqCommonUtils.readPom(pomPath, charset);
                     pom.getDependencies().stream()
-                            .map(Gavtcs::of)
+                            .map(dep -> new Gavtcs(
+                                    dep.getGroupId(),
+                                    dep.getArtifactId(),
+                                    dep.getVersion(),
+                                    dep.getType(),
+                                    dep.getClassifier(),
+                                    dep.getScope(),
+                                    dep.getExclusions().stream()
+                                    .map(e -> new Ga(e.getGroupId(), e.getArtifactId()))
+                                    .collect(Collectors.toList())))
                             .filter(gavtcs -> !gavtcs.isVirtual())
                             .forEach(allDeps::add);
                 }

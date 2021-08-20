@@ -45,10 +45,11 @@ import org.apache.maven.project.MavenProject;
 import org.codehaus.plexus.component.configurator.expression.ExpressionEvaluationException;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.PomModelCache;
-import org.l2x6.cq.maven.PomTransformer.SimpleElementWhitespace;
-import org.l2x6.cq.maven.PomTransformer.Transformation;
-import org.l2x6.cq.maven.PomTransformer.TransformationContext;
-import org.l2x6.cq.maven.PomTransformer.WrappedNode;
+import org.l2x6.maven.utils.PomTransformer;
+import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.maven.utils.PomTransformer.Transformation;
+import org.l2x6.maven.utils.PomTransformer.TransformationContext;
+import org.l2x6.maven.utils.PomTransformer.WrappedNode;
 import org.w3c.dom.Comment;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -179,13 +180,14 @@ public class SyncVersionsMojo extends AbstractMojo {
                                             "Unexpected method " + method + "; expected property or dependency");
                                 }
 
-                                final String key = prop.node.getNodeName();
-                                final String oldValue = prop.node.getTextContent();
+                                final Element propNode = prop.getNode();
+                                final String key = propNode.getNodeName();
+                                final String oldValue = propNode.getTextContent();
                                 if (oldValue.equals(newValue)) {
                                     log.info(" - Property " + key + " up to date");
                                 } else {
                                     log.info(" - Property " + key + " updated: " + oldValue + " -> " + newValue);
-                                    prop.node.setTextContent(newValue);
+                                    propNode.setTextContent(newValue);
                                 }
                             } catch (ExpressionEvaluationException e) {
                                 throw new RuntimeException("Could not resolve " + rawVersion, e);

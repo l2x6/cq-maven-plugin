@@ -24,10 +24,11 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
-import org.l2x6.cq.maven.PomTransformer.ContainerElement;
-import org.l2x6.cq.maven.PomTransformer.SimpleElementWhitespace;
-import org.l2x6.cq.maven.PomTransformer.Transformation;
-import org.l2x6.cq.maven.PomTransformer.TransformationContext;
+import org.l2x6.maven.utils.PomTransformer;
+import org.l2x6.maven.utils.PomTransformer.ContainerElement;
+import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.maven.utils.PomTransformer.Transformation;
+import org.l2x6.maven.utils.PomTransformer.TransformationContext;
 import org.w3c.dom.Document;
 
 /**

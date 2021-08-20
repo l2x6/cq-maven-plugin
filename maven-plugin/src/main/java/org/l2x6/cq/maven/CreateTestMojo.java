@@ -34,9 +34,11 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.l2x6.cq.common.CqCatalog;
 import org.l2x6.cq.common.CqCatalog.Flavor;
+import org.l2x6.maven.utils.Gavtcs;
+import org.l2x6.maven.utils.PomTransformer;
+import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.maven.utils.PomTransformer.Transformation;
 import org.l2x6.cq.common.CqCommonUtils;
-import org.l2x6.cq.maven.PomTransformer.SimpleElementWhitespace;
-import org.l2x6.cq.maven.PomTransformer.Transformation;
 
 import freemarker.template.Configuration;
 

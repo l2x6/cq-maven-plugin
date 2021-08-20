@@ -81,6 +81,7 @@
         <maven-project.version>3.0-alpha-2</maven-project.version>
         <maven.plugin-tools.version>3.5</maven.plugin-tools.version>
         <maven.shared.file-management>3.0.0</maven.shared.file-management>
+        <maven-utils.version>0.0.2</maven-utils.version>
         <junit.version>5.6.0</junit.version>
         <google-client.version>1.23.0</google-client.version>
         <google-api-services-sheets.version>v4-rev493-1.23.0</google-api-services-sheets.version>
@@ -226,6 +227,12 @@
                 <groupId>org.apache.maven.shared</groupId>
                 <artifactId>file-management</artifactId>
                 <version>${maven.shared.file-management}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.l2x6.maven-utils</groupId>
+                <artifactId>maven-utils</artifactId>
+                <version>${maven-utils.version}</version>
             </dependency>
 
             <dependency>

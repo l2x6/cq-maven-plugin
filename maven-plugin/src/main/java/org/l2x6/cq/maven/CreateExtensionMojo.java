@@ -34,9 +34,11 @@ import org.apache.maven.model.Model;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
-import org.l2x6.cq.maven.PomTransformer.Transformation;
 import org.l2x6.cq.maven.TemplateParams.Builder;
 import org.l2x6.cq.maven.TemplateParams.ExtensionStatus;
+import org.l2x6.maven.utils.Gavtcs;
+import org.l2x6.maven.utils.PomTransformer;
+import org.l2x6.maven.utils.PomTransformer.Transformation;
 
 import freemarker.template.Configuration;
 

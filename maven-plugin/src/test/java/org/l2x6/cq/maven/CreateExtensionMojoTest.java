@@ -42,7 +42,7 @@ import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.maven.CqUtils;
 import org.l2x6.cq.maven.CreateExtensionMojo;
 import org.l2x6.cq.maven.ExtensionDir;
-import org.l2x6.cq.maven.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
 
 public class CreateExtensionMojoTest {
 
