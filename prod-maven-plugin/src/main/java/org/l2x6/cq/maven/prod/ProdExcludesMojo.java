@@ -23,6 +23,7 @@ import java.io.Writer;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -91,6 +92,12 @@ public class ProdExcludesMojo extends AbstractMojo {
                 includes.add(new Ga("org.apache.camel.quarkus", artifactId));
                 includes.add(new Ga("org.apache.camel.quarkus", artifactId + "-deployment"));
             }
+            final List<String> additionalProductizedArtifacts = (List<String>) json.get("additionalProductizedArtifacts");
+            if (additionalProductizedArtifacts != null) {
+                for (String artifactId : additionalProductizedArtifacts) {
+                    includes.add(new Ga("org.apache.camel.quarkus", artifactId));
+                }
+            }
         } catch (IOException e) {
             throw new RuntimeException("Could not read " + absProdJson);
         }
@@ -98,21 +105,30 @@ public class ProdExcludesMojo extends AbstractMojo {
         final MavenSourceTree tree = MavenSourceTree.of(basedir.toPath().resolve("pom.xml"), charset);
         final Predicate<Profile> profiles = ActiveProfiles.of();
         final Set<Ga> expandedIncludes = tree.computeModuleClosure(includes, profiles);
+
+        expandedIncludes.stream()
+                .map(Ga::getArtifactId)
+                .filter(a -> !a.endsWith("-deployment"))
+                .filter(a -> !a.endsWith("-parent"))
+                .forEach(System.out::println);
+
         final Set<Ga> excludesSet = tree.complement(expandedIncludes);
 
         /* Write the excludesSet to .mvn/excludes.txt */
         final Path excludesTxt = basedir.toPath().resolve(".mvn/excludes.txt");
         try (Writer w = Files.newBufferedWriter(excludesTxt)) {
-                for (Ga ga : new TreeSet<>(excludesSet)) {
-                    w.write(":" + ga.getArtifactId() + "\n");
-                }
+            for (Ga ga : new TreeSet<>(excludesSet)) {
+                w.write(":" + ga.getArtifactId() + "\n");
+            }
         } catch (IOException e) {
             throw new RuntimeException("Could not write to " + excludesTxt);
         }
 
-        /* We could also edit the poms to keep only the expandedIncludes and try building it to see
-         * that nothing is missing */
-        //tree.unlinkUneededModules(expandedIncludes, profiles);
+        /*
+         * We could also edit the poms to keep only the expandedIncludes and try building it to see
+         * that nothing is missing
+         */
+        // tree.unlinkUneededModules(expandedIncludes, profiles);
     }
 
 }
