@@ -101,7 +101,7 @@
         <maven-install-plugin.version>2.5.2</maven-install-plugin.version>
         <maven-jar-pluginversion.version>2.6</maven-jar-pluginversion.version>
         <maven-javadoc-plugin.version>3.2.0</maven-javadoc-plugin.version>
-        <maven-plugin-plugin.version>3.5.2</maven-plugin-plugin.version>
+        <maven-plugin-plugin.version>3.6.1</maven-plugin-plugin.version>
         <maven-project-info-reports-plugin.version>2.9</maven-project-info-reports-plugin.version>
         <maven-release-plugin.version>2.5.3</maven-release-plugin.version>
         <maven-resources-plugin.version>2.7</maven-resources-plugin.version>
@@ -117,8 +117,8 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
         <!-- maven-compiler-plugin -->
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
         <maven.compiler.showWarnings>true</maven.compiler.showWarnings>
 
         <!-- license-maven-plugin -->
