@@ -123,6 +123,7 @@ public class SyncVersionsMojo extends AbstractMojo {
 
             final List<String> remoteRepos = repositories.stream()
                     .map(RemoteRepository::getUrl)
+                    .map(uri -> uri.endsWith("/") ? uri.substring(0, uri.length() - 1) : uri)
                     .collect(Collectors.toList());
             new PomTransformer(pomXml, charset, simpleElementWhitespace)
                     .transform(new UpdateVersionsTransformation(new PomModelCache(localRepositoryPath, remoteRepos), evaluator,

@@ -73,7 +73,8 @@ public class CqCommonUtils {
     public static InputStream openFirst(List<String> remoteRepositories, String relativePath) throws IOException, MalformedURLException {
         for (String repo : remoteRepositories) {
             try {
-                return new URL(repo + relativePath).openStream();
+                final String uri = repo.endsWith("/") ? (repo + relativePath) : repo + "/" + relativePath;
+                return new URL(uri).openStream();
             } catch (IOException e) {
                 // continue
             }
