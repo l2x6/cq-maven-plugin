@@ -16,6 +16,8 @@
  */
 package org.l2x6.cq.maven;
 
+import freemarker.template.TemplateMethodModelEx;
+import freemarker.template.TemplateModelException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -23,19 +25,17 @@ import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
 import org.apache.camel.tooling.model.ArtifactModel;
 import org.l2x6.maven.utils.Gavtcs;
 
-import freemarker.template.TemplateMethodModelEx;
-import freemarker.template.TemplateModelException;
-
 public class TemplateParams {
-    public enum ExtensionStatus {preview, stable, experimental;
+    public enum ExtensionStatus {
+        preview, stable, experimental;
 
-    static ExtensionStatus of(boolean nativeSupported) {
-        return nativeSupported ? stable : preview;
-    }}
+        static ExtensionStatus of(boolean nativeSupported) {
+            return nativeSupported ? stable : preview;
+        }
+    }
 
     private final boolean nativeSupported;
     private final boolean unlisted;
@@ -245,8 +245,6 @@ public class TemplateParams {
     public boolean isDeprecated() {
         return deprecated;
     }
-
-
 
     public static class Builder {
         public ExtensionStatus status;
@@ -476,8 +474,6 @@ public class TemplateParams {
             return this;
         }
     }
-
-
 
     public ExtensionStatus getStatus() {
         return status;

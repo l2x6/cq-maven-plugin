@@ -16,6 +16,7 @@
  */
 package org.l2x6.cq.maven;
 
+import freemarker.template.Configuration;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -30,19 +31,16 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.TransformerFactoryConfigurationError;
 import javax.xml.transform.dom.DOMResult;
 import javax.xml.transform.stream.StreamSource;
-
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
-import org.apache.maven.project.MavenProject;
 import org.l2x6.maven.utils.PomTransformer;
 import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.maven.utils.PomTransformer.Transformation;
@@ -52,8 +50,6 @@ import org.w3c.dom.DocumentFragment;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
-
-import freemarker.template.Configuration;
 
 /**
  * Promotes an extension identified by {@link #artifactIdBase} from JVM-only to JVM+native state.
@@ -152,14 +148,16 @@ public class PromoteExtensionMojo extends AbstractMojo {
 
         /* Remove the test module from the extension parent */
         final Path srcParentPomPath = srcParentDir.resolve("pom.xml");
-        new PomTransformer(srcParentPomPath, charset, simpleElementWhitespace).transform(Transformation.removeModule(true, true, "integration-test"));
+        new PomTransformer(srcParentPomPath, charset, simpleElementWhitespace)
+                .transform(Transformation.removeModule(true, true, "integration-test"));
 
         /* Adjust the names in the test POM */
         adjustTestPom(artifactIdBase, destItestDir.resolve("pom.xml"), charset, templatesUriBase, simpleElementWhitespace);
 
         /* Add the test module to its new parent module */
         final Path integrationTestsPomPath = sourceRootPath.resolve("integration-tests/pom.xml");
-        new PomTransformer(integrationTestsPomPath, charset, simpleElementWhitespace).transform(Transformation.addModule(artifactIdBase));
+        new PomTransformer(integrationTestsPomPath, charset, simpleElementWhitespace)
+                .transform(Transformation.addModule(artifactIdBase));
         PomSorter.sortModules(integrationTestsPomPath);
 
         /* Move the extension */
@@ -171,17 +169,20 @@ public class PromoteExtensionMojo extends AbstractMojo {
 
         /* Remove the extension module from the extensions-jvm POM */
         final Path extensionsJvmPomPath = sourceRootPath.resolve("extensions-jvm/pom.xml");
-        new PomTransformer(extensionsJvmPomPath, charset, simpleElementWhitespace).transform(Transformation.removeModule(false, true, artifactIdBase));
+        new PomTransformer(extensionsJvmPomPath, charset, simpleElementWhitespace)
+                .transform(Transformation.removeModule(false, true, artifactIdBase));
 
         /* Add the extension module to its new parent module */
         final Path destExtensionsPomPath = extensionsPath.resolve("pom.xml");
-        new PomTransformer(destExtensionsPomPath, charset, simpleElementWhitespace).transform(Transformation.addModule(artifactIdBase));
+        new PomTransformer(destExtensionsPomPath, charset, simpleElementWhitespace)
+                .transform(Transformation.addModule(artifactIdBase));
         PomSorter.sortModules(destExtensionsPomPath);
 
         /* Set the camel.quarkus.nativeSince property in the runtime POM */
         final Path runtimePomPath = destParentDir.resolve("runtime/pom.xml");
         final String camelQuarkusNativeSinceVersion = camelQuarkusVersion.replaceAll("-SNAPSHOT", "");
-        Transformation addNativeSinceProperty = Transformation.addProperty("camel.quarkus.nativeSince", camelQuarkusNativeSinceVersion);
+        Transformation addNativeSinceProperty = Transformation.addProperty("camel.quarkus.nativeSince",
+                camelQuarkusNativeSinceVersion);
         new PomTransformer(runtimePomPath, charset, simpleElementWhitespace).transform(addNativeSinceProperty);
 
         // Remove the warning build step from
@@ -227,7 +228,8 @@ public class PromoteExtensionMojo extends AbstractMojo {
 
     }
 
-    static void adjustTestPom(String baseArtifactId, Path path, Charset charset, String templatesUriBase, SimpleElementWhitespace simpleElementWhitespace) {
+    static void adjustTestPom(String baseArtifactId, Path path, Charset charset, String templatesUriBase,
+            SimpleElementWhitespace simpleElementWhitespace) {
         try {
             String src = new String(Files.readAllBytes(path), charset);
             src = ARTIFACT_ID_PATTERN.matcher(src).replaceFirst("<artifactId>camel-quarkus-integration-test-$1</artifactId>");
@@ -242,7 +244,8 @@ public class PromoteExtensionMojo extends AbstractMojo {
 
         /* Add the native profile at the end of integration-tests/${EXT}/pom.xml: */
         final DocumentFragment nativeProfile = loadNativeProfile(charset, templatesUriBase + "/integration-test-pom.xml");
-        new PomTransformer(path, charset, simpleElementWhitespace).transform(Transformation.addFragment(nativeProfile, "profiles"));
+        new PomTransformer(path, charset, simpleElementWhitespace)
+                .transform(Transformation.addFragment(nativeProfile, "profiles"));
 
     }
 
@@ -277,7 +280,8 @@ public class PromoteExtensionMojo extends AbstractMojo {
         final Matcher m = pattern.matcher(src);
         if (m.find()) {
 
-            final String profilesSource = m.group().replace("<profiles>", "<profiles xmlns=\"http://maven.apache.org/POM/4.0.0\">");
+            final String profilesSource = m.group().replace("<profiles>",
+                    "<profiles xmlns=\"http://maven.apache.org/POM/4.0.0\">");
             final Document document;
             try {
                 final DOMResult domResult = new DOMResult();
@@ -299,7 +303,6 @@ public class PromoteExtensionMojo extends AbstractMojo {
             } catch (TransformerException | TransformerFactoryConfigurationError e) {
                 throw new RuntimeException(String.format("Could not read DOM from [%s]", profilesSource), e);
             }
-
 
         } else {
             throw new IllegalStateException("Could not find " + pattern.pattern() + " in " + uri);

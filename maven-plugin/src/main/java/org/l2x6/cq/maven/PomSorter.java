@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -37,12 +36,10 @@ import java.nio.file.Files;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 /**
  * A script for sorting child modules and dependencyManagement dependencies in pom.xml files.
  * Only elements will be sorted that occur after a comment containing the {@code a..z} marker string.
  */
-
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -54,7 +51,6 @@ import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
-
 import javax.xml.namespace.QName;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
@@ -64,7 +60,6 @@ import javax.xml.transform.stream.StreamSource;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
-
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -148,7 +143,8 @@ public class PomSorter {
             final Pattern fallbackSortSpanPattern = Pattern.compile("(<modules>)(.*)(\\r?\\n)([ ]*)</modules>", Pattern.DOTALL);
             matcher = fallbackSortSpanPattern.matcher(xmlSource);
             if (!matcher.find()) {
-                throw new RuntimeException("Could not match " + sortSpanPattern + " nor "+ fallbackSortSpanPattern +" in " + pomXmlPath);
+                throw new RuntimeException(
+                        "Could not match " + sortSpanPattern + " nor " + fallbackSortSpanPattern + " in " + pomXmlPath);
             }
         }
         final String modulesString = matcher.group(2);

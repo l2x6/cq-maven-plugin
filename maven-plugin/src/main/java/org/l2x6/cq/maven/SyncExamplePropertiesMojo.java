@@ -25,9 +25,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.stream.Collectors;
 import java.util.Properties;
-
+import java.util.stream.Collectors;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -104,7 +103,8 @@ public class SyncExamplePropertiesMojo extends AbstractMojo {
         final List<String> remoteRepos = repositories.stream()
                 .map(RemoteRepository::getUrl)
                 .collect(Collectors.toList());
-        final Path cqPomPath = CqCommonUtils.copyArtifact(localRepositoryPath, "org.apache.camel.quarkus", "camel-quarkus", cqVersion,
+        final Path cqPomPath = CqCommonUtils.copyArtifact(localRepositoryPath, "org.apache.camel.quarkus", "camel-quarkus",
+                cqVersion,
                 "pom", remoteRepos);
         final Model cqModel = CqCommonUtils.readPom(cqPomPath, charset);
         final Properties cqProps = cqModel.getProperties();

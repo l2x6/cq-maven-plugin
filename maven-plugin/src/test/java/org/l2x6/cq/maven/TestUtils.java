@@ -16,8 +16,6 @@
  */
 package org.l2x6.cq.maven;
 
-import static org.junit.jupiter.api.Assertions.fail;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -26,6 +24,8 @@ import java.nio.file.Paths;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class TestUtils {
 

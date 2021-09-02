@@ -28,14 +28,12 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Properties;
 import java.util.stream.Collectors;
-
 import org.apache.camel.catalog.Kind;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 
 public class CqCommonUtils {
-
 
     private CqCommonUtils() {
     }
@@ -54,7 +52,8 @@ public class CqCommonUtils {
         Path result;
         try {
             result = Files.createTempFile(null, localPath.getFileName().toString());
-            try (InputStream in = (localExists ? Files.newInputStream(localPath) : openFirst(remoteRepositories, relativeJarPath));
+            try (InputStream in = (localExists ? Files.newInputStream(localPath)
+                    : openFirst(remoteRepositories, relativeJarPath));
                     OutputStream out = Files.newOutputStream(result)) {
                 final byte[] buf = new byte[4096];
                 int len;
@@ -62,7 +61,8 @@ public class CqCommonUtils {
                     out.write(buf, 0, len);
                 }
             } catch (IOException e) {
-                throw new RuntimeException("Could not copy " + (localExists ? localPath : relativeJarPath) + " to " + result, e);
+                throw new RuntimeException("Could not copy " + (localExists ? localPath : relativeJarPath) + " to " + result,
+                        e);
             }
         } catch (IOException e) {
             throw new RuntimeException("Could not create temp file", e);
@@ -70,7 +70,8 @@ public class CqCommonUtils {
         return result;
     }
 
-    public static InputStream openFirst(List<String> remoteRepositories, String relativePath) throws IOException, MalformedURLException {
+    public static InputStream openFirst(List<String> remoteRepositories, String relativePath)
+            throws IOException, MalformedURLException {
         for (String repo : remoteRepositories) {
             try {
                 final String uri = repo.endsWith("/") ? (repo + relativePath) : repo + "/" + relativePath;

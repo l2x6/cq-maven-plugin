@@ -20,7 +20,6 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import org.apache.camel.tooling.model.BaseModel;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -56,7 +55,7 @@ public class VersionReportMojo extends AbstractMojo {
         final String delim = "..";
         final int delimPos = versions.indexOf(delim);
         if (delimPos <= 0) {
-            throw new IllegalStateException("Expected versions delimited by '..': found '"+ versions +"'");
+            throw new IllegalStateException("Expected versions delimited by '..': found '" + versions + "'");
         }
         final String baselineVersion = versions.substring(0, delimPos);
         final String reportVersion = versions.substring(delimPos + delim.length());
@@ -110,7 +109,6 @@ public class VersionReportMojo extends AbstractMojo {
 
         getLog().info("Counts:\n\n\n" + counts.toString() + "\n\n");
         getLog().info("Report:\n\n\n" + details.toString() + "\n\n");
-
 
     }
 

@@ -43,7 +43,7 @@ public class ExtensionModule implements Comparable<ExtensionModule> {
 
     @Override
     public String toString() {
-        return artifactIdBase + " ("+ extensionDir +")";
+        return artifactIdBase + " (" + extensionDir + ")";
     }
 
     public boolean isNativeSupported() {

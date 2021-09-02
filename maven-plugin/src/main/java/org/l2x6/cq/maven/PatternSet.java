@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 public class PatternSet {
 
     private static final PatternSet EMPTY = new PatternSet(Collections.emptyList());
+
     public static PatternSet empty() {
         return EMPTY;
     }

@@ -16,6 +16,7 @@
  */
 package org.l2x6.cq.maven;
 
+import com.google.gson.GsonBuilder;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -30,14 +31,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
-
-import com.google.gson.GsonBuilder;
 
 /**
  * Stores example metadata into an {@code examples.json} file.
@@ -148,9 +146,9 @@ public class UpdateExamplesJsonMojo extends AbstractMojo {
         }
 
         public Example validate() {
-            Objects.requireNonNull(title, "title cannot be null in "+ this);
-            Objects.requireNonNull(description, "description cannot be null in "+ this);
-            Objects.requireNonNull(link, "link cannot be null in "+ this);
+            Objects.requireNonNull(title, "title cannot be null in " + this);
+            Objects.requireNonNull(description, "description cannot be null in " + this);
+            Objects.requireNonNull(link, "link cannot be null in " + this);
             return this;
         }
 

@@ -16,6 +16,14 @@
  */
 package org.l2x6.cq.maven;
 
+import freemarker.cache.ClassTemplateLoader;
+import freemarker.cache.FileTemplateLoader;
+import freemarker.cache.MultiTemplateLoader;
+import freemarker.cache.TemplateLoader;
+import freemarker.template.Configuration;
+import freemarker.template.Template;
+import freemarker.template.TemplateException;
+import freemarker.template.TemplateExceptionHandler;
 import java.io.IOException;
 import java.io.Writer;
 import java.nio.file.Files;
@@ -31,27 +39,12 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
 import javax.lang.model.SourceVersion;
-
 import org.apache.camel.tooling.model.ArtifactModel;
-import org.apache.maven.execution.MavenSession;
-import org.apache.maven.execution.ProjectDependencyGraph;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.logging.Log;
-import org.apache.maven.project.MavenProject;
 import org.l2x6.cq.maven.TemplateParams.ExtensionStatus;
-import org.l2x6.maven.utils.MavenSourceTree;
 import org.l2x6.maven.utils.MavenSourceTree.Module;
-
-import freemarker.cache.ClassTemplateLoader;
-import freemarker.cache.FileTemplateLoader;
-import freemarker.cache.MultiTemplateLoader;
-import freemarker.cache.TemplateLoader;
-import freemarker.template.Configuration;
-import freemarker.template.Template;
-import freemarker.template.TemplateException;
-import freemarker.template.TemplateExceptionHandler;
 
 public class CqUtils {
     public static final String CLASSPATH_PREFIX = "classpath:";
@@ -91,16 +84,19 @@ public class CqUtils {
         }
     }
 
-    public static Stream<ExtensionModule> findExtensions(Path basePath, Collection<Module> modules, Predicate<String> artifactIdBaseFilter) {
+    public static Stream<ExtensionModule> findExtensions(Path basePath, Collection<Module> modules,
+            Predicate<String> artifactIdBaseFilter) {
         return modules.stream()
                 .filter(p -> p.getGav().getArtifactId().asConstant().endsWith("-deployment"))
                 .map(p -> {
-                    final Path extensionDir = basePath.resolve(p.getPomPath()).getParent().getParent().toAbsolutePath().normalize();
+                    final Path extensionDir = basePath.resolve(p.getPomPath()).getParent().getParent().toAbsolutePath()
+                            .normalize();
                     final String deploymentArtifactId = p.getGav().getArtifactId().asConstant();
                     if (!deploymentArtifactId.startsWith("camel-quarkus-")) {
                         throw new IllegalStateException("Should start with 'camel-quarkus-': " + deploymentArtifactId);
                     }
-                    final String artifactIdBase = deploymentArtifactId.substring("camel-quarkus-".length(), deploymentArtifactId.length() - "-deployment".length());
+                    final String artifactIdBase = deploymentArtifactId.substring("camel-quarkus-".length(),
+                            deploymentArtifactId.length() - "-deployment".length());
                     return new ExtensionModule(extensionDir, artifactIdBase);
                 })
                 .filter(e -> artifactIdBaseFilter.test(e.getArtifactIdBase()))

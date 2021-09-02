@@ -26,7 +26,6 @@ import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.lifecycle.internal.MojoDescriptorCreator;
 import org.apache.maven.model.Dependency;

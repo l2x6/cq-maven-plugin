@@ -16,6 +16,7 @@
  */
 package org.l2x6.cq.maven;
 
+import freemarker.template.Configuration;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -23,7 +24,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
-
 import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -34,8 +34,6 @@ import org.l2x6.cq.common.CqCatalog;
 import org.l2x6.cq.common.CqCatalog.Flavor;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.maven.TemplateParams.ExtensionStatus;
-
-import freemarker.template.Configuration;
 
 /**
  * Updates {@code quarkus-extension.yaml} files in extension modules based on the info from Camel Catalog.
@@ -67,26 +65,36 @@ public class UpdateQuarkusMetadataMojo extends AbstractExtensionListMojo {
                     getLog().info("Regenerating " + multiModuleProjectDirectory.toPath().relativize(quarkusExtensionsYamlPath));
                     final List<ArtifactModel<?>> models = catalog.primaryModel(artifactIdBase);
                     final Model runtimePom = CqCommonUtils.readPom(extModule.getRuntimePomPath(), StandardCharsets.UTF_8);
-                    final Path relativeRuntimePomPath = multiModuleProjectDirectory.toPath().relativize(extModule.getRuntimePomPath());
+                    final Path relativeRuntimePomPath = multiModuleProjectDirectory.toPath()
+                            .relativize(extModule.getRuntimePomPath());
 
                     final String name = runtimePom.getName();
                     if (!name.endsWith(NAME_SUFFIX)) {
-                        throw new RuntimeException("The name in " + relativeRuntimePomPath +" must end with '"+ NAME_SUFFIX +"'; found: " + name);
+                        throw new RuntimeException("The name in " + relativeRuntimePomPath + " must end with '" + NAME_SUFFIX
+                                + "'; found: " + name);
                     }
                     final int startDelimPos = name.lastIndexOf(" :: ", name.length() - NAME_SUFFIX.length() - 1);
                     if (startDelimPos < 0) {
-                        throw new RuntimeException("The name in " + relativeRuntimePomPath +" must start with '<whatever> :: '; found: " + name);
+                        throw new RuntimeException(
+                                "The name in " + relativeRuntimePomPath + " must start with '<whatever> :: '; found: " + name);
                     }
                     final String titleBase = name.substring(startDelimPos + 4, name.length() - NAME_SUFFIX.length());
                     final String rawKeywords = (String) runtimePom.getProperties().getProperty("quarkus.metadata.keywords");
-                    final List<String> keywords = rawKeywords != null ? Arrays.asList(rawKeywords.split(",")) : Collections.emptyList();
-                    final boolean unlisted = !extModule.isNativeSupported() || Boolean.parseBoolean(runtimePom.getProperties().getProperty("quarkus.metadata.unlisted", "false"));
-                    final boolean deprecated = models.stream().anyMatch(ArtifactModel::isDeprecated) || Boolean.parseBoolean(runtimePom.getProperties().getProperty("quarkus.metadata.deprecated", "false"));
+                    final List<String> keywords = rawKeywords != null ? Arrays.asList(rawKeywords.split(","))
+                            : Collections.emptyList();
+                    final boolean unlisted = !extModule.isNativeSupported() || Boolean
+                            .parseBoolean(runtimePom.getProperties().getProperty("quarkus.metadata.unlisted", "false"));
+                    final boolean deprecated = models.stream().anyMatch(ArtifactModel::isDeprecated) || Boolean
+                            .parseBoolean(runtimePom.getProperties().getProperty("quarkus.metadata.deprecated", "false"));
 
-                    final ExtensionStatus status = ExtensionStatus.valueOf(runtimePom.getProperties().getProperty("quarkus.metadata.status", ExtensionStatus.of(extModule.isNativeSupported()).toString()));
+                    final ExtensionStatus status = ExtensionStatus.valueOf(runtimePom.getProperties().getProperty(
+                            "quarkus.metadata.status", ExtensionStatus.of(extModule.isNativeSupported()).toString()));
 
-                    final TemplateParams templateParams = CqUtils.quarkusExtensionYamlParams(models, artifactIdBase, titleBase, runtimePom.getDescription(), keywords, unlisted, deprecated, extModule.isNativeSupported(), status, multiModuleProjectDirectory.toPath(), getLog(), errors);
-                    final Configuration cfg = CqUtils.getTemplateConfig(multiModuleProjectDirectory.toPath(), CqUtils.DEFAULT_TEMPLATES_URI_BASE,
+                    final TemplateParams templateParams = CqUtils.quarkusExtensionYamlParams(models, artifactIdBase, titleBase,
+                            runtimePom.getDescription(), keywords, unlisted, deprecated, extModule.isNativeSupported(), status,
+                            multiModuleProjectDirectory.toPath(), getLog(), errors);
+                    final Configuration cfg = CqUtils.getTemplateConfig(multiModuleProjectDirectory.toPath(),
+                            CqUtils.DEFAULT_TEMPLATES_URI_BASE,
                             templatesUriBase, encoding);
 
                     CqUtils.evalTemplate(cfg, "quarkus-extension.yaml", quarkusExtensionsYamlPath, templateParams,

@@ -25,10 +25,7 @@ import java.util.Arrays;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Stream;
-
 import org.junit.jupiter.api.Test;
-import org.l2x6.cq.maven.FormatPomsMojo;
-import org.l2x6.cq.maven.PomSorter;
 import org.l2x6.maven.utils.Gavtcs;
 import org.l2x6.maven.utils.PomTransformer;
 import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
@@ -61,18 +58,18 @@ public class PomSorterTest {
         final Path baseDir = Paths.get("target/test-classes/projects/pom-sorter");
         try (Stream<Path> files = Files.list(baseDir.resolve("mvnd-rules"))) {
             files
-            .filter(p -> Files.isDirectory(p) && !"support".equals(p.getFileName().toString()))
-            .sorted()
-            .map(p -> p.resolve("pom.xml"))
-            .filter(p -> Files.exists(p))
-            .forEach(pomXmlPath -> {
+                    .filter(p -> Files.isDirectory(p) && !"support".equals(p.getFileName().toString()))
+                    .sorted()
+                    .map(p -> p.resolve("pom.xml"))
+                    .filter(p -> Files.exists(p))
+                    .forEach(pomXmlPath -> {
                         new PomTransformer(pomXmlPath, StandardCharsets.UTF_8, SimpleElementWhitespace.EMPTY)
                                 .transform(Transformation.updateMappedDependencies(
                                         Gavtcs::isVirtualDeployment,
                                         Gavtcs.deploymentVitualMapper(gavtcs -> aids.contains(gavtcs.getArtifactId())),
                                         Gavtcs.scopeAndTypeFirstComparator(),
                                         FormatPomsMojo.VIRTUAL_DEPS_INITIAL_COMMENT));
-            });
+                    });
         }
 
         final Path expected = Paths.get("src/test/resources/expected/pom-sorter/mvnd-rules");

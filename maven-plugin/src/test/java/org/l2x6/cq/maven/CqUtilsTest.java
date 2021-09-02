@@ -16,12 +16,10 @@
  */
 package org.l2x6.cq.maven;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
 import java.io.IOException;
-
 import org.junit.jupiter.api.Test;
-import org.l2x6.cq.maven.CqUtils;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class CqUtilsTest {
 

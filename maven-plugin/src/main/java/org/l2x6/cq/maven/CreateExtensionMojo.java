@@ -16,6 +16,7 @@
  */
 package org.l2x6.cq.maven;
 
+import freemarker.template.Configuration;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -28,7 +29,6 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-
 import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugins.annotations.Mojo;
@@ -39,8 +39,6 @@ import org.l2x6.cq.maven.TemplateParams.ExtensionStatus;
 import org.l2x6.maven.utils.Gavtcs;
 import org.l2x6.maven.utils.PomTransformer;
 import org.l2x6.maven.utils.PomTransformer.Transformation;
-
-import freemarker.template.Configuration;
 
 /**
  * Scaffolds a new Camel Quarkus extension.
@@ -213,7 +211,8 @@ public class CreateExtensionMojo extends CreateTestMojo {
         final Set<Gavtcs> allExtensions = findExtensions()
                 .map(e -> new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-" + e.getArtifactIdBase(), null))
                 .collect(Collectors.toSet());
-        FormatPomsMojo.updateVirtualDependenciesAllExtensions(updateVirtualDependenciesAllExtensions, allExtensions, getCharset(), simpleElementWhitespace);
+        FormatPomsMojo.updateVirtualDependenciesAllExtensions(updateVirtualDependenciesAllExtensions, allExtensions,
+                getCharset(), simpleElementWhitespace);
 
     }
 
@@ -308,7 +307,6 @@ public class CreateExtensionMojo extends CreateTestMojo {
             return artifactId;
         }
     }
-
 
     String replacePlaceholders(String gavtc) {
         final StringBuffer transformedGavtc = new StringBuffer();

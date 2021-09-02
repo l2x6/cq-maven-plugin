@@ -16,17 +16,13 @@
  */
 package org.l2x6.cq.maven;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
-
 import org.apache.maven.model.Build;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Model;
@@ -37,6 +33,8 @@ import org.apache.maven.project.MavenProject;
 import org.junit.jupiter.api.Test;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class CreateExtensionMojoTest {
 
@@ -112,7 +110,7 @@ public class CreateExtensionMojoTest {
         mojo.artifactIdBase = "dozer";
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
                 mojo.getRootModuleDirectory());
     }
 
@@ -125,7 +123,7 @@ public class CreateExtensionMojoTest {
         mojo.nativeSupported = false;
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
                 mojo.getRootModuleDirectory());
     }
 
@@ -138,10 +136,9 @@ public class CreateExtensionMojoTest {
 
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
                 mojo.getRootModuleDirectory());
     }
-
 
     @Test
     void createExtensionDataformatJvm() throws MojoExecutionException, MojoFailureException,
@@ -153,7 +150,7 @@ public class CreateExtensionMojoTest {
 
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
                 mojo.getRootModuleDirectory());
     }
 
@@ -165,7 +162,7 @@ public class CreateExtensionMojoTest {
         mojo.artifactIdBase = "xpath";
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName ),
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
                 mojo.getRootModuleDirectory());
     }
 
@@ -178,7 +175,7 @@ public class CreateExtensionMojoTest {
         mojo.nativeSupported = false;
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName ),
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
                 mojo.getRootModuleDirectory());
     }
 
@@ -194,7 +191,6 @@ public class CreateExtensionMojoTest {
                 mojo.getRootModuleDirectory());
     }
 
-
     @Test
     void createExtensionOtherJvm() throws MojoExecutionException, MojoFailureException,
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
@@ -207,6 +203,7 @@ public class CreateExtensionMojoTest {
         TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
                 mojo.getRootModuleDirectory());
     }
+
     @Test
     void getPackage() throws IOException {
         assertEquals("org.apache.camel.quarkus.aws.sns.deployment", CqUtils
@@ -214,6 +211,5 @@ public class CreateExtensionMojoTest {
         assertEquals("org.apache.camel.quarkus.component.aws.sns.deployment", CqUtils
                 .getJavaPackage("org.apache.camel.quarkus", "component", "camel-quarkus-aws-sns-deployment"));
     }
-
 
 }

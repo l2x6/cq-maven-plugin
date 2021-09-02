@@ -29,7 +29,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
 import org.apache.camel.catalog.CamelCatalog;
 import org.apache.camel.catalog.DefaultCamelCatalog;
 import org.apache.camel.catalog.DefaultRuntimeProvider;
@@ -121,9 +120,9 @@ public class CqCatalog {
         final List<ArtifactModel<?>> models = filterModels(cqArtifactIdBase)
                 .filter(CqCatalog::isFirstScheme)
                 .filter(m -> !m.getName().startsWith("google-") || !m.getName().endsWith("-stream")) // ignore the
-                                                                                                     // google stream
-                                                                                                     // component
-                                                                                                     // variants
+                // google stream
+                // component
+                // variants
                 .collect(Collectors.toList());
         if (models.size() > 1) {
             List<ArtifactModel<?>> componentModels = models.stream()
@@ -159,8 +158,9 @@ public class CqCatalog {
      * Normally schemes not available in Camel need to be removed from Camel Quarkus. This method provides a way to
      * maintain a list of exceptions to that rule.
      *
-     * @param scheme the scheme to check
-     * @return {@code true} if the given scheme is known not to be available in Camel by design; {@code false} otherwise
+     * @param  scheme the scheme to check
+     * @return        {@code true} if the given scheme is known not to be available in Camel by design; {@code false}
+     *                otherwise
      */
     public static boolean isCamelQuarkusOrphan(String scheme) {
         return "qute".equals(scheme);

@@ -16,27 +16,18 @@
  */
 package org.l2x6.cq.maven;
 
-import java.io.File;
 import java.io.IOException;
-import java.net.URI;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Model;
-import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
@@ -51,8 +42,6 @@ import org.l2x6.maven.utils.MavenSourceTree;
 import org.l2x6.maven.utils.PomTransformer;
 import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.maven.utils.PomTransformer.Transformation;
-import org.l2x6.maven.utils.PomTransformer.TransformationContext;
-import org.w3c.dom.Document;
 
 /**
  * Formats the {@code pom.xml} files in the source tree.
@@ -206,7 +195,8 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
         }
 
         final Set<Gavtcs> allExtensions = findExtensions()
-                .map(extensionModule -> new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-" + extensionModule.getArtifactIdBase(), null))
+                .map(extensionModule -> new Gavtcs("org.apache.camel.quarkus",
+                        "camel-quarkus-" + extensionModule.getArtifactIdBase(), null))
                 .collect(Collectors.toSet());
         final MavenSourceTree tree = getTree();
         for (DirectoryScanner scanner : updateVirtualDependencies) {
@@ -217,15 +207,15 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
                 if (tree.getModulesByPath().keySet().contains(pomXmlRelPath)) {
                     /* Ignore unlinked modules */
                     new PomTransformer(pomXmlPath, getCharset(), simpleElementWhitespace)
-                    .transform(
-                            Transformation.updateMappedDependencies(
-                                    Gavtcs::isVirtualDeployment,
-                                    Gavtcs.deploymentVitualMapper(gavtcs -> allExtensions.contains(gavtcs)),
-                                    Gavtcs.scopeAndTypeFirstComparator(),
-                                    VIRTUAL_DEPS_INITIAL_COMMENT),
-                            Transformation.keepFirst(virtualDepsCommentXPath(), true),
-                            Transformation.removeProperty(true, true, "mvnd.builder.rule"),
-                            Transformation.removeContainerElementIfEmpty(true, true, true, "properties"));
+                            .transform(
+                                    Transformation.updateMappedDependencies(
+                                            Gavtcs::isVirtualDeployment,
+                                            Gavtcs.deploymentVitualMapper(gavtcs -> allExtensions.contains(gavtcs)),
+                                            Gavtcs.scopeAndTypeFirstComparator(),
+                                            VIRTUAL_DEPS_INITIAL_COMMENT),
+                                    Transformation.keepFirst(virtualDepsCommentXPath(), true),
+                                    Transformation.removeProperty(true, true, "mvnd.builder.rule"),
+                                    Transformation.removeContainerElementIfEmpty(true, true, true, "properties"));
                 }
             }
         }

@@ -16,6 +16,19 @@
  */
 package org.l2x6.cq.maven.prod;
 
+import com.google.api.client.auth.oauth2.Credential;
+import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp;
+import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver;
+import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow;
+import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets;
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.http.javanet.NetHttpTransport;
+import com.google.api.client.json.JsonFactory;
+import com.google.api.client.json.jackson2.JacksonFactory;
+import com.google.api.client.util.store.FileDataStoreFactory;
+import com.google.api.services.sheets.v4.Sheets;
+import com.google.api.services.sheets.v4.SheetsScopes;
+import com.google.api.services.sheets.v4.model.ValueRange;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -33,7 +46,6 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -46,7 +58,6 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
 import org.apache.camel.catalog.Kind;
 import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.camel.tooling.model.BaseModel;
@@ -65,20 +76,6 @@ import org.l2x6.cq.common.CqCatalog.Flavor;
 import org.l2x6.cq.common.CqCatalog.GavCqCatalog;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.maven.prod.SyncExtensionListMojo.Sheet.Record;
-
-import com.google.api.client.auth.oauth2.Credential;
-import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp;
-import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver;
-import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow;
-import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets;
-import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
-import com.google.api.client.http.javanet.NetHttpTransport;
-import com.google.api.client.json.JsonFactory;
-import com.google.api.client.json.jackson2.JacksonFactory;
-import com.google.api.client.util.store.FileDataStoreFactory;
-import com.google.api.services.sheets.v4.Sheets;
-import com.google.api.services.sheets.v4.SheetsScopes;
-import com.google.api.services.sheets.v4.model.ValueRange;
 
 /**
  * Updates a Google Sheet containing CQ extensions based on the data from a specified CQ Catalog
@@ -115,14 +112,15 @@ public class SyncExtensionListMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     List<RemoteRepository> repositories;
 
-    private static final Set<String> PRIMARY_LABELS = new LinkedHashSet<>(Arrays.asList("eip", "dataformat", "language", "rest", "configuration", "error"));
+    private static final Set<String> PRIMARY_LABELS = new LinkedHashSet<>(
+            Arrays.asList("eip", "dataformat", "language", "rest", "configuration", "error"));
 
     /**
      * Execute goal.
      *
      * @throws MojoExecutionException execution of the main class or one of the
-     *             threads it generated failed.
-     * @throws MojoFailureException something bad happened...
+     *                                threads it generated failed.
+     * @throws MojoFailureException   something bad happened...
      */
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
@@ -194,12 +192,12 @@ public class SyncExtensionListMojo extends AbstractMojo {
                             });
 
                     final Map<String, EipModel> cqModels = new LinkedHashMap<>();
-//                    camelQuarkusCatalog.eips()
-//                            .sorted(BaseModel.compareTitle())
-//                            .forEach(m -> {
-//                                cqModels.put(m.getName(), m);
-//                                allSchemes.add(m.getName());
-//                            });
+                    //                    camelQuarkusCatalog.eips()
+                    //                            .sorted(BaseModel.compareTitle())
+                    //                            .forEach(m -> {
+                    //                                cqModels.put(m.getName(), m);
+                    //                                allSchemes.add(m.getName());
+                    //                            });
 
                     Map<String, Set<String>> occurrences = findOccurrences(allSchemes, Paths.get("."), getLog());
 
@@ -207,7 +205,8 @@ public class SyncExtensionListMojo extends AbstractMojo {
                     final Sheet sheet = Sheet.read(service, googleSpreadsheetId, kind, getLog(), Column.eipColumns());
 
                     for (String scheme : allSchemes) {
-                        sheet.updateBase(scheme, camelModels.get(scheme), cqModels.get(scheme), occurrences.get(scheme), nativeSupportsMap);
+                        sheet.updateBase(scheme, camelModels.get(scheme), cqModels.get(scheme), occurrences.get(scheme),
+                                nativeSupportsMap);
                     }
 
                     sheet.update(Comparator.comparing(Record::getKind).thenComparing(Record::getScheme));
@@ -286,11 +285,11 @@ public class SyncExtensionListMojo extends AbstractMojo {
     /**
      * Creates an authorized Credential object.
      *
-     * @param transport The network HTTP Transport.
-     * @param scopes
-     * @param jSON_FACTORY
-     * @return An authorized Credential object.
-     * @throws IOException If the credentials.json file cannot be found.
+     * @param  transport    The network HTTP Transport.
+     * @param  scopes
+     * @param  jSON_FACTORY
+     * @return              An authorized Credential object.
+     * @throws IOException  If the credentials.json file cannot be found.
      */
     Credential getCredentials(final NetHttpTransport transport, JsonFactory jsonFactory, List<String> scopes) {
 
@@ -416,7 +415,8 @@ public class SyncExtensionListMojo extends AbstractMojo {
         final private Set<String> updatedSchemes = new HashSet<>();
         final private List<String> newSchemes = new ArrayList<>();
 
-        public Record updateBase(String scheme, BaseModel<?> camelModel, BaseModel<?> cqModel, Set<String> occurrences, Map<Kind, Map<String, NativeSupport>> nativeSupportsMap) {
+        public Record updateBase(String scheme, BaseModel<?> camelModel, BaseModel<?> cqModel, Set<String> occurrences,
+                Map<Kind, Map<String, NativeSupport>> nativeSupportsMap) {
             Record row = findRecord(scheme);
             if (row == null) {
                 row = addRecord(scheme);
@@ -492,7 +492,8 @@ public class SyncExtensionListMojo extends AbstractMojo {
             return kind;
         }
 
-        public void update(String scheme, ArtifactModel<?> camelModel, ArtifactModel<?> cqModel, Map<Kind, Map<String, NativeSupport>> nativeSupportsMap) {
+        public void update(String scheme, ArtifactModel<?> camelModel, ArtifactModel<?> cqModel,
+                Map<Kind, Map<String, NativeSupport>> nativeSupportsMap) {
 
             final Record row = updateBase(scheme, camelModel, cqModel, null, nativeSupportsMap);
 
@@ -639,6 +640,7 @@ public class SyncExtensionListMojo extends AbstractMojo {
                 }
                 return "ZZZZZZZZZZZZZZZZZZZ";
             }
+
             public String getKind() {
                 final String kind = getString(Column.Kind);
                 return kind == null ? "ZZZZZZZZZZZZZZZZZZZ" : kind;

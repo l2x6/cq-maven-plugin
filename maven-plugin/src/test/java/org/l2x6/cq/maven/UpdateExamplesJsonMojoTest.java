@@ -19,13 +19,10 @@ package org.l2x6.cq.maven;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.l2x6.cq.maven.CqUtils;
-import org.l2x6.cq.maven.UpdateExamplesJsonMojo;
 
 public class UpdateExamplesJsonMojoTest {
 
@@ -38,7 +35,6 @@ public class UpdateExamplesJsonMojoTest {
         return mojo;
     }
 
-
     @Test
     void updateExamplesJson() throws MojoExecutionException, MojoFailureException, IOException {
         final Path baseDir = TestUtils.createProjectFromTemplate("update-examples-json", "update-examples-json-test");
@@ -47,7 +43,8 @@ public class UpdateExamplesJsonMojoTest {
 
         final Path examplesJsonRelpath = Paths.get(UpdateExamplesJsonMojo.DEFAULT_EXAMPLES_JSON);
 
-        final Path examplesJson = Paths.get("target/test-classes/expected/update-examples-json").resolve(examplesJsonRelpath).toAbsolutePath();
+        final Path examplesJson = Paths.get("target/test-classes/expected/update-examples-json").resolve(examplesJsonRelpath)
+                .toAbsolutePath();
 
         Assertions.assertThat(baseDir.resolve(examplesJsonRelpath)).hasSameTextualContentAs(examplesJson);
     }

@@ -21,7 +21,6 @@ import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.Stream;
-
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.l2x6.maven.utils.MavenSourceTree;
@@ -56,9 +55,7 @@ public abstract class AbstractExtensionListMojo extends AbstractMojo {
     String encoding;
     private Charset charset;
 
-
     private MavenSourceTree tree;
-
 
     Path getRootModuleDirectory() {
         if (rootModuleDirectory == null) {

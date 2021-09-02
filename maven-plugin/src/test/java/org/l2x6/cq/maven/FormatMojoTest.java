@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collections;
-
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.shared.model.fileset.FileSet;
@@ -40,7 +39,6 @@ public class FormatMojoTest {
         return mojo;
     }
 
-
     @Test
     void emptyApplicationProperties() throws MojoExecutionException, MojoFailureException, IOException {
         final String testName = "remove-empty-application-properties";
@@ -51,7 +49,7 @@ public class FormatMojoTest {
         mojo.removeEmptyApplicationProperties = fileSet;
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
                 mojo.multiModuleProjectDirectory.toPath());
 
     }

@@ -16,6 +16,7 @@
  */
 package org.l2x6.cq.maven.prod;
 
+import com.google.gson.Gson;
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
@@ -28,7 +29,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Predicate;
-
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -38,8 +38,6 @@ import org.l2x6.maven.utils.Ga;
 import org.l2x6.maven.utils.MavenSourceTree;
 import org.l2x6.maven.utils.MavenSourceTree.ActiveProfiles;
 import org.l2x6.maven.utils.MavenSourceTree.Module.Profile;
-
-import com.google.gson.Gson;
 
 /**
  */

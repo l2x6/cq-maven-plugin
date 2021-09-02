@@ -27,7 +27,6 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
-
 import org.apache.camel.catalog.Kind;
 import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.camel.tooling.model.BaseModel;
@@ -72,19 +71,21 @@ public class ExportComponentCsvMojo extends AbstractMojo {
      * Execute goal.
      *
      * @throws MojoExecutionException execution of the main class or one of the
-     *             threads it generated failed.
-     * @throws MojoFailureException something bad happened...
+     *                                threads it generated failed.
+     * @throws MojoFailureException   something bad happened...
      */
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         final Path localRepositoryPath = Paths.get(localRepository);
         final Path outputPath = outputDir.toPath();
         try (GavCqCatalog camelCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camel, camelCatalogVersion);
-                GavCqCatalog camelQuarkusCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camelQuarkus, camelQuarkusCatalogVersion)) {
+                GavCqCatalog camelQuarkusCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camelQuarkus,
+                        camelQuarkusCatalogVersion)) {
             CqCatalog.kinds().forEach(kind -> {
                 final Path outputFile = outputPath.resolve(kind.name() + "s.csv");
                 try (Writer out = Files.newBufferedWriter(outputFile, StandardCharsets.UTF_8)) {
-                    out.write("Priority\tGA product target\tTP2 done\tName\tScheme\tartifactId\tKind\tDeprecated\tCQ community\tProduct\tCommunity issue\tIntegration test\tSprint\tComment\n");
+                    out.write(
+                            "Priority\tGA product target\tTP2 done\tName\tScheme\tartifactId\tKind\tDeprecated\tCQ community\tProduct\tCommunity issue\tIntegration test\tSprint\tComment\n");
                     camelCatalog.models(kind)
                             .filter(CqCatalog::isFirstScheme)
                             .sorted(CqCatalog.compareArtifactId().thenComparing(BaseModel.compareTitle()))

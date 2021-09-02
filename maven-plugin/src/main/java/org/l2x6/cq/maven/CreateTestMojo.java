@@ -16,17 +16,14 @@
  */
 package org.l2x6.cq.maven;
 
+import freemarker.template.Configuration;
 import java.io.File;
-import java.nio.charset.Charset;
 import java.nio.file.Path;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-
 import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.maven.model.Model;
-import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
@@ -34,13 +31,11 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.l2x6.cq.common.CqCatalog;
 import org.l2x6.cq.common.CqCatalog.Flavor;
+import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.maven.utils.Gavtcs;
 import org.l2x6.maven.utils.PomTransformer;
 import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.maven.utils.PomTransformer.Transformation;
-import org.l2x6.cq.common.CqCommonUtils;
-
-import freemarker.template.Configuration;
 
 /**
  * Scaffolds a new test.
@@ -349,7 +344,8 @@ public class CreateTestMojo extends AbstractExtensionListMojo {
         final Path itestPomPath = itestDir.resolve("pom.xml");
         evalTemplate(cfg, "integration-test-pom.xml", itestPomPath, model.build());
 
-        final Set<String> extensionArtifactIds = findExtensions().map(e -> "camel-quarkus-" + e.getArtifactIdBase()).collect(Collectors.toSet());
+        final Set<String> extensionArtifactIds = findExtensions().map(e -> "camel-quarkus-" + e.getArtifactIdBase())
+                .collect(Collectors.toSet());
         new PomTransformer(itestPomPath, getCharset(), simpleElementWhitespace)
                 .transform(
                         Transformation.updateMappedDependencies(
