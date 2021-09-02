@@ -25,25 +25,18 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.shared.model.fileset.FileSet;
 import org.junit.jupiter.api.Test;
-import org.l2x6.cq.maven.CqUtils;
-import org.l2x6.cq.maven.ExtensionDir;
-import org.l2x6.cq.maven.FormatPomsMojo;
 
 public class FormatMojoTest {
 
     private static FormatPomsMojo initMojo(final Path projectDir) throws IOException {
         final FormatPomsMojo mojo = new FormatPomsMojo();
         final Path basePath = projectDir.toAbsolutePath().normalize();
-        mojo.basedir = basePath.toFile();
+        mojo.multiModuleProjectDirectory = basePath.toFile();
         mojo.sortDependencyManagementPaths = Collections.emptyList();
         mojo.sortModulesPaths = Collections.emptyList();
         mojo.updateVirtualDependencies = Collections.emptyList();
         mojo.updateVirtualDependenciesAllExtensions = Collections.emptyList();
-        mojo.extensionDirs = Collections.emptyList();
-        mojo.skipArtifactIds = Collections.emptySet();
         mojo.encoding = CqUtils.DEFAULT_ENCODING;
-        mojo.extensionDirs = Collections.singletonList(new ExtensionDir("extensions", "camel-quarkus-"));
-
         return mojo;
     }
 
@@ -53,13 +46,13 @@ public class FormatMojoTest {
         final String testName = "remove-empty-application-properties";
         final FormatPomsMojo mojo = initMojo(TestUtils.createProjectFromTemplate("create-extension-pom", testName));
         final FileSet fileSet = new FileSet();
-        fileSet.setDirectory(mojo.basedir.toString() + "/integration-tests");
+        fileSet.setDirectory(mojo.multiModuleProjectDirectory.toString() + "/integration-tests");
         fileSet.addInclude("*/src/main/resources/application.properties");
         mojo.removeEmptyApplicationProperties = fileSet;
         mojo.execute();
 
         TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
-                mojo.basedir.toPath());
+                mojo.multiModuleProjectDirectory.toPath());
 
     }
 

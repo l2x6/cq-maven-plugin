@@ -17,11 +17,18 @@
 package org.l2x6.cq.maven;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class PatternSet {
+
+    private static final PatternSet EMPTY = new PatternSet(Collections.emptyList());
+    public static PatternSet empty() {
+        return EMPTY;
+    }
+
     private final List<Pattern> patterns;
 
     PatternSet(Collection<String> rawPatterns) {

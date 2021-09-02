@@ -45,15 +45,12 @@ import java.nio.file.Files;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -73,13 +70,6 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 public class PomSorter {
-
-    public static final List<ExtensionDir> CQ_EXTENSIONS_DIRECTORIES = Collections.unmodifiableList(Arrays.asList(
-            new ExtensionDir("extensions", "camel-quarkus-"),
-            new ExtensionDir("extensions-core", "camel-quarkus-"),
-            new ExtensionDir("extensions-jvm", "camel-quarkus-"),
-            new ExtensionDir("extensions-support", "camel-quarkus-support-"),
-            new ExtensionDir("integration-tests/support", "camel-quarkus-integration-test-support-")));
 
     public static void sortDependencyManagement(Path baseDir, List<String> pomPaths) {
         for (String pomPath : pomPaths) {
@@ -153,52 +143,40 @@ public class PomSorter {
 
         final Pattern sortSpanPattern = Pattern.compile("(a\\.\\.z[^>]*>)(.*)(\\r?\\n)([ ]*)</modules>", Pattern.DOTALL);
 
-        final Matcher matcher = sortSpanPattern.matcher(xmlSource);
-        if (matcher.find()) {
-            final String modulesString = matcher.group(2);
-            final String eol = matcher.group(3);
-            final String indent = matcher.group(4);
-            final String[] modulesArray = modulesString.split("[\r\n]+ *");
-            final Map<String, String> sortedModules = new TreeMap<String, String>();
-            for (String module : modulesArray) {
-                module = module.trim();
-                if (!module.isEmpty()) {
-                    String key = module
-                            .replaceAll(">[ \n\r\t]+", ">")
-                            .replaceAll("[ \n\r\t]+<", "<");
-                    key = key.replaceAll("<[^>]+>", "");
-                    if (!key.isEmpty()) {
-                        sortedModules.put(key, module);
-                    }
+        Matcher matcher = sortSpanPattern.matcher(xmlSource);
+        if (!matcher.find()) {
+            final Pattern fallbackSortSpanPattern = Pattern.compile("(<modules>)(.*)(\\r?\\n)([ ]*)</modules>", Pattern.DOTALL);
+            matcher = fallbackSortSpanPattern.matcher(xmlSource);
+            if (!matcher.find()) {
+                throw new RuntimeException("Could not match " + sortSpanPattern + " nor "+ fallbackSortSpanPattern +" in " + pomXmlPath);
+            }
+        }
+        final String modulesString = matcher.group(2);
+        final String eol = matcher.group(3);
+        final String indent = matcher.group(4);
+        final String[] modulesArray = modulesString.split("[\r\n]+ *");
+        final Map<String, String> sortedModules = new TreeMap<String, String>();
+        for (String module : modulesArray) {
+            module = module.trim();
+            if (!module.isEmpty()) {
+                String key = module
+                        .replaceAll(">[ \n\r\t]+", ">")
+                        .replaceAll("[ \n\r\t]+<", "<");
+                key = key.replaceAll("<[^>]+>", "");
+                if (!key.isEmpty()) {
+                    sortedModules.put(key, module);
                 }
             }
-
-            final StringBuilder result = new StringBuilder(xmlSource);
-            result.setLength(matcher.end(1));
-            for (String module : sortedModules.values()) {
-                result.append(eol).append(indent).append(indent).append(module);
-            }
-            result.append(eol).append(indent).append(xmlSource.substring(matcher.end(4)));
-
-            write(pomXmlPath, result.toString());
-        } else {
-            throw new RuntimeException("Could not match " + sortSpanPattern + " in " + pomXmlPath);
         }
-    }
 
-    public static Set<String> findExtensionArtifactIds(
-            Path baseDir,
-            List<ExtensionDir> extensionDirs,
-            Set<String> skipArtifactIds) {
-        final Set<String> extensionArtifactIds = new TreeSet<>();
-        for (ExtensionDir extDir : extensionDirs) {
-            final Path absPath = baseDir.resolve(extDir.getPath());
-            CqUtils.findExtensionArtifactIdBases(absPath)
-                    .map(artifactIdBase -> extDir.getArtifactIdPrefix() + artifactIdBase)
-                    .filter(artifactId -> !skipArtifactIds.contains(artifactId))
-                    .forEach(extensionArtifactIds::add);
+        final StringBuilder result = new StringBuilder(xmlSource);
+        result.setLength(matcher.end(1));
+        for (String module : sortedModules.values()) {
+            result.append(eol).append(indent).append(indent).append(module);
         }
-        return extensionArtifactIds;
+        result.append(eol).append(indent).append(xmlSource.substring(matcher.end(4)));
+
+        write(pomXmlPath, result.toString());
     }
 
     static void write(final Path path, final String content) {

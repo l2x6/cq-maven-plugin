@@ -34,6 +34,7 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -46,6 +47,7 @@ import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.maven.utils.Ga;
 import org.l2x6.maven.utils.Gavtcs;
+import org.l2x6.maven.utils.MavenSourceTree;
 import org.l2x6.maven.utils.PomTransformer;
 import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.maven.utils.PomTransformer.Transformation;
@@ -58,19 +60,11 @@ import org.w3c.dom.Document;
  * @since 0.1.0
  */
 @Mojo(name = "format", requiresProject = true, inheritByDefault = false)
-public class FormatPomsMojo extends AbstractMojo {
+public class FormatPomsMojo extends AbstractExtensionListMojo {
     public static final String VIRTUAL_DEPS_INITIAL_COMMENT = " The following dependencies guarantee that this module is built after them. You can update them by running `mvn process-resources -Pformat -N` from the source tree root directory ";
     public static final String CQ_SORT_MODULES_PATHS = "extensions/pom.xml,integration-tests/pom.xml";
     public static final String CQ_SORT_DEPENDENCY_MANAGEMENT_PATHS = "poms/bom/pom.xml,poms/bom-deployment/pom.xml";
     public static final String CQ_UPDATE_VIRTUAL_DEPENDENCIES_DIRS = "examples,integration-tests";
-
-    /**
-     * Directory where the changes should be performed. Default is the current directory of the current Java process.
-     *
-     * @since 0.0.1
-     */
-    @Parameter(property = "cq.basedir", defaultValue = "${project.basedir}")
-    File basedir;
 
     /**
      * A list of {@code pom.xml} file paths relative to the current module's {@code baseDir} in which the
@@ -113,38 +107,12 @@ public class FormatPomsMojo extends AbstractMojo {
     List<DirectoryScanner> updateVirtualDependenciesAllExtensions;
 
     /**
-     * A list of directory paths relative to the current module's {@code baseDir} containing Quarkus extensions.
-     *
-     * @since 0.0.1
-     */
-    @Parameter(property = "cq.extensionDirs")
-    List<ExtensionDir> extensionDirs;
-
-    /**
-     * A set of artifactIdBases that are nor extensions and should not be processed by this mojo.
-     *
-     * @since 0.18.0
-     */
-    @Parameter(property = "cq.skipArtifactIdBases")
-    Set<String> skipArtifactIdBases;
-    Set<String> skipArtifactIds;
-
-    /**
      * Skip the execution of this mojo.
      *
      * @since 0.0.1
      */
     @Parameter(property = "cq.format.skip", defaultValue = "false")
     boolean skip;
-
-    /**
-     * Encoding to read and write files in the current source tree
-     *
-     * @since 0.18.0
-     */
-    @Parameter(defaultValue = CqUtils.DEFAULT_ENCODING, required = true, property = "cq.encoding")
-    String encoding;
-    Charset charset;
 
     /**
      * A FileSet to select `application.properties` files that should be removed if empty.
@@ -180,15 +148,7 @@ public class FormatPomsMojo extends AbstractMojo {
             getLog().info("Skipping as requested by the user");
             return;
         }
-        charset = Charset.forName(encoding);
-        final Path basePath = basedir.toPath();
-
-        if (extensionDirs == null || extensionDirs.isEmpty()) {
-            extensionDirs = PomSorter.CQ_EXTENSIONS_DIRECTORIES;
-        }
-        skipArtifactIds = skipArtifactIdBases != null
-                ? skipArtifactIdBases.stream().map(base -> "camel-quarkus-" + base).collect(Collectors.toSet())
-                : Collections.emptySet();
+        final Path basePath = multiModuleProjectDirectory.toPath();
 
         PomSorter.sortDependencyManagement(basePath, sortDependencyManagementPaths);
         PomSorter.sortModules(basePath, sortModulesPaths);
@@ -206,7 +166,7 @@ public class FormatPomsMojo extends AbstractMojo {
 
                 for (String includedFile : includedFiles) {
                     final Path pomPath = dir.resolve(includedFile);
-                    Model pom = CqCommonUtils.readPom(pomPath, charset);
+                    Model pom = CqCommonUtils.readPom(pomPath, getCharset());
                     pom.getDependencies().stream()
                             .map(dep -> new Gavtcs(
                                     dep.getGroupId(),
@@ -216,8 +176,8 @@ public class FormatPomsMojo extends AbstractMojo {
                                     dep.getClassifier(),
                                     dep.getScope(),
                                     dep.getExclusions().stream()
-                                    .map(e -> new Ga(e.getGroupId(), e.getArtifactId()))
-                                    .collect(Collectors.toList())))
+                                            .map(e -> new Ga(e.getGroupId(), e.getArtifactId()))
+                                            .collect(Collectors.toList())))
                             .filter(gavtcs -> !gavtcs.isVirtual())
                             .forEach(allDeps::add);
                 }
@@ -240,33 +200,38 @@ public class FormatPomsMojo extends AbstractMojo {
                         .forEach(transformers::add);
 
                 final Path destPath = Paths.get(pomSet.getDestinationPom());
-                new PomTransformer(destPath, charset, simpleElementWhitespace).transform(transformers);
+                new PomTransformer(destPath, getCharset(), simpleElementWhitespace).transform(transformers);
 
             }
         }
 
-        final Set<Gavtcs> allExtensions = PomSorter.findExtensionArtifactIds(basePath, extensionDirs, skipArtifactIds).stream()
-                .map(artifactId -> new Gavtcs("org.apache.camel.quarkus", artifactId, null))
+        final Set<Gavtcs> allExtensions = findExtensions()
+                .map(extensionModule -> new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-" + extensionModule.getArtifactIdBase(), null))
                 .collect(Collectors.toSet());
+        final MavenSourceTree tree = getTree();
         for (DirectoryScanner scanner : updateVirtualDependencies) {
             scanner.scan();
             final Path base = scanner.getBasedir().toPath();
             for (String pomXmlRelPath : scanner.getIncludedFiles()) {
                 final Path pomXmlPath = base.resolve(pomXmlRelPath);
-                new PomTransformer(pomXmlPath, charset, simpleElementWhitespace)
-                        .transform(
-                                Transformation.updateMappedDependencies(
-                                        Gavtcs::isVirtualDeployment,
-                                        Gavtcs.deploymentVitualMapper(gavtcs -> allExtensions.contains(gavtcs)),
-                                        Gavtcs.scopeAndTypeFirstComparator(),
-                                        VIRTUAL_DEPS_INITIAL_COMMENT),
-                                Transformation.keepFirst(virtualDepsCommentXPath(), true),
-                                Transformation.removeProperty(true, true, "mvnd.builder.rule"),
-                                Transformation.removeContainerElementIfEmpty(true, true, true, "properties"));
+                if (tree.getModulesByPath().keySet().contains(pomXmlRelPath)) {
+                    /* Ignore unlinked modules */
+                    new PomTransformer(pomXmlPath, getCharset(), simpleElementWhitespace)
+                    .transform(
+                            Transformation.updateMappedDependencies(
+                                    Gavtcs::isVirtualDeployment,
+                                    Gavtcs.deploymentVitualMapper(gavtcs -> allExtensions.contains(gavtcs)),
+                                    Gavtcs.scopeAndTypeFirstComparator(),
+                                    VIRTUAL_DEPS_INITIAL_COMMENT),
+                            Transformation.keepFirst(virtualDepsCommentXPath(), true),
+                            Transformation.removeProperty(true, true, "mvnd.builder.rule"),
+                            Transformation.removeContainerElementIfEmpty(true, true, true, "properties"));
+                }
             }
         }
 
-        updateVirtualDependenciesAllExtensions(updateVirtualDependenciesAllExtensions, allExtensions, charset, simpleElementWhitespace);
+        updateVirtualDependenciesAllExtensions(updateVirtualDependenciesAllExtensions, allExtensions, getCharset(),
+                simpleElementWhitespace);
 
         if (removeEmptyApplicationProperties != null) {
             final FileSetManager fileSetManager = new FileSetManager();

@@ -48,7 +48,7 @@ import freemarker.template.Configuration;
  * @since 0.28.0
  */
 @Mojo(name = "new-test", requiresProject = true, inheritByDefault = false)
-public class CreateTestMojo extends AbstractMojo {
+public class CreateTestMojo extends AbstractExtensionListMojo {
 
     static final String QUARKUS_VERSION_PROP = "quarkus.version";
 
@@ -71,13 +71,6 @@ public class CreateTestMojo extends AbstractMojo {
 
     static final String CQ_ADDITIONAL_RUNTIME_DEPENDENCIES = "org.apache.camel:camel-@{cq.artifactIdBase}:@{$}{camel.version}";
 
-    /**
-     * Directory where the changes should be performed. Default is the current directory of the current Java process.
-     *
-     * @since 0.1.0
-     */
-    @Parameter(property = "cq.basedir", defaultValue = "${project.basedir}")
-    File basedir;
     protected Path basePath;
 
     /**
@@ -200,14 +193,6 @@ public class CreateTestMojo extends AbstractMojo {
     String templatesUriBase;
 
     /**
-     * Encoding to read and write files in the current source tree
-     *
-     * @since 0.0.1
-     */
-    @Parameter(defaultValue = CqUtils.DEFAULT_ENCODING, required = true, property = "cq.encoding")
-    String encoding;
-
-    /**
      * The directory where the extension's itest should be created. The default value depends on
      * {@link #nativeSupported}: if
      * {@link #nativeSupported} is {@code true}, the default is {@value #CQ_INTEGRATION_TESTS_PATH} otherwise the
@@ -231,23 +216,6 @@ public class CreateTestMojo extends AbstractMojo {
     boolean nativeSupported;
 
     /**
-     * A list of directory paths relative to the current module's {@code baseDir} containing Quarkus extensions.
-     *
-     * @since 0.0.1
-     */
-    @Parameter(required = true)
-    List<ExtensionDir> extensionDirs;
-
-    /**
-     * A set of artifactIdBases that are nor extensions and should not be processed by this mojo.
-     *
-     * @since 0.18.0
-     */
-    @Parameter(property = "cq.skipArtifactIdBases")
-    Set<String> skipArtifactIdBases;
-    Set<String> skipArtifactIds;
-
-    /**
      * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
      *
      * @since 0.38.0
@@ -258,28 +226,19 @@ public class CreateTestMojo extends AbstractMojo {
     List<ArtifactModel<?>> models;
     ArtifactModel<?> model;
 
-    Charset charset;
-
     Model extensionsModel;
     Path extensionsPomPath;
     Configuration cfg;
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
-        basePath = basedir.toPath().toAbsolutePath().normalize();
+        basePath = getRootModuleDirectory();
         if (extensionsDir == null) {
             extensionsDir = nativeSupported ? basePath.resolve(CQ_EXTENSIONS_DIR).toFile()
                     : basePath.resolve(CQ_EXTENSIONS_JVM_DIR).toFile();
         }
         extensionsPath = extensionsDir.toPath();
-        if (extensionDirs == null || extensionDirs.isEmpty()) {
-            extensionDirs = PomSorter.CQ_EXTENSIONS_DIRECTORIES;
-        }
-        skipArtifactIds = skipArtifactIdBases != null
-                ? skipArtifactIdBases.stream().map(base -> "camel-quarkus-" + base).collect(Collectors.toSet())
-                : Collections.emptySet();
 
-        charset = Charset.forName(encoding);
         final CqCatalog cqCatalog = new CqCatalog(Flavor.camel);
         this.models = cqCatalog.filterModels(artifactIdBase).collect(Collectors.toList());
         final List<ArtifactModel<?>> primaryModels = cqCatalog.primaryModel(artifactIdBase);
@@ -308,7 +267,7 @@ public class CreateTestMojo extends AbstractMojo {
         }
 
         extensionsPomPath = this.extensionsPath.resolve("pom.xml");
-        extensionsModel = CqCommonUtils.readPom(extensionsPomPath, charset);
+        extensionsModel = CqCommonUtils.readPom(extensionsPomPath, getCharset());
         this.groupId = getGroupId(extensionsModel);
         this.version = CqUtils.getVersion(extensionsModel);
 
@@ -328,7 +287,7 @@ public class CreateTestMojo extends AbstractMojo {
     }
 
     PomTransformer pomTransformer(Path basePomXml) {
-        return new PomTransformer(basePomXml, charset, simpleElementWhitespace);
+        return new PomTransformer(basePomXml, getCharset(), simpleElementWhitespace);
     }
 
     TemplateParams.Builder getTemplateParams() {
@@ -370,7 +329,7 @@ public class CreateTestMojo extends AbstractMojo {
             itestDir = itestParentPath.getParent().resolve("integration-test");
         }
 
-        final Model itestParent = CqCommonUtils.readPom(itestParentPath, charset);
+        final Model itestParent = CqCommonUtils.readPom(itestParentPath, getCharset());
         if (!"pom".equals(itestParent.getPackaging())) {
             throw new RuntimeException(
                     "Can add an extension integration test only under a project with packagin 'pom'; found: "
@@ -390,8 +349,8 @@ public class CreateTestMojo extends AbstractMojo {
         final Path itestPomPath = itestDir.resolve("pom.xml");
         evalTemplate(cfg, "integration-test-pom.xml", itestPomPath, model.build());
 
-        final Set<String> extensionArtifactIds = PomSorter.findExtensionArtifactIds(basePath, extensionDirs, skipArtifactIds);
-        new PomTransformer(itestPomPath, charset, simpleElementWhitespace)
+        final Set<String> extensionArtifactIds = findExtensions().map(e -> "camel-quarkus-" + e.getArtifactIdBase()).collect(Collectors.toSet());
+        new PomTransformer(itestPomPath, getCharset(), simpleElementWhitespace)
                 .transform(
                         Transformation.updateMappedDependencies(
                                 Gavtcs::isVirtualDeployment,

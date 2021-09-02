@@ -19,12 +19,10 @@ package org.l2x6.cq.maven;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.camel.tooling.model.BaseModel;
+import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
@@ -39,7 +37,7 @@ import org.l2x6.cq.common.CqCatalog.GavCqCatalog;
  * @since 0.3.0
  */
 @Mojo(name = "whatsnew", threadSafe = true, requiresProject = false)
-public class VersionReportMojo extends AbstractExtensionListMojo {
+public class VersionReportMojo extends AbstractMojo {
 
     /**
      * Two Camel Quarkus versions to compare, delimited by {@code ..}, e.g. {@code -Dcq.versions=1.0.0.M6..1.0.0.M7}.
@@ -54,9 +52,6 @@ public class VersionReportMojo extends AbstractExtensionListMojo {
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
-        if (skipArtifactIdBases == null) {
-            skipArtifactIdBases = Collections.emptySet();
-        }
         final Path localRepositoryPath = Paths.get(localRepository);
         final String delim = "..";
         final int delimPos = versions.indexOf(delim);
@@ -65,7 +60,6 @@ public class VersionReportMojo extends AbstractExtensionListMojo {
         }
         final String baselineVersion = versions.substring(0, delimPos);
         final String reportVersion = versions.substring(delimPos + delim.length());
-        final List<String> versions = Arrays.asList(baselineVersion, reportVersion);
         final StringBuilder counts = new StringBuilder();
         final StringBuilder details = new StringBuilder();
 

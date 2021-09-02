@@ -210,10 +210,10 @@ public class CreateExtensionMojo extends CreateTestMojo {
 
         generateItest(cfg, templateParams);
 
-        final Set<Gavtcs> allExtensions = PomSorter.findExtensionArtifactIds(basePath, extensionDirs, skipArtifactIds).stream()
-                .map(artifactId -> new Gavtcs("org.apache.camel.quarkus", artifactId, null))
+        final Set<Gavtcs> allExtensions = findExtensions()
+                .map(e -> new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-" + e.getArtifactIdBase(), null))
                 .collect(Collectors.toSet());
-        FormatPomsMojo.updateVirtualDependenciesAllExtensions(updateVirtualDependenciesAllExtensions, allExtensions, charset, simpleElementWhitespace);
+        FormatPomsMojo.updateVirtualDependenciesAllExtensions(updateVirtualDependenciesAllExtensions, allExtensions, getCharset(), simpleElementWhitespace);
 
     }
 

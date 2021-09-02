@@ -19,7 +19,6 @@ package org.l2x6.cq.maven;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,8 +26,6 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.apache.maven.model.Build;
 import org.apache.maven.model.Dependency;
@@ -39,9 +36,6 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.project.MavenProject;
 import org.junit.jupiter.api.Test;
 import org.l2x6.cq.common.CqCommonUtils;
-import org.l2x6.cq.maven.CqUtils;
-import org.l2x6.cq.maven.CreateExtensionMojo;
-import org.l2x6.cq.maven.ExtensionDir;
 import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
 
 public class CreateExtensionMojoTest {
@@ -50,7 +44,7 @@ public class CreateExtensionMojoTest {
         final CreateExtensionMojo mojo = new CreateExtensionMojo();
         mojo.project = new MavenProject();
         final Path basePath = projectDir.toAbsolutePath().normalize();
-        mojo.basedir = basePath.toFile();
+        mojo.multiModuleProjectDirectory = basePath.toFile();
         mojo.nativeSupported = true;
 
         final Path pom = projectDir.resolve("pom.xml");
@@ -104,7 +98,6 @@ public class CreateExtensionMojoTest {
         mojo.extensionsDir = basePath.resolve(CreateExtensionMojo.CQ_EXTENSIONS_DIR).toFile();
         mojo.javaPackageInfix = CreateExtensionMojo.CQ_JAVA_PACKAGE_INFIX;
         mojo.additionalRuntimeDependencies = Arrays.asList(CreateExtensionMojo.CQ_ADDITIONAL_RUNTIME_DEPENDENCIES.split(","));
-        mojo.extensionDirs = Collections.singletonList(new ExtensionDir("extensions", "camel-quarkus-"));
         mojo.createConvenienceDirs = false;
         mojo.simpleElementWhitespace = SimpleElementWhitespace.EMPTY;
 
@@ -120,7 +113,7 @@ public class CreateExtensionMojoTest {
         mojo.execute();
 
         TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
-                mojo.basedir.toPath());
+                mojo.getRootModuleDirectory());
     }
 
     @Test
@@ -133,7 +126,7 @@ public class CreateExtensionMojoTest {
         mojo.execute();
 
         TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
-                mojo.basedir.toPath());
+                mojo.getRootModuleDirectory());
     }
 
     @Test
@@ -146,7 +139,7 @@ public class CreateExtensionMojoTest {
         mojo.execute();
 
         TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
-                mojo.basedir.toPath());
+                mojo.getRootModuleDirectory());
     }
 
 
@@ -161,7 +154,7 @@ public class CreateExtensionMojoTest {
         mojo.execute();
 
         TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/"+ testName),
-                mojo.basedir.toPath());
+                mojo.getRootModuleDirectory());
     }
 
     @Test
@@ -173,7 +166,7 @@ public class CreateExtensionMojoTest {
         mojo.execute();
 
         TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName ),
-                mojo.basedir.toPath());
+                mojo.getRootModuleDirectory());
     }
 
     @Test
@@ -186,7 +179,7 @@ public class CreateExtensionMojoTest {
         mojo.execute();
 
         TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName ),
-                mojo.basedir.toPath());
+                mojo.getRootModuleDirectory());
     }
 
     @Test
@@ -198,7 +191,7 @@ public class CreateExtensionMojoTest {
         mojo.execute();
 
         TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
-                mojo.basedir.toPath());
+                mojo.getRootModuleDirectory());
     }
 
 
@@ -212,7 +205,7 @@ public class CreateExtensionMojoTest {
         mojo.execute();
 
         TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
-                mojo.basedir.toPath());
+                mojo.getRootModuleDirectory());
     }
     @Test
     void getPackage() throws IOException {

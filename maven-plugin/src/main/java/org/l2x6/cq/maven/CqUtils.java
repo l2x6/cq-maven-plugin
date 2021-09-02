@@ -17,17 +17,14 @@
 package org.l2x6.cq.maven;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.Writer;
-import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Properties;
 import java.util.Set;
 import java.util.Stack;
 import java.util.function.Consumer;
@@ -38,9 +35,14 @@ import java.util.stream.Stream;
 import javax.lang.model.SourceVersion;
 
 import org.apache.camel.tooling.model.ArtifactModel;
+import org.apache.maven.execution.MavenSession;
+import org.apache.maven.execution.ProjectDependencyGraph;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.logging.Log;
+import org.apache.maven.project.MavenProject;
 import org.l2x6.cq.maven.TemplateParams.ExtensionStatus;
+import org.l2x6.maven.utils.MavenSourceTree;
+import org.l2x6.maven.utils.MavenSourceTree.Module;
 
 import freemarker.cache.ClassTemplateLoader;
 import freemarker.cache.FileTemplateLoader;
@@ -89,27 +91,20 @@ public class CqUtils {
         }
     }
 
-    public static Stream<String> findExtensionArtifactIdBases(Path extensionDir) {
-        try {
-            return Files.list(extensionDir)
-                    .filter(path -> Files.isDirectory(path)
-                            && Files.exists(path.resolve("pom.xml"))
-                            && Files.exists(path.resolve("runtime")))
-                    .map(dir -> dir.getFileName().toString());
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public static Stream<ExtensionModule> findExtensions(Stream<Path> extensionDirectories,
-            Predicate<String> artifactIdFilter) {
-        return extensionDirectories
-                .map(Path::toAbsolutePath)
-                .map(Path::normalize)
-                .flatMap(extDir -> CqUtils.findExtensionArtifactIdBases(extDir)
-                        .filter(artifactIdFilter)
-                        .map(artifactIdBase -> new ExtensionModule(extDir.resolve(artifactIdBase), artifactIdBase))
-                        .sorted());
+    public static Stream<ExtensionModule> findExtensions(Path basePath, Collection<Module> modules, Predicate<String> artifactIdBaseFilter) {
+        return modules.stream()
+                .filter(p -> p.getGav().getArtifactId().asConstant().endsWith("-deployment"))
+                .map(p -> {
+                    final Path extensionDir = basePath.resolve(p.getPomPath()).getParent().getParent().toAbsolutePath().normalize();
+                    final String deploymentArtifactId = p.getGav().getArtifactId().asConstant();
+                    if (!deploymentArtifactId.startsWith("camel-quarkus-")) {
+                        throw new IllegalStateException("Should start with 'camel-quarkus-': " + deploymentArtifactId);
+                    }
+                    final String artifactIdBase = deploymentArtifactId.substring("camel-quarkus-".length(), deploymentArtifactId.length() - "-deployment".length());
+                    return new ExtensionModule(extensionDir, artifactIdBase);
+                })
+                .filter(e -> artifactIdBaseFilter.test(e.getArtifactIdBase()))
+                .sorted();
     }
 
     public static Configuration getTemplateConfig(Path basePath, String defaultUriBase, String templatesUriBase,
@@ -137,7 +132,6 @@ public class CqUtils {
     public static Path extensionDocPage(Path repoRootDir, String artifactIdBase) {
         return repoRootDir.resolve("docs/modules/ROOT/pages/reference/extensions/" + artifactIdBase + ".adoc");
     }
-
 
     public static void evalTemplate(Configuration cfg, String templateUri, Path dest, TemplateParams model,
             Consumer<String> log) {
@@ -284,6 +278,5 @@ public class CqUtils {
                 .map(s -> SourceVersion.isKeyword(s) ? s + "_" : s) //
                 .collect(Collectors.joining("."));
     }
-
 
 }

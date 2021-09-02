@@ -23,10 +23,10 @@ public class ExtensionModule implements Comparable<ExtensionModule> {
     private final Path extensionDir;
     private final String artifactIdBase;
 
-    public ExtensionModule(Path extensionDir, String artifactIdPrefix) {
+    public ExtensionModule(Path extensionDir, String artifactIdBase) {
         super();
         this.extensionDir = extensionDir;
-        this.artifactIdBase = artifactIdPrefix;
+        this.artifactIdBase = artifactIdBase;
     }
 
     /**
