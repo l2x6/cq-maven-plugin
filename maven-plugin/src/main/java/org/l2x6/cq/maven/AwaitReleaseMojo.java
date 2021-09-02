@@ -75,7 +75,7 @@ public class AwaitReleaseMojo extends AbstractExtensionListMojo {
      *
      * @since 0.40.0
      */
-    @Parameter(property = "cq.groupId", defaultValue = "org.apache.camel.quarkus", required = true)
+    @Parameter(property = "cq.groupId", defaultValue = "${project.groupId}", required = true)
     String groupId;
 
     @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
