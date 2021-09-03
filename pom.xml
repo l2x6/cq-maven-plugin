@@ -400,6 +400,8 @@ limitations under the License.</inlineHeader>
                         <goals>deploy site</goals>
                         <releaseProfiles>release</releaseProfiles>
                         <autoVersionSubmodules>true</autoVersionSubmodules>
+                        <!-- Both release:prepare and release:perform config -->
+                        <arguments>-DskipTests -Dformatter.skip -Dimpsort.skip</arguments>
                     </configuration>
                 </plugin>
 
