@@ -1,0 +1,11 @@
+{
+    "extensions": {
+        "camel-quarkus-avro": {
+            "jvmSupportedSince": "2.1.0",
+            "nativeSupportedSince": "2.1.0"
+        }
+    },
+    "additionalProductizedArtifacts": [
+        "camel-quarkus-catalog"
+    ]
+}

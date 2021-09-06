@@ -17,8 +17,11 @@
 package org.l2x6.cq.maven.prod;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.junit.jupiter.api.Test;
@@ -33,16 +36,32 @@ public class ProdExcludesMojoTest {
         mojo.basedir = basePath.toFile();
         mojo.encoding = "utf-8";
         mojo.productJson = basePath.resolve("product/src/main/resources/camel-quarkus-product-source.json").toFile();
-        mojo.unlinkExcludes = true;
         mojo.simpleElementWhitespace = SimpleElementWhitespace.SPACE;
         return mojo;
     }
 
     @Test
-    void prodeExcludes() throws MojoExecutionException, MojoFailureException,
+    void prodExcludes() throws MojoExecutionException, MojoFailureException,
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
         final String testName = "basic";
         final ProdExcludesMojo mojo = initMojo(TestUtils.createProjectFromTemplate("prod-excludes", testName));
+        mojo.execute();
+
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName), mojo.basedir.toPath());
+    }
+
+    @Test
+    void newSupportedExtension() throws MojoExecutionException, MojoFailureException,
+            IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
+        final String testName = "new-supported-extension";
+        final ProdExcludesMojo mojo = initMojo(TestUtils.createProjectFromTemplate("../expected/basic", testName));
+
+        final Path dest = mojo.productJson.toPath();
+        try (InputStream in = getClass().getClassLoader()
+                .getResourceAsStream("camel-quarkus-product-source-with-new-extension.json")) {
+            Files.copy(in, dest, StandardCopyOption.REPLACE_EXISTING);
+        }
+
         mojo.execute();
 
         TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName), mojo.basedir.toPath());
