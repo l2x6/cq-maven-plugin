@@ -50,7 +50,6 @@ import org.l2x6.maven.utils.PomTransformer.Transformation;
  */
 @Mojo(name = "format", requiresProject = true, inheritByDefault = false)
 public class FormatPomsMojo extends AbstractExtensionListMojo {
-    public static final String VIRTUAL_DEPS_INITIAL_COMMENT = " The following dependencies guarantee that this module is built after them. You can update them by running `mvn process-resources -Pformat -N` from the source tree root directory ";
     public static final String CQ_SORT_MODULES_PATHS = "extensions/pom.xml,integration-tests/pom.xml";
     public static final String CQ_SORT_DEPENDENCY_MANAGEMENT_PATHS = "poms/bom/pom.xml,poms/bom-deployment/pom.xml";
     public static final String CQ_UPDATE_VIRTUAL_DEPENDENCIES_DIRS = "examples,integration-tests";
@@ -212,8 +211,8 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
                                             Gavtcs::isVirtualDeployment,
                                             Gavtcs.deploymentVitualMapper(gavtcs -> allExtensions.contains(gavtcs)),
                                             Gavtcs.scopeAndTypeFirstComparator(),
-                                            VIRTUAL_DEPS_INITIAL_COMMENT),
-                                    Transformation.keepFirst(virtualDepsCommentXPath(), true),
+                                            CqCommonUtils.VIRTUAL_DEPS_INITIAL_COMMENT),
+                                    Transformation.keepFirst(CqCommonUtils.virtualDepsCommentXPath(), true),
                                     Transformation.removeProperty(true, true, "mvnd.builder.rule"),
                                     Transformation.removeContainerElementIfEmpty(true, true, true, "properties"));
                 }
@@ -241,10 +240,6 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
 
     }
 
-    public static String virtualDepsCommentXPath() {
-        return "//comment()[contains(.,'" + FormatPomsMojo.VIRTUAL_DEPS_INITIAL_COMMENT + "')]";
-    }
-
     public static void updateVirtualDependenciesAllExtensions(List<DirectoryScanner> updateVirtualDependenciesAllExtensions,
             final Set<Gavtcs> allExtensions, Charset charset, SimpleElementWhitespace simpleElementWhitespace) {
         if (updateVirtualDependenciesAllExtensions != null) {
@@ -256,15 +251,7 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
                 final Path base = scanner.getBasedir().toPath();
                 for (String pomXmlRelPath : scanner.getIncludedFiles()) {
                     final Path pomXmlPath = base.resolve(pomXmlRelPath);
-                    new PomTransformer(pomXmlPath, charset, simpleElementWhitespace)
-                            .transform(
-                                    Transformation.updateDependencySubset(
-                                            gavtcs -> gavtcs.isVirtual(),
-                                            allVirtualExtensions,
-                                            Gavtcs.scopeAndTypeFirstComparator(),
-                                            VIRTUAL_DEPS_INITIAL_COMMENT),
-                                    Transformation.removeProperty(true, true, "mvnd.builder.rule"),
-                                    Transformation.removeContainerElementIfEmpty(true, true, true, "properties"));
+                    CqCommonUtils.updateVirtualDependencies(charset, simpleElementWhitespace, allVirtualExtensions, pomXmlPath);
                 }
             }
         }

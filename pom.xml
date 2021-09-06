@@ -81,7 +81,7 @@
         <maven-project.version>3.0-alpha-2</maven-project.version>
         <maven.plugin-tools.version>3.5</maven.plugin-tools.version>
         <maven.shared.file-management>3.0.0</maven.shared.file-management>
-        <maven-utils.version>0.1.0</maven-utils.version>
+        <maven-utils.version>2.0.0</maven-utils.version>
         <junit.version>5.6.0</junit.version>
         <google-client.version>1.23.0</google-client.version>
         <google-api-services-sheets.version>v4-rev493-1.23.0</google-api-services-sheets.version>
@@ -149,6 +149,7 @@
 
     <modules>
         <module>common</module>
+        <module>test-utils</module>
         <module>maven-plugin</module>
         <module>prod-maven-plugin</module>
     </modules>
@@ -174,6 +175,11 @@
             <dependency>
                 <groupId>org.l2x6.cq</groupId>
                 <artifactId>cq-common</artifactId>
+                <version>1.0.1-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>org.l2x6.cq</groupId>
+                <artifactId>cq-test-utils</artifactId>
                 <version>1.0.1-SNAPSHOT</version>
             </dependency>
 

@@ -26,6 +26,8 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.l2x6.cq.common.CqCommonUtils;
+import org.l2x6.cq.test.utils.TestUtils;
 import org.l2x6.maven.utils.Gavtcs;
 import org.l2x6.maven.utils.PomTransformer;
 import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
@@ -68,7 +70,7 @@ public class PomSorterTest {
                                         Gavtcs::isVirtualDeployment,
                                         Gavtcs.deploymentVitualMapper(gavtcs -> aids.contains(gavtcs.getArtifactId())),
                                         Gavtcs.scopeAndTypeFirstComparator(),
-                                        FormatPomsMojo.VIRTUAL_DEPS_INITIAL_COMMENT));
+                                        CqCommonUtils.VIRTUAL_DEPS_INITIAL_COMMENT));
                     });
         }
 

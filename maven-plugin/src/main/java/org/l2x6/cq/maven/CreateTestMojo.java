@@ -352,8 +352,8 @@ public class CreateTestMojo extends AbstractExtensionListMojo {
                                 Gavtcs::isVirtualDeployment,
                                 Gavtcs.deploymentVitualMapper(gavtcs -> extensionArtifactIds.contains(gavtcs.getArtifactId())),
                                 Gavtcs.scopeAndTypeFirstComparator(),
-                                FormatPomsMojo.VIRTUAL_DEPS_INITIAL_COMMENT),
-                        Transformation.keepFirst(FormatPomsMojo.virtualDepsCommentXPath(), true));
+                                CqCommonUtils.VIRTUAL_DEPS_INITIAL_COMMENT),
+                        Transformation.keepFirst(CqCommonUtils.virtualDepsCommentXPath(), true));
 
         if (nativeSupported) {
             evalTemplate(cfg, "integration-test-application.properties",

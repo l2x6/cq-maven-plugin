@@ -101,6 +101,11 @@
             <artifactId>assertj-core</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.l2x6.cq</groupId>
+            <artifactId>cq-test-utils</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>

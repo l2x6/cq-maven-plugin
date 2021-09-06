@@ -32,6 +32,7 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.project.MavenProject;
 import org.junit.jupiter.api.Test;
 import org.l2x6.cq.common.CqCommonUtils;
+import org.l2x6.cq.test.utils.TestUtils;
 import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

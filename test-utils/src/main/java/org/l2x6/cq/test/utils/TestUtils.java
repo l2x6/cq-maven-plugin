@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.l2x6.cq.maven;
+package org.l2x6.cq.test.utils;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 public class TestUtils {
 
-    static Path createProjectFromTemplate(String testProjectName, String copyPrefix) throws IOException {
+    public static Path createProjectFromTemplate(String testProjectName, String copyPrefix) throws IOException {
         final Path srcDir = Paths.get("src/test/resources/projects/" + testProjectName);
         /*
          * We want to run on the same project multiple times with different args so let's create a copy with a random
@@ -49,7 +49,7 @@ public class TestUtils {
         return copyDir;
     }
 
-    static Path newProjectDir(String copyPrefix) throws IOException {
+    public static Path newProjectDir(String copyPrefix) throws IOException {
         final Path path = Paths.get("target/test-classes/projects/" + copyPrefix);// + "-" + UUID.randomUUID().toString().substring(0, 7));
         int count = 0;
         while (count < 100) {
@@ -64,7 +64,7 @@ public class TestUtils {
         throw new RuntimeException("Unable to create a directory for copying the test application into: " + path);
     }
 
-    static void assertTreesMatch(Path expected, Path actual) throws IOException {
+    public static void assertTreesMatch(Path expected, Path actual) throws IOException {
         final Set<Path> expectedFiles = new LinkedHashSet<>();
         Files.walk(expected).filter(Files::isRegularFile).forEach(p -> {
             final Path relative = expected.relativize(p);

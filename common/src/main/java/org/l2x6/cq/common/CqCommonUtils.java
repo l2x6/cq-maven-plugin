@@ -27,13 +27,20 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.camel.catalog.Kind;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
+import org.l2x6.maven.utils.Gavtcs;
+import org.l2x6.maven.utils.PomTransformer;
+import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.maven.utils.PomTransformer.Transformation;
 
 public class CqCommonUtils {
+
+    public static final String VIRTUAL_DEPS_INITIAL_COMMENT = " The following dependencies guarantee that this module is built after them. You can update them by running `mvn process-resources -Pformat -N` from the source tree root directory ";
 
     private CqCommonUtils() {
     }
@@ -124,6 +131,23 @@ public class CqCommonUtils {
             sb.append(in.substring(1));
         }
         return sb.toString();
+    }
+
+    public static void updateVirtualDependencies(Charset charset, SimpleElementWhitespace simpleElementWhitespace,
+            final Set<Gavtcs> allVirtualExtensions, final Path pomXmlPath) {
+        new PomTransformer(pomXmlPath, charset, simpleElementWhitespace)
+                .transform(
+                        Transformation.updateDependencySubset(
+                                gavtcs -> gavtcs.isVirtual(),
+                                allVirtualExtensions,
+                                Gavtcs.scopeAndTypeFirstComparator(),
+                                VIRTUAL_DEPS_INITIAL_COMMENT),
+                        Transformation.removeProperty(true, true, "mvnd.builder.rule"),
+                        Transformation.removeContainerElementIfEmpty(true, true, true, "properties"));
+    }
+
+    public static String virtualDepsCommentXPath() {
+        return "//comment()[contains(.,'" + VIRTUAL_DEPS_INITIAL_COMMENT + "')]";
     }
 
 }
