@@ -53,7 +53,7 @@ public class ProdExcludesCheckMojoTest {
             Assertions.assertThat(e.getMessage()).contains("Superfluous modules");
         }
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/projects/prod-excludes-check"), mojo.basedir.toPath());
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName), mojo.basedir.toPath());
     }
 
     @Test
@@ -72,7 +72,8 @@ public class ProdExcludesCheckMojoTest {
             mojo.execute();
             Assertions.fail("Expected a MojoFailureException");
         } catch (MojoFailureException e) {
-            Assertions.assertThat(e.getMessage()).contains("Missing modules:");
+            Assertions.assertThat(e.getMessage()).contains("The content of .mvn/excludes.txt does not match the content of "
+                    + ProdExcludesMojo.CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH);
         }
 
         /* Write the original back so that it does not pop up when checking no changes */
@@ -81,8 +82,7 @@ public class ProdExcludesCheckMojoTest {
             Files.copy(in, dest, StandardCopyOption.REPLACE_EXISTING);
         }
 
-        /* No change expected */
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/basic"), mojo.basedir.toPath());
+        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName), mojo.basedir.toPath());
     }
 
 }
