@@ -163,8 +163,7 @@ public class CqCommonUtils {
     /**
      * Deletes a file or directory recursively if it exists.
      *
-     * @param  directory   the directory to delete
-     * @throws IOException
+     * @param directory the directory to delete
      */
     public static void deleteDirectory(Path directory) {
         if (Files.exists(directory)) {
