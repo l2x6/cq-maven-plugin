@@ -23,8 +23,14 @@ import java.io.Reader;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.Charset;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.FileSystemException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
@@ -41,6 +47,10 @@ import org.l2x6.maven.utils.PomTransformer.Transformation;
 public class CqCommonUtils {
 
     public static final String VIRTUAL_DEPS_INITIAL_COMMENT = " The following dependencies guarantee that this module is built after them. You can update them by running `mvn process-resources -Pformat -N` from the source tree root directory ";
+    /** The number of attempts to try when creating a new directory */
+    private static final int CREATE_RETRY_COUNT = 256;
+    private static final long DELETE_RETRY_MILLIS = 5000L;
+    private static final boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
 
     private CqCommonUtils() {
     }
@@ -148,6 +158,122 @@ public class CqCommonUtils {
 
     public static String virtualDepsCommentXPath() {
         return "//comment()[contains(.,'" + VIRTUAL_DEPS_INITIAL_COMMENT + "')]";
+    }
+
+    /**
+     * Deletes a file or directory recursively if it exists.
+     *
+     * @param  directory   the directory to delete
+     * @throws IOException
+     */
+    public static void deleteDirectory(Path directory) {
+        if (Files.exists(directory)) {
+            try {
+                Files.walkFileTree(directory, new SimpleFileVisitor<Path>() {
+                    @Override
+                    public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                        if (exc == null) {
+                            Files.delete(dir);
+                            return FileVisitResult.CONTINUE;
+                        } else {
+                            // directory iteration failed; propagate exception
+                            throw exc;
+                        }
+                    }
+
+                    @Override
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                        if (isWindows) {
+                            final long deadline = System.currentTimeMillis() + DELETE_RETRY_MILLIS;
+                            FileSystemException lastException = null;
+                            do {
+                                try {
+                                    Files.delete(file);
+                                    return FileVisitResult.CONTINUE;
+                                } catch (FileSystemException e) {
+                                    lastException = e;
+                                }
+                            } while (System.currentTimeMillis() < deadline);
+                            throw new IOException(String.format("Could not delete file [%s] after retrying for %d ms", file,
+                                    DELETE_RETRY_MILLIS), lastException);
+                        } else {
+                            Files.delete(file);
+                        }
+                        return FileVisitResult.CONTINUE;
+                    }
+
+                    @Override
+                    public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+                        // try to delete the file anyway, even if its attributes
+                        // could not be read, since delete-only access is
+                        // theoretically possible
+                        Files.delete(file);
+                        return FileVisitResult.CONTINUE;
+                    }
+                });
+            } catch (IOException e) {
+                throw new RuntimeException("Could not delete " + directory, e);
+            }
+        }
+    }
+
+    /**
+     * Makes sure that the given directory exists. Tries creating {@link #CREATE_RETRY_COUNT} times.
+     *
+     * @param dir the directory {@link Path} to check
+     */
+    public static void ensureDirectoryExists(Path dir) {
+        Throwable toThrow = null;
+        for (int i = 0; i < CREATE_RETRY_COUNT; i++) {
+            try {
+                Files.createDirectories(dir);
+                if (Files.exists(dir)) {
+                    return;
+                }
+            } catch (AccessDeniedException e) {
+                toThrow = e;
+                /* Workaround for https://bugs.openjdk.java.net/browse/JDK-8029608 */
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException e1) {
+                    Thread.currentThread().interrupt();
+                    toThrow = e1;
+                }
+            } catch (IOException e) {
+                toThrow = e;
+            }
+        }
+        if (toThrow != null) {
+            throw new RuntimeException(String.format("Could not create directory [%s]", dir), toThrow);
+        } else {
+            throw new RuntimeException(
+                    String.format("Could not create directory [%s] attempting [%d] times", dir, CREATE_RETRY_COUNT));
+        }
+
+    }
+
+    /**
+     * If the given directory does not exist, creates it using {@link #ensureDirectoryExists(Path)}. Otherwise
+     * recursively deletes all subpaths in the given directory.
+     *
+     * @param dir the directory to check
+     */
+    public static void ensureDirectoryExistsAndEmpty(Path dir) {
+        if (Files.exists(dir)) {
+            try (DirectoryStream<Path> subPaths = Files.newDirectoryStream(dir)) {
+                for (Path subPath : subPaths) {
+                    if (Files.isDirectory(subPath)) {
+                        deleteDirectory(subPath);
+                    } else {
+                        Files.delete(subPath);
+                    }
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Could not process " + dir, e);
+            }
+        } else {
+            ensureDirectoryExists(dir);
+        }
     }
 
 }

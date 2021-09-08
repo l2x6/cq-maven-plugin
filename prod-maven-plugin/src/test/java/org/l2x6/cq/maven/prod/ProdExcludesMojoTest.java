@@ -37,6 +37,7 @@ public class ProdExcludesMojoTest {
         mojo.encoding = "utf-8";
         mojo.productJson = basePath.resolve("product/src/main/resources/camel-quarkus-product-source.json").toFile();
         mojo.simpleElementWhitespace = SimpleElementWhitespace.SPACE;
+        mojo.unlinkExcludes = true;
         return mojo;
     }
 
