@@ -196,13 +196,13 @@ public class ProdExcludesMojo extends AbstractMojo {
 
         tree.unlinkModules(expandedIncludes, profiles, charset, simpleElementWhitespace,
                 (Set<String> unlinkModules) -> {
-                    if (isChecking() && !unlinkModules.isEmpty()) {
+                    if (isChecking() && unlinkExcludes && !unlinkModules.isEmpty()) {
                         throw new RuntimeException("The source tree does not match the content of "
                                 + CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH
                                 + ". Superfluous modules (the list might be incomplete):\n - "
                                 + unlinkModules.stream()
                                         .collect(Collectors.joining("\n - "))
-                                + ".\n\nConsider running cq-prod:prod-excludes");
+                                + ".\n\nConsider running mvn org.l2x6.cq:cq-prod-maven-plugin:prod-excludes -N");
                     }
                     return Transformation.commentModules(unlinkModules, MODULE_COMMENT);
                 });
@@ -250,7 +250,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         if (isChecking() && !Files.isRegularFile(excludesTxt)) {
             throw new MojoFailureException("The source tree does not match the content of "
                     + CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH
-                    + ". .mvn/excludes.txt does not exist.\n\nConsider running cq-prod:prod-excludes");
+                    + ". .mvn/excludes.txt does not exist.\n\nConsider running mvn org.l2x6.cq:cq-prod-maven-plugin:prod-excludes -N");
         }
         final String oldExcludesTxtContent;
         try {
@@ -263,7 +263,7 @@ public class ProdExcludesMojo extends AbstractMojo {
             if (isChecking()) {
                 throw new MojoFailureException("The content of .mvn/excludes.txt does not match the content of "
                         + CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH
-                        + ". Consider running cq-prod:prod-excludes. Expected content of .mvn/excludes.txt:\n\n"
+                        + ". Consider running mvn org.l2x6.cq:cq-prod-maven-plugin:prod-excludes -N. Expected content of .mvn/excludes.txt:\n\n"
                         + newExcludesTxtContent);
             } else {
                 try {

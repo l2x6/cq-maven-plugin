@@ -46,6 +46,7 @@ public class ProdExcludesCheckMojoTest {
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
         final String testName = "check-initial";
         final ProdExcludesCheckMojo mojo = initMojo(TestUtils.createProjectFromTemplate("prod-excludes-check", testName));
+        mojo.unlinkExcludes = true;
         try {
             mojo.execute();
             Assertions.fail("Expected a RuntimeException");
