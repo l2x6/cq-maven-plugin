@@ -23,9 +23,12 @@ import java.io.Reader;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.AbstractMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -78,6 +81,14 @@ public class ProdExcludesMojo extends AbstractMojo {
      */
     @Parameter(property = "cq.prod-artifacts.skip", defaultValue = "false")
     boolean skip;
+
+    /**
+     * Remove the excluded module elements from {@code pom.xml} files.
+     *
+     * @since 1.1.0
+     */
+    @Parameter(property = "cq.unlinkExcludes", defaultValue = "false")
+    boolean unlinkExcludes;
 
     /**
      * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
@@ -155,12 +166,77 @@ public class ProdExcludesMojo extends AbstractMojo {
                                 .map(Ga::getArtifactId)
                                 .collect(Collectors.joining("\n - "))
                         + "\n\nConsider running cq-prod:prod-excludes");
-            } else {
-                tree = tree.relinkModules(charset, simpleElementWhitespace, MODULE_COMMENT);
             }
         }
+        if (!isChecking()) {
+            /* re-link any previously commented modules */
+            tree = tree.relinkModules(charset, simpleElementWhitespace, MODULE_COMMENT);
+        }
 
-        final Set<Ga> expandedIncludes = tree.findRequiredModules(includes, profiles);
+        Set<Ga> expandedIncludes = tree.findRequiredModules(includes, profiles);
+
+        /* Tests */
+        final MavenSourceTree finalTree = tree;
+        getLog().info("Included extensions before considering tests:");
+        final Set<Ga> expandedExtensions = expandedIncludes.stream()
+                .filter(ga -> ga.getArtifactId().endsWith("-deployment"))
+                .map(ga -> new Ga(ga.getGroupId(),
+                        ga.getArtifactId().substring(0, ga.getArtifactId().length() - "-deployment".length())))
+                .peek(ga -> getLog().info(" - " + ga.getArtifactId()))
+                .collect(Collectors.toCollection(TreeSet::new));
+
+        getLog().info("Found tests:");
+        final Map<Ga, Set<Ga>> testModules = tree.getModulesByPath().entrySet().stream()
+                .filter(en -> en.getKey().startsWith("integration-test"))
+                .map(Map.Entry::getValue)
+                .map(module -> {
+                    final Ga moduleGa = module.getGav().resolveGa(finalTree, profiles);
+                    return new AbstractMap.SimpleImmutableEntry<Ga, Set<Ga>>(
+                            moduleGa,
+                            finalTree.collectTransitiveDependencies(moduleGa, profiles).stream()
+                                    .map(dep -> dep.resolveGa(finalTree, profiles))
+                                    /* keep only local extension dependencies */
+                                    .filter(dep -> finalTree.getModulesByGa().keySet()
+                                            .contains(new Ga(dep.getGroupId(), dep.getArtifactId() + "-deployment")))
+                                    .collect(Collectors.toSet()));
+                })
+                .peek(module -> getLog().info(" - " + module.getKey().getArtifactId() + ": "
+                        + module.getValue().stream().map(Ga::getArtifactId).collect(Collectors.joining(", "))))
+                .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+
+        final Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions = new TreeMap<>();
+        final Set<Ga> includedTests = new TreeSet<>();
+        final Set<Ga> finalExpandedIncludes = expandedIncludes;
+        getLog().info("Test coverage:");
+        for (Ga extensionGa : expandedExtensions) {
+            boolean covered = false;
+            final Map<Ga, Set<Ga>> testsWithMissingDependencies = new TreeMap<>();
+            for (Entry<Ga, Set<Ga>> testModule : testModules.entrySet()) {
+                if (testModule.getValue().contains(extensionGa)) {
+                    if (expandedIncludes.containsAll(testModule.getValue())) {
+                        /* This test covers the given extensionGa and all its deps are included */
+                        includedTests.add(testModule.getKey());
+                        covered = true;
+                        getLog().info(
+                                " - " + extensionGa.getArtifactId() + " is covered by " + testModule.getKey().getArtifactId());
+                    } else if (!covered) {
+                        /* Store what is missing to be able to report later */
+                        testsWithMissingDependencies.put(
+                                testModule.getKey(),
+                                testModule.getValue().stream()
+                                        .filter(ga -> !finalExpandedIncludes.contains(ga))
+                                        .collect(Collectors.toCollection(TreeSet::new)));
+                    }
+                }
+            }
+            if (!covered) {
+                uncoveredExtensions.put(extensionGa, testsWithMissingDependencies);
+            }
+        }
+        expandedIncludes.addAll(includedTests);
+
+        /* Tests may require some additional modules */
+        expandedIncludes = tree.findRequiredModules(expandedIncludes, profiles);
 
         getLog().debug("Required modules:");
         expandedIncludes.stream()
@@ -230,6 +306,29 @@ public class ProdExcludesMojo extends AbstractMojo {
                     .collect(Collectors.toSet());
             CqCommonUtils.updateVirtualDependencies(charset, simpleElementWhitespace, allVirtualExtensions, catalogPomPath);
         }
+
+        if (!uncoveredExtensions.isEmpty()) {
+            final StringBuilder sb = new StringBuilder("Unable to find tests for extensions:\n");
+            for (Entry<Ga, Map<Ga, Set<Ga>>> ext : uncoveredExtensions.entrySet()) {
+                sb.append(" - Extension ").append(ext.getKey().getArtifactId()).append(":\n");
+                if (ext.getValue().isEmpty()) {
+                    sb.append("   - no test found\n");
+                } else {
+                    for (Entry<Ga, Set<Ga>> test : ext.getValue().entrySet()) {
+                        sb.append("   - Test ").append(test.getKey().getArtifactId())
+                                .append(" has unsatisfied dependencies:\n");
+                        for (Ga dep : test.getValue()) {
+                            sb.append("     - ").append(dep.getArtifactId()).append("\n");
+                        }
+                    }
+                }
+            }
+
+            sb.append(".\n\nConsider adding those tests manually via additionalProductizedArtifacts in ")
+                    .append(CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH);
+            throw new MojoFailureException(sb.toString());
+        }
+
     }
 
 }
