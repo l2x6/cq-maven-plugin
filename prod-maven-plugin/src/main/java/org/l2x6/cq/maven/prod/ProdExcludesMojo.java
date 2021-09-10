@@ -28,6 +28,11 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -37,6 +42,7 @@ import java.util.TreeSet;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -49,6 +55,9 @@ import org.l2x6.maven.utils.Gavtcs;
 import org.l2x6.maven.utils.MavenSourceTree;
 import org.l2x6.maven.utils.MavenSourceTree.ActiveProfiles;
 import org.l2x6.maven.utils.MavenSourceTree.Dependency;
+import org.l2x6.maven.utils.MavenSourceTree.Expression;
+import org.l2x6.maven.utils.MavenSourceTree.Expression.NoSuchPropertyException;
+import org.l2x6.maven.utils.MavenSourceTree.Module;
 import org.l2x6.maven.utils.MavenSourceTree.Module.Profile;
 import org.l2x6.maven.utils.PomTransformer;
 import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
@@ -58,6 +67,21 @@ import org.l2x6.maven.utils.PomTransformer.Transformation;
  */
 @Mojo(name = "prod-excludes", threadSafe = true, requiresProject = false, inheritByDefault = false)
 public class ProdExcludesMojo extends AbstractMojo {
+    enum Edition {
+        PRODUCT(new HashSet<>(
+                Arrays.asList("${camel-quarkus.version}", "${project.version}")), "${camel-quarkus.version}"),
+        COMMUNITY(Collections
+                .singleton("${camel-quarkus-community.version}"), "${camel-quarkus-community.version}");
+
+        Edition(Set<String> versionExpressions, String preferredVersionExpression) {
+            this.versionExpressions = versionExpressions;
+            this.preferredVersionExpression = preferredVersionExpression;
+        }
+
+        private final Set<String> versionExpressions;
+        private final String preferredVersionExpression;
+    }
+
     static final String CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH = "product/src/main/resources/camel-quarkus-product-source.json";
     static final String MODULE_COMMENT = "disabled by cq-prod-maven-plugin:prod-excludes";
     /**
@@ -213,8 +237,27 @@ public class ProdExcludesMojo extends AbstractMojo {
                 .collect(Collectors.toSet());
         CqCommonUtils.updateVirtualDependencies(charset, simpleElementWhitespace, allVirtualExtensions, catalogPomPath);
 
-        if (isChecking() && unlinkExcludes) {
-            assertPomsMatch(workRoot, basedir.toPath());
+        /* BOMs */
+        updateBoms(tree, expandedIncludes, profiles);
+        if (!isChecking() && !unlinkExcludes) {
+            /* Always fix the application BOM */
+            final Path src = workRoot.resolve("poms/bom/pom.xml");
+            final Path dest = basedir.toPath().resolve("poms/bom/pom.xml");
+            try {
+                Files.copy(src, dest, StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                throw new RuntimeException("Could not copy " + src + " to " + dest);
+            }
+        }
+
+        if (isChecking()) {
+            if (unlinkExcludes) {
+                assertPomsMatch(workRoot, basedir.toPath());
+            } else {
+                final Path src = workRoot.resolve("poms/bom/pom.xml");
+                final Path dest = basedir.toPath().resolve("poms/bom/pom.xml");
+                Assertions.assertThat(src).hasSameTextualContentAs(dest);
+            }
         }
 
         if (includeTests && !uncoveredExtensions.isEmpty()) {
@@ -239,6 +282,57 @@ public class ProdExcludesMojo extends AbstractMojo {
             throw new MojoFailureException(sb.toString());
         }
 
+    }
+
+    void updateBoms(MavenSourceTree tree, Set<Ga> expandedIncludes, Predicate<Profile> profiles) {
+
+        for (Module module : tree.getModulesByGa().values()) {
+            final List<Transformation> transformations = new ArrayList<>();
+            for (Profile profile : module.getProfiles()) {
+                final Map<Edition, List<Ga>> gasByVersion = Stream
+                        .of(Edition.values())
+                        .collect(Collectors.toMap(x -> x, x -> new ArrayList<Ga>(), (m1, m2) -> m2, LinkedHashMap::new));
+                if (profiles.test(profile)) {
+                    for (Dependency managedDep : profile.getDependencyManagement()) {
+                        final Ga depGa = managedDep.resolveGa(tree, profiles);
+                        if (depGa.getGroupId().equals("org.apache.camel.quarkus")) {
+                            final String rawExpression = managedDep.getVersion().getRawExpression();
+                            if (!expandedIncludes.contains(depGa) && !rawExpression
+                                    .equals("${camel-quarkus-community.version}")) {
+
+                            }
+                            final Edition edition = expandedIncludes.contains(depGa)
+                                    ? Edition.PRODUCT
+                                    : Edition.COMMUNITY;
+                            if (!edition.versionExpressions.contains(rawExpression)
+                                    && !"${project.version}".equals(rawExpression)) {
+                                gasByVersion.get(edition).add(depGa);
+                            }
+                        }
+                    }
+                }
+                gasByVersion.entrySet().stream()
+                        .filter(en -> !en.getValue().isEmpty())
+                        .forEach(en -> transformations
+                                .add(Transformation.setManagedDependencyVersion(profile.getId(),
+                                        en.getKey().preferredVersionExpression, en.getValue())));
+            }
+            if (!transformations.isEmpty()) {
+                new PomTransformer(tree.getRootDirectory().resolve(module.getPomPath()), charset, simpleElementWhitespace)
+                        .transform(transformations);
+            }
+        }
+
+    }
+
+    static boolean isResolvable(MavenSourceTree tree, Ga ga, Predicate<Profile> profiles, String rawEpression) {
+        final Expression expr = new Expression.NonConstant(rawEpression, ga);
+        try {
+            expr.evaluate(tree, profiles);
+            return true;
+        } catch (NoSuchPropertyException e) {
+            return false;
+        }
     }
 
     void writeExcludesTxt(final Set<Ga> excludesSet) throws MojoFailureException {

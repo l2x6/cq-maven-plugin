@@ -1,10 +1,10 @@
 {
     "extensions": {
-        "camel-quarkus-activemq": {
+        "camel-quarkus-avro": {
             "jvmSupportedSince": "2.1.0",
             "nativeSupportedSince": "2.1.0"
         },
-        "camel-quarkus-avro": {
+        "camel-quarkus-direct": {
             "jvmSupportedSince": "2.1.0",
             "nativeSupportedSince": "2.1.0"
         }
