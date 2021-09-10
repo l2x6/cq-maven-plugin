@@ -34,14 +34,6 @@
     <modules>
         <module>core</module>
         <module>core-cloud</module>
-        <module>http-common</module>
-        <module>reactive-executor</module>
-        <module>threadpoolfactory-vertx</module>
-        <module>xml-io-dsl</module>
-        <module>xml-jaxb</module>
-        <module>xml-jaxp</module>
-        <module>caffeine-lrucache</module>
-        <module>yaml-dsl</module>
     </modules>
 
 </project>
