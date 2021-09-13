@@ -22,8 +22,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.Collections;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.l2x6.cq.test.utils.TestUtils;
@@ -38,6 +40,11 @@ public class ProdExcludesCheckMojoTest {
         mojo.encoding = "utf-8";
         mojo.productJson = basePath.resolve("product/src/main/resources/camel-quarkus-product-source.json").toFile();
         mojo.simpleElementWhitespace = SimpleElementWhitespace.SPACE;
+        final DirectoryScanner scanner = new DirectoryScanner();
+        scanner.setBasedir(mojo.basedir);
+        scanner.setIncludes("extensions-jvm/*/integration-test/pom.xml", "integration-tests/*/pom.xml",
+                "integration-test-groups/*/*/pom.xml");
+        mojo.integrationTests = Collections.singletonList(scanner);
         return mojo;
     }
 
@@ -45,23 +52,24 @@ public class ProdExcludesCheckMojoTest {
     void initial() throws MojoExecutionException, MojoFailureException,
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
         final String testName = "check-initial";
-        final ProdExcludesCheckMojo mojo = initMojo(TestUtils.createProjectFromTemplate("prod-excludes-check", testName));
-        mojo.unlinkExcludes = true;
+        final ProdExcludesCheckMojo mojo = initMojo(TestUtils.createProjectFromTemplate("prod-excludes", testName));
         try {
             mojo.execute();
             Assertions.fail("Expected a RuntimeException");
         } catch (RuntimeException e) {
-            Assertions.assertThat(e.getMessage()).contains("Superfluous modules");
+            Assertions.assertThat(e.getMessage()).contains(
+                    "File [pom.xml] is not in sync with product/src/main/resources/camel-quarkus-product-source.json");
         }
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName), mojo.basedir.toPath());
+        TestUtils.assertTreesMatch(Paths.get("src/test/expected/" + testName), mojo.basedir.toPath());
     }
 
     @Test
     void newSupportedExtension() throws MojoExecutionException, MojoFailureException,
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
         final String testName = "check-new-supported-extension";
-        final ProdExcludesCheckMojo mojo = initMojo(TestUtils.createProjectFromTemplate("../expected/basic", testName));
+        final ProdExcludesCheckMojo mojo = initMojo(
+                TestUtils.createProjectFromTemplate("../expected/prod-excludes-initial", testName));
 
         final Path dest = mojo.productJson.toPath();
         try (InputStream in = getClass().getClassLoader()
@@ -71,19 +79,18 @@ public class ProdExcludesCheckMojoTest {
 
         try {
             mojo.execute();
-            Assertions.fail("Expected a MojoFailureException");
-        } catch (MojoFailureException e) {
-            Assertions.assertThat(e.getMessage()).contains("The content of .mvn/excludes.txt does not match the content of "
-                    + ProdExcludesMojo.CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH);
+            Assertions.fail("Expected a RuntimeException");
+        } catch (RuntimeException e) {
+            Assertions.assertThat(e.getMessage()).contains(
+                    "is not in sync with product/src/main/resources/camel-quarkus-product-source.json");
         }
 
         /* Write the original back so that it does not pop up when checking no changes */
-        try (InputStream in = getClass().getClassLoader()
-                .getResourceAsStream("expected/basic/product/src/main/resources/camel-quarkus-product-source.json")) {
-            Files.copy(in, dest, StandardCopyOption.REPLACE_EXISTING);
-        }
+        final Path in = Paths
+                .get("src/test/expected/prod-excludes-initial/product/src/main/resources/camel-quarkus-product-source.json");
+        Files.copy(in, dest, StandardCopyOption.REPLACE_EXISTING);
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName), mojo.basedir.toPath());
+        TestUtils.assertTreesMatch(Paths.get("src/test/expected/" + testName), mojo.basedir.toPath());
     }
 
 }

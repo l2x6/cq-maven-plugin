@@ -37,17 +37,19 @@ public class PomSorterTest {
 
     @Test
     void sortDependencyManagement() throws IOException {
-        final Path baseDir = Paths.get("target/test-classes/projects/pom-sorter/dependency-management");
+        final Path root = TestUtils.createProjectFromTemplate("pom-sorter", "pom-sorter-dependency-management");
+        final Path baseDir = root.resolve("dependency-management");
         PomSorter.sortDependencyManagement(baseDir, Arrays.asList("pom1.xml"));
-        final Path expected = Paths.get("src/test/resources/expected/pom-sorter/dependency-management");
+        final Path expected = Paths.get("src/test/expected/pom-sorter/dependency-management");
         TestUtils.assertTreesMatch(expected, baseDir);
     }
 
     @Test
     void sortModules() throws IOException {
-        final Path baseDir = Paths.get("target/test-classes/projects/pom-sorter/modules");
+        final Path root = TestUtils.createProjectFromTemplate("pom-sorter", "pom-sorter-modules");
+        final Path baseDir = root.resolve("modules");
         PomSorter.sortModules(baseDir, Arrays.asList("pom1.xml"));
-        final Path expected = Paths.get("src/test/resources/expected/pom-sorter/modules");
+        final Path expected = Paths.get("src/test/expected/pom-sorter/modules");
         TestUtils.assertTreesMatch(expected, baseDir);
     }
 
@@ -57,7 +59,7 @@ public class PomSorterTest {
                 "camel-quarkus-direct",
                 "camel-quarkus-foo",
                 "camel-quarkus-bar"));
-        final Path baseDir = Paths.get("target/test-classes/projects/pom-sorter");
+        final Path baseDir = TestUtils.createProjectFromTemplate("pom-sorter", "pom-sorter-updateVirtualDependencies");
         try (Stream<Path> files = Files.list(baseDir.resolve("mvnd-rules"))) {
             files
                     .filter(p -> Files.isDirectory(p) && !"support".equals(p.getFileName().toString()))
@@ -74,7 +76,7 @@ public class PomSorterTest {
                     });
         }
 
-        final Path expected = Paths.get("src/test/resources/expected/pom-sorter/mvnd-rules");
+        final Path expected = Paths.get("src/test/expected/pom-sorter/mvnd-rules");
         TestUtils.assertTreesMatch(expected, baseDir.resolve("mvnd-rules"));
     }
 }

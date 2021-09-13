@@ -44,7 +44,7 @@ public class UpdateExamplesJsonMojoTest {
 
         final Path examplesJsonRelpath = Paths.get(UpdateExamplesJsonMojo.DEFAULT_EXAMPLES_JSON);
 
-        final Path examplesJson = Paths.get("target/test-classes/expected/update-examples-json").resolve(examplesJsonRelpath)
+        final Path examplesJson = Paths.get("src/test/expected/update-examples-json").resolve(examplesJsonRelpath)
                 .toAbsolutePath();
 
         Assertions.assertThat(baseDir.resolve(examplesJsonRelpath)).hasSameTextualContentAs(examplesJson);
