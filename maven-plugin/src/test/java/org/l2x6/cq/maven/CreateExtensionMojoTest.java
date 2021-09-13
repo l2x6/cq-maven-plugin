@@ -111,7 +111,7 @@ public class CreateExtensionMojoTest {
         mojo.artifactIdBase = "dozer";
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
+        TestUtils.assertTreesMatch(Paths.get("src/test/expected/" + testName),
                 mojo.getRootModuleDirectory());
     }
 
@@ -124,7 +124,7 @@ public class CreateExtensionMojoTest {
         mojo.nativeSupported = false;
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
+        TestUtils.assertTreesMatch(Paths.get("src/test/expected/" + testName),
                 mojo.getRootModuleDirectory());
     }
 
@@ -137,7 +137,7 @@ public class CreateExtensionMojoTest {
 
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
+        TestUtils.assertTreesMatch(Paths.get("src/test/expected/" + testName),
                 mojo.getRootModuleDirectory());
     }
 
@@ -151,7 +151,7 @@ public class CreateExtensionMojoTest {
 
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
+        TestUtils.assertTreesMatch(Paths.get("src/test/expected/" + testName),
                 mojo.getRootModuleDirectory());
     }
 
@@ -163,7 +163,7 @@ public class CreateExtensionMojoTest {
         mojo.artifactIdBase = "xpath";
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
+        TestUtils.assertTreesMatch(Paths.get("src/test/expected/" + testName),
                 mojo.getRootModuleDirectory());
     }
 
@@ -176,7 +176,7 @@ public class CreateExtensionMojoTest {
         mojo.nativeSupported = false;
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
+        TestUtils.assertTreesMatch(Paths.get("src/test/expected/" + testName),
                 mojo.getRootModuleDirectory());
     }
 
@@ -188,7 +188,7 @@ public class CreateExtensionMojoTest {
         mojo.artifactIdBase = "attachments";
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
+        TestUtils.assertTreesMatch(Paths.get("src/test/expected/" + testName),
                 mojo.getRootModuleDirectory());
     }
 
@@ -201,7 +201,7 @@ public class CreateExtensionMojoTest {
         mojo.nativeSupported = false;
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
+        TestUtils.assertTreesMatch(Paths.get("src/test/expected/" + testName),
                 mojo.getRootModuleDirectory());
     }
 

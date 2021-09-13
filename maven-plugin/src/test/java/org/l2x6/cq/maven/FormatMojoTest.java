@@ -50,7 +50,7 @@ public class FormatMojoTest {
         mojo.removeEmptyApplicationProperties = fileSet;
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName),
+        TestUtils.assertTreesMatch(Paths.get("src/test/expected/" + testName),
                 mojo.multiModuleProjectDirectory.toPath());
 
     }

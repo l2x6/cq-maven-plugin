@@ -22,8 +22,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.Collections;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.junit.jupiter.api.Test;
 import org.l2x6.cq.test.utils.TestUtils;
 import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
@@ -37,25 +39,30 @@ public class ProdExcludesMojoTest {
         mojo.encoding = "utf-8";
         mojo.productJson = basePath.resolve("product/src/main/resources/camel-quarkus-product-source.json").toFile();
         mojo.simpleElementWhitespace = SimpleElementWhitespace.SPACE;
-        mojo.unlinkExcludes = true;
+        final DirectoryScanner scanner = new DirectoryScanner();
+        scanner.setBasedir(mojo.basedir);
+        scanner.setIncludes("extensions-jvm/*/integration-test/pom.xml", "integration-tests/*/pom.xml",
+                "integration-test-groups/*/*/pom.xml");
+        mojo.integrationTests = Collections.singletonList(scanner);
         return mojo;
     }
 
     @Test
-    void prodExcludes() throws MojoExecutionException, MojoFailureException,
+    void initial() throws MojoExecutionException, MojoFailureException,
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
-        final String testName = "basic";
+        final String testName = "prod-excludes-initial";
         final ProdExcludesMojo mojo = initMojo(TestUtils.createProjectFromTemplate("prod-excludes", testName));
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName), mojo.basedir.toPath());
+        TestUtils.assertTreesMatch(Paths.get("src/test/expected/" + testName), mojo.basedir.toPath());
     }
 
     @Test
     void newSupportedExtension() throws MojoExecutionException, MojoFailureException,
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
-        final String testName = "new-supported-extension";
-        final ProdExcludesMojo mojo = initMojo(TestUtils.createProjectFromTemplate("../expected/basic", testName));
+        final String testName = "prod-excludes-new-supported-extension";
+        final ProdExcludesMojo mojo = initMojo(
+                TestUtils.createProjectFromTemplate("../expected/prod-excludes-initial", testName));
 
         final Path dest = mojo.productJson.toPath();
         try (InputStream in = getClass().getClassLoader()
@@ -65,7 +72,7 @@ public class ProdExcludesMojoTest {
 
         mojo.execute();
 
-        TestUtils.assertTreesMatch(Paths.get("src/test/resources/expected/" + testName), mojo.basedir.toPath());
+        TestUtils.assertTreesMatch(Paths.get("src/test/expected/" + testName), mojo.basedir.toPath());
     }
 
 }

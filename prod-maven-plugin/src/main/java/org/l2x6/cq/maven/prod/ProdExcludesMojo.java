@@ -27,7 +27,7 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.AbstractMap;
+import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -48,6 +48,7 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
+import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.assertj.core.api.Assertions;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.maven.utils.Ga;
@@ -113,22 +114,12 @@ public class ProdExcludesMojo extends AbstractMojo {
     boolean skip;
 
     /**
-     * Remove the excluded module elements from {@code pom.xml} files.
+     * A list of {@link DirectoryScanner}s selecting integration test {@code pom.xml} files.
      *
-     * @since 1.1.0
+     * @since 1.4.0
      */
-    @Parameter(property = "cq.unlinkExcludes", defaultValue = "false")
-    boolean unlinkExcludes;
-
-    /**
-     * If {@code true} the tests coverage will be analyzed and the tests covering supported extensions will not be added
-     * to {@code .mvn/excludes.txt}; otherwise no test coverage analysis will be performed and all tests will be added
-     * to {@code .mvn/excludes.txt}.
-     *
-     * @since 1.2.0
-     */
-    @Parameter(property = "cq.includeTests", defaultValue = "false")
-    boolean includeTests;
+    @Parameter
+    List<DirectoryScanner> integrationTests;
 
     /**
      * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
@@ -155,19 +146,37 @@ public class ProdExcludesMojo extends AbstractMojo {
             return;
         }
         charset = Charset.forName(encoding);
+        if (integrationTests == null) {
+            integrationTests = Collections.emptyList();
+        }
 
         final Path absProdJson = basedir.toPath().resolve(productJson.toPath());
         final Set<Ga> includes = new TreeSet<Ga>();
         final Set<Ga> requiredExtensions = new TreeSet<Ga>();
+        final Map<Ga, Set<Ga>> allowedMixedTests = new TreeMap<>();
         try (Reader r = Files.newBufferedReader(absProdJson, charset)) {
+            @SuppressWarnings("unchecked")
             final Map<String, Object> json = new Gson().fromJson(r, Map.class);
+            @SuppressWarnings("unchecked")
             final Map<String, Object> extensions = (Map<String, Object>) json.get("extensions");
-            for (String artifactId : extensions.keySet()) {
+            for (Entry<String, Object> en : extensions.entrySet()) {
+                final String artifactId = en.getKey();
                 final Ga extensionGa = new Ga("org.apache.camel.quarkus", artifactId);
                 requiredExtensions.add(extensionGa);
                 includes.add(extensionGa);
                 includes.add(new Ga("org.apache.camel.quarkus", artifactId + "-deployment"));
+
+                @SuppressWarnings("unchecked")
+                final List<String> allowedMixedTestsList = (List<String>) ((Map<String, Object>) en.getValue())
+                        .get("allowedMixedTests");
+                if (allowedMixedTestsList != null) {
+                    final Set<Ga> moduleAllowedMixedTests = allowedMixedTestsList.stream()
+                            .map(a -> new Ga("org.apache.camel.quarkus", a))
+                            .collect(Collectors.toCollection(TreeSet::new));
+                    allowedMixedTests.put(extensionGa, moduleAllowedMixedTests);
+                }
             }
+            @SuppressWarnings("unchecked")
             final List<String> additionalProductizedArtifacts = (List<String>) json.get("additionalProductizedArtifacts");
             if (additionalProductizedArtifacts != null) {
                 for (String artifactId : additionalProductizedArtifacts) {
@@ -175,14 +184,23 @@ public class ProdExcludesMojo extends AbstractMojo {
                 }
             }
         } catch (IOException e) {
-            throw new RuntimeException("Could not read " + absProdJson);
+            throw new RuntimeException("Could not read " + absProdJson, e);
         }
 
         /*
          * Let's edit the pom.xml files out of the real source tree if we are just checking or pom editing is not
          * desired
          */
-        final Path workRoot = (isChecking() || !unlinkExcludes) ? copyPoms(basedir.toPath()) : basedir.toPath();
+        final Path workRoot = isChecking() ? copyPoms(basedir.toPath()) : basedir.toPath();
+
+        final Map<String, Set<String>> foundMixedTests = Stream.of("jvm", "native")
+                .map(k -> new SimpleImmutableEntry<String, Set<String>>(k, new TreeSet<>()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        for (String mixedKey : foundMixedTests.keySet()) {
+            final Path mixedModulePath = workRoot.resolve("product/integration-tests-mixed-" + mixedKey + "/pom.xml");
+            new PomTransformer(mixedModulePath, charset, simpleElementWhitespace)
+                    .transform(Transformation.removeAllModules("mixed", true, true));
+        }
 
         final Path catalogPomPath = workRoot.resolve("catalog/pom.xml");
         /* Remove all virtual deps from the Catalog */
@@ -204,9 +222,7 @@ public class ProdExcludesMojo extends AbstractMojo {
 
         /* Tests */
         final Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions = new TreeMap<>();
-        if (includeTests) {
-            analyzeTestCoverage(tree, expandedIncludes, profiles, uncoveredExtensions);
-        }
+        analyzeTestCoverage(tree, expandedIncludes, profiles, uncoveredExtensions, allowedMixedTests, foundMixedTests);
 
         getLog().debug("Required modules:");
         expandedIncludes.stream()
@@ -214,22 +230,8 @@ public class ProdExcludesMojo extends AbstractMojo {
                 .sorted()
                 .forEach(a -> getLog().debug(" - " + a));
 
-        /* Write the excludesSet to .mvn/excludes.txt */
-        final Set<Ga> excludesSet = tree.complement(expandedIncludes);
-        writeExcludesTxt(excludesSet);
-
         tree.unlinkModules(expandedIncludes, profiles, charset, simpleElementWhitespace,
-                (Set<String> unlinkModules) -> {
-                    if (isChecking() && unlinkExcludes && !unlinkModules.isEmpty()) {
-                        throw new RuntimeException("The source tree does not match the content of "
-                                + CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH
-                                + ". Superfluous modules (the list might be incomplete):\n - "
-                                + unlinkModules.stream()
-                                        .collect(Collectors.joining("\n - "))
-                                + ".\n\nConsider running mvn org.l2x6.cq:cq-prod-maven-plugin:prod-excludes -N");
-                    }
-                    return Transformation.commentModules(unlinkModules, MODULE_COMMENT);
-                });
+                (Set<String> unlinkModules) -> Transformation.commentModules(unlinkModules, MODULE_COMMENT));
         /* Fix the virtual deps in the Catalog */
         final Set<Gavtcs> allVirtualExtensions = requiredExtensions.stream()
                 .map(ga -> new Gavtcs(ga.getGroupId(), ga.getArtifactId(), null))
@@ -239,7 +241,7 @@ public class ProdExcludesMojo extends AbstractMojo {
 
         /* BOMs */
         updateBoms(tree, expandedIncludes, profiles);
-        if (!isChecking() && !unlinkExcludes) {
+        if (!isChecking()) {
             /* Always fix the application BOM */
             final Path src = workRoot.resolve("poms/bom/pom.xml");
             final Path dest = basedir.toPath().resolve("poms/bom/pom.xml");
@@ -250,17 +252,23 @@ public class ProdExcludesMojo extends AbstractMojo {
             }
         }
 
+        /* Enable the mixed tests in special modules */
+        for (Entry<String, Set<String>> mixedEntry : foundMixedTests.entrySet()) {
+            final Path mixedModulePath = tree.getRootDirectory()
+                    .resolve("product/integration-tests-mixed-" + mixedEntry.getKey() + "/pom.xml");
+            new PomTransformer(mixedModulePath, charset, simpleElementWhitespace)
+                    .transform(Transformation.addModules("mixed", mixedEntry.getValue()));
+        }
+        new PomTransformer(workRoot.resolve("pom.xml"), charset, simpleElementWhitespace)
+                .transform(
+                        Transformation.uncommentModules(MODULE_COMMENT, m -> m.equals("product")));
+
         if (isChecking()) {
-            if (unlinkExcludes) {
-                assertPomsMatch(workRoot, basedir.toPath());
-            } else {
-                final Path src = workRoot.resolve("poms/bom/pom.xml");
-                final Path dest = basedir.toPath().resolve("poms/bom/pom.xml");
-                Assertions.assertThat(src).hasSameTextualContentAs(dest);
-            }
+            assertPomsMatch(workRoot, basedir.toPath());
         }
 
-        if (includeTests && !uncoveredExtensions.isEmpty()) {
+        if (!uncoveredExtensions.isEmpty()) {
+
             final StringBuilder sb = new StringBuilder("Unable to find tests for extensions:\n");
             for (Entry<Ga, Map<Ga, Set<Ga>>> ext : uncoveredExtensions.entrySet()) {
                 sb.append(" - Extension ").append(ext.getKey().getArtifactId()).append(":\n");
@@ -335,108 +343,106 @@ public class ProdExcludesMojo extends AbstractMojo {
         }
     }
 
-    void writeExcludesTxt(final Set<Ga> excludesSet) throws MojoFailureException {
-        final String newExcludesTxtContent = excludesSet.stream()
-                .sorted()
-                .map(ga -> (":" + ga.getArtifactId() + "\n"))
-                .collect(Collectors.joining());
-        final Path excludesTxt = basedir.toPath().resolve(".mvn/excludes.txt");
-        if (isChecking() && !Files.isRegularFile(excludesTxt)) {
-            throw new MojoFailureException("The source tree does not match the content of "
-                    + CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH
-                    + ". .mvn/excludes.txt does not exist.\n\nConsider running mvn org.l2x6.cq:cq-prod-maven-plugin:prod-excludes -N");
-        }
-        final String oldExcludesTxtContent;
-        try {
-            oldExcludesTxtContent = Files.isRegularFile(excludesTxt)
-                    ? new String(Files.readAllBytes(excludesTxt), charset) : "";
-        } catch (IOException e) {
-            throw new RuntimeException("Could not read " + excludesTxt, e);
-        }
-        if (!oldExcludesTxtContent.equals(newExcludesTxtContent)) {
-            if (isChecking()) {
-                throw new MojoFailureException("The content of .mvn/excludes.txt does not match the content of "
-                        + CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH
-                        + ". Consider running mvn org.l2x6.cq:cq-prod-maven-plugin:prod-excludes -N. Expected content of .mvn/excludes.txt:\n\n"
-                        + newExcludesTxtContent);
-            } else {
-                try {
-                    Files.createDirectories(excludesTxt.getParent());
-                } catch (IOException e) {
-                    throw new RuntimeException("Could not create directory " + excludesTxt.getParent(), e);
-                }
-
-                try {
-                    Files.write(excludesTxt, newExcludesTxtContent.getBytes(charset));
-                } catch (IOException e) {
-                    throw new RuntimeException("Could not write to " + excludesTxt, e);
-                }
-            }
-        }
-    }
-
     void analyzeTestCoverage(final MavenSourceTree tree, final Set<Ga> expandedIncludes, Predicate<Profile> profiles,
-            Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions) {
-        getLog().info("Included extensions before considering tests:");
+            Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions, Map<Ga, Set<Ga>> allowedMixedTests,
+            Map<String, Set<String>> foundMixedTests) {
+        getLog().debug("Included extensions before considering tests:");
         final Set<Ga> expandedExtensions = expandedIncludes.stream()
                 .filter(ga -> ga.getArtifactId().endsWith("-deployment"))
                 .map(ga -> new Ga(ga.getGroupId(),
                         ga.getArtifactId().substring(0, ga.getArtifactId().length() - "-deployment".length())))
-                .peek(ga -> getLog().info(" - " + ga.getArtifactId()))
+                .peek(ga -> getLog().debug(" - " + ga.getArtifactId()))
                 .collect(Collectors.toCollection(TreeSet::new));
 
-        getLog().info("Found tests:");
-        final Map<Ga, Set<Ga>> testModules = tree.getModulesByPath().entrySet().stream()
-                .filter(en -> en.getKey().startsWith("integration-test"))
-                .map(Map.Entry::getValue)
-                .map(module -> {
-                    final Ga moduleGa = module.getGav().resolveGa(tree, profiles);
-                    return new AbstractMap.SimpleImmutableEntry<Ga, Set<Ga>>(
-                            moduleGa,
-                            tree.collectTransitiveDependencies(moduleGa, profiles).stream()
-                                    .map(dep -> dep.resolveGa(tree, profiles))
-                                    /* keep only local extension dependencies */
-                                    .filter(dep -> tree.getModulesByGa().keySet()
-                                            .contains(new Ga(dep.getGroupId(), dep.getArtifactId() + "-deployment")))
-                                    .collect(Collectors.toSet()));
-                })
-                .peek(module -> getLog().info(" - " + module.getKey().getArtifactId() + ": "
-                        + module.getValue().stream().map(Ga::getArtifactId).collect(Collectors.joining(", "))))
-                .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+        final Map<Ga, Set<Ga>> testModules = new TreeMap<>();
+        for (DirectoryScanner scanner : integrationTests) {
+            scanner.scan();
+            final Path base = scanner.getBasedir().toPath().toAbsolutePath().normalize();
+            for (String scannerPath : scanner.getIncludedFiles()) {
+                final Path pomXmlPath = base.resolve(scannerPath);
+                final Path pomXmlRelPath = basedir.toPath().relativize(pomXmlPath);
+                final Module testModule = tree.getModulesByPath().get(pomXmlRelPath.toString());
+                if (testModule == null) {
+                    throw new IllegalStateException("Could not find module for path " + pomXmlRelPath);
+                }
+                final Ga moduleGa = testModule.getGav().resolveGa(tree, profiles);
+                final Set<Ga> deps = tree.collectTransitiveDependencies(moduleGa, profiles).stream()
+                        .map(dep -> dep.resolveGa(tree, profiles))
+                        /* keep only local extension dependencies */
+                        .filter(dep -> tree.getModulesByGa().keySet()
+                                .contains(new Ga(dep.getGroupId(), dep.getArtifactId() + "-deployment")))
+                        .collect(Collectors.toSet());
+                testModules.merge(moduleGa, deps, (oldSet, newSet) -> {
+                    oldSet.addAll(newSet);
+                    return oldSet;
+                });
+            }
+        }
+        getLog().debug("Found tests:");
+        testModules.entrySet().forEach(m -> getLog().debug(" - " + m.getKey().getArtifactId() + ": " + m.getValue()));
 
-        final Set<Ga> includedTests = new TreeSet<>();
+        final Set<Ga> prodTests = new TreeSet<>();
         final Set<Ga> finalExpandedIncludes = expandedIncludes;
         getLog().info("Test coverage:");
         for (Ga extensionGa : expandedExtensions) {
-            boolean covered = false;
-            final Map<Ga, Set<Ga>> testsWithMissingDependencies = new TreeMap<>();
-            for (Entry<Ga, Set<Ga>> testModule : testModules.entrySet()) {
-                if (testModule.getValue().contains(extensionGa)) {
-                    if (expandedIncludes.containsAll(testModule.getValue())) {
-                        /* This test covers the given extensionGa and all its deps are included */
-                        includedTests.add(testModule.getKey());
-                        covered = true;
-                        getLog().info(
-                                " - " + extensionGa.getArtifactId() + " is covered by " + testModule.getKey().getArtifactId());
-                    } else if (!covered) {
-                        /* Store what is missing to be able to report later */
-                        testsWithMissingDependencies.put(
-                                testModule.getKey(),
-                                testModule.getValue().stream()
-                                        .filter(ga -> !finalExpandedIncludes.contains(ga))
-                                        .collect(Collectors.toCollection(TreeSet::new)));
+            if (!extensionGa.getArtifactId().startsWith("camel-quarkus-support-")) {
+                /* Do not analyze the test coverage of the ancillary extensions */
+                final Set<Ga> extAllowedMixedTests = allowedMixedTests.getOrDefault(extensionGa, Collections.emptySet());
+                boolean covered = false;
+                final Map<Ga, Set<Ga>> testsWithMissingDependencies = new TreeMap<>();
+                for (Entry<Ga, Set<Ga>> testModule : testModules.entrySet()) {
+                    if (testModule.getValue().contains(extensionGa)) {
+                        if (extAllowedMixedTests.contains(testModule.getKey())) {
+                            /* This test is allowed to be mixed for this specific extension */
+                            covered = true;
+                            getLog().info(
+                                    " - " + extensionGa.getArtifactId() + " is covered by an explicitly allowed mixed test "
+                                            + testModule.getKey().getArtifactId());
+                        } else if (expandedIncludes.containsAll(testModule.getValue())) {
+                            /* This test covers the given extensionGa and all its deps are included */
+                            prodTests.add(testModule.getKey());
+                            covered = true;
+                            getLog().info(
+                                    " - " + extensionGa.getArtifactId() + " is covered by "
+                                            + testModule.getKey().getArtifactId());
+                        } else if (!covered) {
+                            /* Store what is missing to be able to report later */
+                            testsWithMissingDependencies.put(
+                                    testModule.getKey(),
+                                    testModule.getValue().stream()
+                                            .filter(ga -> !finalExpandedIncludes.contains(ga))
+                                            .collect(Collectors.toCollection(TreeSet::new)));
+                        }
                     }
                 }
-            }
-            if (!covered) {
-                uncoveredExtensions.put(extensionGa, testsWithMissingDependencies);
+                if (!covered) {
+                    uncoveredExtensions.put(extensionGa, testsWithMissingDependencies);
+                }
             }
         }
-        expandedIncludes.addAll(includedTests);
+        expandedIncludes.addAll(prodTests);
 
         /* Tests may require some additional modules */
         final Set<Ga> newIncludes = tree.findRequiredModules(expandedIncludes, profiles);
         expandedIncludes.addAll(newIncludes);
+
+        final Path mixedModuleDir = tree.getRootDirectory().resolve("product/integration-tests-mixed-jvm");
+        for (Ga testGa : testModules.keySet()) {
+            if (!prodTests.contains(testGa)) {
+                /* This is a mixed test */
+                final Module testModule = tree.getModulesByGa().get(testGa);
+                final Path testModulePath = tree.getRootDirectory().resolve(testModule.getPomPath()).getParent();
+                final String testModuleRelPath = mixedModuleDir.relativize(testModulePath).toString();
+                if (testModule.getPomPath().startsWith("extensions-jvm")) {
+                    /* This is a test of a JVM-only extension */
+                    foundMixedTests.get("jvm").add(testModuleRelPath);
+                } else {
+                    /* This is a regular test of an extension that supports native */
+                    foundMixedTests.get("native").add(testModuleRelPath);
+                }
+            }
+        }
+
     }
 
     private Path copyPoms(Path src) {
@@ -457,7 +463,22 @@ public class ProdExcludesMojo extends AbstractMojo {
     void assertPomsMatch(Path src, Path dest) {
         visitPoms(src, file -> {
             final Path destPath = dest.resolve(src.relativize(file));
-            Assertions.assertThat(file).hasSameTextualContentAs(destPath);
+            try {
+                Assertions.assertThat(file).hasSameTextualContentAs(destPath);
+            } catch (AssertionError e) {
+                String msg = e.getMessage();
+                final String changedContentAt = "Changed content at";
+                int offset = msg.indexOf(changedContentAt);
+                if (offset < 0) {
+                    throw new IllegalStateException(
+                            "Expected to find '" + changedContentAt + "' in the causing exception's message", e);
+                }
+                msg = "File [" + basedir.toPath().relativize(destPath) + "] is not in sync with "
+                        + CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH + ":\n\n"
+                        + msg.substring(offset)
+                        + "\n\n Consider running mvn org.l2x6.cq:cq-prod-maven-plugin:prod-excludes -N\n\n";
+                throw new RuntimeException(msg);
+            }
         });
     }
 

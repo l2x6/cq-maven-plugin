@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 public class TestUtils {
 
     public static Path createProjectFromTemplate(String testProjectName, String copyPrefix) throws IOException {
-        final Path srcDir = Paths.get("src/test/resources/projects/" + testProjectName);
+        final Path srcDir = Paths.get("src/test/projects/" + testProjectName);
         /*
          * We want to run on the same project multiple times with different args so let's create a copy with a random
          * suffix
@@ -50,7 +50,7 @@ public class TestUtils {
     }
 
     public static Path newProjectDir(String copyPrefix) throws IOException {
-        final Path path = Paths.get("target/test-classes/projects/" + copyPrefix);// + "-" + UUID.randomUUID().toString().substring(0, 7));
+        final Path path = Paths.get("target/projects/" + copyPrefix);// + "-" + UUID.randomUUID().toString().substring(0, 7));
         int count = 0;
         while (count < 100) {
             if (!Files.exists(path)) {
