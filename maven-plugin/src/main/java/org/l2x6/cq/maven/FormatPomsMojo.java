@@ -200,21 +200,20 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
         final MavenSourceTree tree = getTree();
         for (DirectoryScanner scanner : updateVirtualDependencies) {
             scanner.scan();
-            final Path base = scanner.getBasedir().toPath();
-            for (String pomXmlRelPath : scanner.getIncludedFiles()) {
-                final Path pomXmlPath = base.resolve(pomXmlRelPath);
+            final Path base = scanner.getBasedir().toPath().toAbsolutePath().normalize();
+            for (String scannerPath : scanner.getIncludedFiles()) {
+                final Path pomXmlAbsolutePath = base.resolve(scannerPath);
+                final String pomXmlRelPath = tree.getRootDirectory().relativize(pomXmlAbsolutePath).toString();
                 if (tree.getModulesByPath().keySet().contains(pomXmlRelPath)) {
                     /* Ignore unlinked modules */
-                    new PomTransformer(pomXmlPath, getCharset(), simpleElementWhitespace)
+                    new PomTransformer(pomXmlAbsolutePath, getCharset(), simpleElementWhitespace)
                             .transform(
                                     Transformation.updateMappedDependencies(
                                             Gavtcs::isVirtualDeployment,
                                             Gavtcs.deploymentVitualMapper(gavtcs -> allExtensions.contains(gavtcs)),
                                             Gavtcs.scopeAndTypeFirstComparator(),
                                             CqCommonUtils.VIRTUAL_DEPS_INITIAL_COMMENT),
-                                    Transformation.keepFirst(CqCommonUtils.virtualDepsCommentXPath(), true),
-                                    Transformation.removeProperty(true, true, "mvnd.builder.rule"),
-                                    Transformation.removeContainerElementIfEmpty(true, true, true, "properties"));
+                                    Transformation.keepFirst(CqCommonUtils.virtualDepsCommentXPath(), true));
                 }
             }
         }
