@@ -63,6 +63,7 @@ import org.l2x6.maven.utils.MavenSourceTree.Module.Profile;
 import org.l2x6.maven.utils.PomTransformer;
 import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.maven.utils.PomTransformer.Transformation;
+import org.l2x6.maven.utils.Utils;
 
 /**
  */
@@ -279,7 +280,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                     mixedTests.add(testGa);
                     final Module testModule = fullTree.getModulesByGa().get(testGa);
                     final Path testModulePath = fullTree.getRootDirectory().resolve(testModule.getPomPath()).getParent();
-                    final String testModuleRelPath = mixedModuleDir.relativize(testModulePath).toString();
+                    final String testModuleRelPath = Utils.toUnixPath(mixedModuleDir.relativize(testModulePath).toString());
                     if (testModule.getPomPath().startsWith("extensions-jvm")) {
                         /* This is a test of a JVM-only extension */
                         foundMixedTests.get("jvm").add(testModuleRelPath);
@@ -348,16 +349,12 @@ public class ProdExcludesMojo extends AbstractMojo {
                     for (Dependency managedDep : profile.getDependencyManagement()) {
                         final Ga depGa = managedDep.resolveGa(tree, profiles);
                         if (depGa.getGroupId().equals("org.apache.camel.quarkus")) {
-                            final String rawExpression = managedDep.getVersion().getRawExpression();
-                            if (!expandedIncludes.contains(depGa) && !rawExpression
-                                    .equals("${camel-quarkus-community.version}")) {
 
-                            }
+                            final String rawExpression = managedDep.getVersion().getRawExpression();
                             final Edition edition = expandedIncludes.contains(depGa)
                                     ? Edition.PRODUCT
                                     : Edition.COMMUNITY;
-                            if (!edition.versionExpressions.contains(rawExpression)
-                                    && !"${project.version}".equals(rawExpression)) {
+                            if (!edition.versionExpressions.contains(rawExpression)) {
                                 gasByVersion.get(edition).add(depGa);
                             }
                         }
@@ -459,7 +456,7 @@ public class ProdExcludesMojo extends AbstractMojo {
             final Path base = scanner.getBasedir().toPath().toAbsolutePath().normalize();
             for (String scannerPath : scanner.getIncludedFiles()) {
                 final Path pomXmlPath = base.resolve(scannerPath);
-                final Path pomXmlRelPath = basedir.toPath().relativize(pomXmlPath);
+                final String pomXmlRelPath = Utils.toUnixPath(basedir.toPath().relativize(pomXmlPath).toString());
                 final Module testModule = tree.getModulesByPath().get(pomXmlRelPath.toString());
                 if (testModule == null) {
                     throw new IllegalStateException("Could not find module for path " + pomXmlRelPath);
