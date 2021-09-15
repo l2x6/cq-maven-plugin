@@ -83,6 +83,22 @@ public class ProdExcludesMojo extends AbstractMojo {
         private final String preferredVersionExpression;
     }
 
+    enum TestCategory {
+        /** Covers only productized extensions, has all dependencies productized */
+        PURE_PRODUCT,
+        /** Covers one or more productized extensions, is explicitly allowed to depend on community artifacts */
+        ALLOWED_MIXED,
+        /** None of the above, covers a mixture of productized and community artifacts */
+        MIXED;
+
+        TestCategory upgradeFrom(TestCategory oldValue) {
+            if (oldValue == null || ordinal() <= oldValue.ordinal()) {
+                return this;
+            }
+            throw new IllegalStateException("Cannot upgrade from " + oldValue + " to " + this);
+        }
+    }
+
     static final String CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH = "product/src/main/resources/camel-quarkus-product-source.json";
     static final String MODULE_COMMENT = "disabled by cq-prod-maven-plugin:prod-excludes";
     /**
@@ -198,8 +214,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         for (String mixedKey : foundMixedTests.keySet()) {
             final Path mixedModulePath = workRoot.resolve("product/integration-tests-mixed-" + mixedKey + "/pom.xml");
-            new PomTransformer(mixedModulePath, charset, simpleElementWhitespace)
-                    .transform(Transformation.removeAllModules("mixed", true, true));
+            removeAllModules(mixedModulePath);
         }
 
         final Path catalogPomPath = workRoot.resolve("catalog/pom.xml");
@@ -211,18 +226,28 @@ public class ProdExcludesMojo extends AbstractMojo {
                         gavtcs -> gavtcs.isVirtual()));
 
         final Path rootPomPath = workRoot.resolve("pom.xml");
-        MavenSourceTree tree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
+        final MavenSourceTree initialTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
         final Predicate<Profile> profiles = ActiveProfiles.of();
 
         /* Re-link any previously commented modules */
-        tree = tree.relinkModules(charset, simpleElementWhitespace, MODULE_COMMENT);
+        final MavenSourceTree fullTree = initialTree.relinkModules(charset, simpleElementWhitespace, MODULE_COMMENT);
 
         /* Add the modules required by the includes */
-        Set<Ga> expandedIncludes = tree.findRequiredModules(includes, profiles);
+        Set<Ga> expandedIncludes = fullTree.findRequiredModules(includes, profiles);
 
         /* Tests */
         final Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions = new TreeMap<>();
-        analyzeTestCoverage(tree, expandedIncludes, profiles, uncoveredExtensions, allowedMixedTests, foundMixedTests);
+        final Map<Ga, TestCategory> tests = analyzeTests(fullTree, expandedIncludes, profiles, uncoveredExtensions,
+                allowedMixedTests);
+
+        /* Add the found product tests to the includes */
+        tests.entrySet().stream()
+                .filter(en -> en.getValue() == TestCategory.PURE_PRODUCT)
+                .map(Entry::getKey)
+                .forEach(expandedIncludes::add);
+        /* The tests may require some additional modules */
+        final Set<Ga> newIncludes = fullTree.findRequiredModules(expandedIncludes, profiles);
+        expandedIncludes.addAll(newIncludes);
 
         getLog().debug("Required modules:");
         expandedIncludes.stream()
@@ -230,8 +255,10 @@ public class ProdExcludesMojo extends AbstractMojo {
                 .sorted()
                 .forEach(a -> getLog().debug(" - " + a));
 
-        tree.unlinkModules(expandedIncludes, profiles, charset, simpleElementWhitespace,
+        /* Comment all non-productized modules in the tree */
+        fullTree.unlinkModules(expandedIncludes, profiles, charset, simpleElementWhitespace,
                 (Set<String> unlinkModules) -> Transformation.commentModules(unlinkModules, MODULE_COMMENT));
+
         /* Fix the virtual deps in the Catalog */
         final Set<Gavtcs> allVirtualExtensions = requiredExtensions.stream()
                 .map(ga -> new Gavtcs(ga.getGroupId(), ga.getArtifactId(), null))
@@ -240,25 +267,36 @@ public class ProdExcludesMojo extends AbstractMojo {
         CqCommonUtils.updateVirtualDependencies(charset, simpleElementWhitespace, allVirtualExtensions, catalogPomPath);
 
         /* BOMs */
-        updateBoms(tree, expandedIncludes, profiles);
-        if (!isChecking()) {
-            /* Always fix the application BOM */
-            final Path src = workRoot.resolve("poms/bom/pom.xml");
-            final Path dest = basedir.toPath().resolve("poms/bom/pom.xml");
-            try {
-                Files.copy(src, dest, StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException e) {
-                throw new RuntimeException("Could not copy " + src + " to " + dest);
-            }
-        }
+        updateBoms(fullTree, expandedIncludes, profiles);
 
         /* Enable the mixed tests in special modules */
+        final Path mixedModuleDir = fullTree.getRootDirectory().resolve("product/integration-tests-mixed-jvm");
+        final Set<Ga> mixedTests = new TreeSet<Ga>();
+        tests.entrySet().stream()
+                .filter(en -> en.getValue() != TestCategory.PURE_PRODUCT)
+                .map(Entry::getKey)
+                .forEach(testGa -> {
+                    mixedTests.add(testGa);
+                    final Module testModule = fullTree.getModulesByGa().get(testGa);
+                    final Path testModulePath = fullTree.getRootDirectory().resolve(testModule.getPomPath()).getParent();
+                    final String testModuleRelPath = mixedModuleDir.relativize(testModulePath).toString();
+                    if (testModule.getPomPath().startsWith("extensions-jvm")) {
+                        /* This is a test of a JVM-only extension */
+                        foundMixedTests.get("jvm").add(testModuleRelPath);
+                    } else {
+                        /* This is a regular test of an extension that supports native */
+                        foundMixedTests.get("native").add(testModuleRelPath);
+                    }
+                });
+
         for (Entry<String, Set<String>> mixedEntry : foundMixedTests.entrySet()) {
-            final Path mixedModulePath = tree.getRootDirectory()
+            final Path mixedModulePath = fullTree.getRootDirectory()
                     .resolve("product/integration-tests-mixed-" + mixedEntry.getKey() + "/pom.xml");
             new PomTransformer(mixedModulePath, charset, simpleElementWhitespace)
                     .transform(Transformation.addModules("mixed", mixedEntry.getValue()));
         }
+
+        /* Uncomment the product module */
         new PomTransformer(workRoot.resolve("pom.xml"), charset, simpleElementWhitespace)
                 .transform(
                         Transformation.uncommentModules(MODULE_COMMENT, m -> m.equals("product")));
@@ -291,6 +329,11 @@ public class ProdExcludesMojo extends AbstractMojo {
             throw new MojoFailureException(sb.toString());
         }
 
+    }
+
+    void removeAllModules(final Path pomXml) {
+        new PomTransformer(pomXml, charset, simpleElementWhitespace)
+                .transform(Transformation.removeAllModules("mixed", true, true));
     }
 
     void updateBoms(MavenSourceTree tree, Set<Ga> expandedIncludes, Predicate<Profile> profiles) {
@@ -344,17 +387,72 @@ public class ProdExcludesMojo extends AbstractMojo {
         }
     }
 
-    void analyzeTestCoverage(final MavenSourceTree tree, final Set<Ga> expandedIncludes, Predicate<Profile> profiles,
-            Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions, Map<Ga, Set<Ga>> allowedMixedTests,
-            Map<String, Set<String>> foundMixedTests) {
+    /**
+     * @param  tree                the source tree
+     * @param  productizedGas      {@link Set} of productized artifacts
+     * @param  profiles            the active profiles
+     * @param  uncoveredExtensions a map from an extension {@link Ga} to set of missing dependencies
+     * @param  allowedMixedTests   a Map from extension {@link Ga} to a set of mixed tests covering it that are allowed
+     * @return                     a {@link Map} covering all integration tests, from {@link Ga} to {@link TestCategory}
+     */
+    Map<Ga, TestCategory> analyzeTests(final MavenSourceTree tree, final Set<Ga> productizedGas, Predicate<Profile> profiles,
+            Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions, Map<Ga, Set<Ga>> allowedMixedTests) {
         getLog().debug("Included extensions before considering tests:");
-        final Set<Ga> expandedExtensions = expandedIncludes.stream()
+        final Set<Ga> expandedExtensions = productizedGas.stream()
                 .filter(ga -> ga.getArtifactId().endsWith("-deployment"))
                 .map(ga -> new Ga(ga.getGroupId(),
                         ga.getArtifactId().substring(0, ga.getArtifactId().length() - "-deployment".length())))
                 .peek(ga -> getLog().debug(" - " + ga.getArtifactId()))
                 .collect(Collectors.toCollection(TreeSet::new));
 
+        final Map<Ga, Set<Ga>> testModules = collectIntegrationTests(tree, profiles);
+
+        final Map<Ga, TestCategory> tests = new TreeMap<>();
+        testModules.keySet().stream().forEach(ga -> tests.put(ga, TestCategory.MIXED));
+
+        getLog().info("Test coverage:");
+        for (Ga extensionGa : expandedExtensions) {
+            if (!extensionGa.getArtifactId().startsWith("camel-quarkus-support-")) {
+                /* Do not analyze the test coverage of the ancillary extensions */
+                final Set<Ga> extAllowedMixedTests = allowedMixedTests.getOrDefault(extensionGa, Collections.emptySet());
+                boolean covered = false;
+                final Map<Ga, Set<Ga>> testsWithMissingDependencies = new TreeMap<>();
+                for (Entry<Ga, Set<Ga>> testModule : testModules.entrySet()) {
+                    if (testModule.getValue().contains(extensionGa)) {
+                        final Ga testGa = testModule.getKey();
+                        if (productizedGas.containsAll(testModule.getValue())) {
+                            /* This test covers the given extensionGa and all its deps are included */
+                            tests.compute(testGa, (k, oldVal) -> TestCategory.PURE_PRODUCT.upgradeFrom(oldVal));
+                            covered = true;
+                            getLog().info(
+                                    " - " + extensionGa.getArtifactId() + " is covered by "
+                                            + testGa.getArtifactId());
+                        } else if (extAllowedMixedTests.contains(testGa)) {
+                            /* This test is allowed to be mixed for this specific extension */
+                            tests.compute(testGa, (k, oldVal) -> TestCategory.ALLOWED_MIXED.upgradeFrom(oldVal));
+                            covered = true;
+                            getLog().info(
+                                    " - " + extensionGa.getArtifactId() + " is covered by an explicitly allowed mixed test "
+                                            + testGa.getArtifactId());
+                        } else if (!covered) {
+                            /* Store what is missing to be able to report later */
+                            testsWithMissingDependencies.put(
+                                    testGa,
+                                    testModule.getValue().stream()
+                                            .filter(ga -> !productizedGas.contains(ga))
+                                            .collect(Collectors.toCollection(TreeSet::new)));
+                        }
+                    }
+                }
+                if (!covered) {
+                    uncoveredExtensions.put(extensionGa, testsWithMissingDependencies);
+                }
+            }
+        }
+        return tests;
+    }
+
+    public Map<Ga, Set<Ga>> collectIntegrationTests(final MavenSourceTree tree, Predicate<Profile> profiles) {
         final Map<Ga, Set<Ga>> testModules = new TreeMap<>();
         for (DirectoryScanner scanner : integrationTests) {
             scanner.scan();
@@ -381,69 +479,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         }
         getLog().debug("Found tests:");
         testModules.entrySet().forEach(m -> getLog().debug(" - " + m.getKey().getArtifactId() + ": " + m.getValue()));
-
-        final Set<Ga> prodTests = new TreeSet<>();
-        final Set<Ga> finalExpandedIncludes = expandedIncludes;
-        getLog().info("Test coverage:");
-        for (Ga extensionGa : expandedExtensions) {
-            if (!extensionGa.getArtifactId().startsWith("camel-quarkus-support-")) {
-                /* Do not analyze the test coverage of the ancillary extensions */
-                final Set<Ga> extAllowedMixedTests = allowedMixedTests.getOrDefault(extensionGa, Collections.emptySet());
-                boolean covered = false;
-                final Map<Ga, Set<Ga>> testsWithMissingDependencies = new TreeMap<>();
-                for (Entry<Ga, Set<Ga>> testModule : testModules.entrySet()) {
-                    if (testModule.getValue().contains(extensionGa)) {
-                        if (extAllowedMixedTests.contains(testModule.getKey())) {
-                            /* This test is allowed to be mixed for this specific extension */
-                            covered = true;
-                            getLog().info(
-                                    " - " + extensionGa.getArtifactId() + " is covered by an explicitly allowed mixed test "
-                                            + testModule.getKey().getArtifactId());
-                        } else if (expandedIncludes.containsAll(testModule.getValue())) {
-                            /* This test covers the given extensionGa and all its deps are included */
-                            prodTests.add(testModule.getKey());
-                            covered = true;
-                            getLog().info(
-                                    " - " + extensionGa.getArtifactId() + " is covered by "
-                                            + testModule.getKey().getArtifactId());
-                        } else if (!covered) {
-                            /* Store what is missing to be able to report later */
-                            testsWithMissingDependencies.put(
-                                    testModule.getKey(),
-                                    testModule.getValue().stream()
-                                            .filter(ga -> !finalExpandedIncludes.contains(ga))
-                                            .collect(Collectors.toCollection(TreeSet::new)));
-                        }
-                    }
-                }
-                if (!covered) {
-                    uncoveredExtensions.put(extensionGa, testsWithMissingDependencies);
-                }
-            }
-        }
-        expandedIncludes.addAll(prodTests);
-
-        /* Tests may require some additional modules */
-        final Set<Ga> newIncludes = tree.findRequiredModules(expandedIncludes, profiles);
-        expandedIncludes.addAll(newIncludes);
-
-        final Path mixedModuleDir = tree.getRootDirectory().resolve("product/integration-tests-mixed-jvm");
-        for (Ga testGa : testModules.keySet()) {
-            if (!prodTests.contains(testGa)) {
-                /* This is a mixed test */
-                final Module testModule = tree.getModulesByGa().get(testGa);
-                final Path testModulePath = tree.getRootDirectory().resolve(testModule.getPomPath()).getParent();
-                final String testModuleRelPath = mixedModuleDir.relativize(testModulePath).toString();
-                if (testModule.getPomPath().startsWith("extensions-jvm")) {
-                    /* This is a test of a JVM-only extension */
-                    foundMixedTests.get("jvm").add(testModuleRelPath);
-                } else {
-                    /* This is a regular test of an extension that supports native */
-                    foundMixedTests.get("native").add(testModuleRelPath);
-                }
-            }
-        }
-
+        return testModules;
     }
 
     private Path copyPoms(Path src) {

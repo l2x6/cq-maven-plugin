@@ -58,7 +58,7 @@ public class ProdExcludesCheckMojoTest {
             Assertions.fail("Expected a RuntimeException");
         } catch (RuntimeException e) {
             Assertions.assertThat(e.getMessage()).contains(
-                    "File [pom.xml] is not in sync with product/src/main/resources/camel-quarkus-product-source.json");
+                    "] is not in sync with product/src/main/resources/camel-quarkus-product-source.json");
         }
 
         TestUtils.assertTreesMatch(Paths.get("src/test/expected/" + testName), mojo.basedir.toPath());
