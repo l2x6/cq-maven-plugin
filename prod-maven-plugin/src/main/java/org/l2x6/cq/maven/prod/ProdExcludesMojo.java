@@ -457,7 +457,7 @@ public class ProdExcludesMojo extends AbstractMojo {
             for (String scannerPath : scanner.getIncludedFiles()) {
                 final Path pomXmlPath = base.resolve(scannerPath);
                 final String pomXmlRelPath = Utils.toUnixPath(basedir.toPath().relativize(pomXmlPath).toString());
-                final Module testModule = tree.getModulesByPath().get(pomXmlRelPath.toString());
+                final Module testModule = tree.getModulesByPath().get(pomXmlRelPath);
                 if (testModule == null) {
                     throw new IllegalStateException("Could not find module for path " + pomXmlRelPath);
                 }
@@ -505,7 +505,9 @@ public class ProdExcludesMojo extends AbstractMojo {
                 int offset = msg.indexOf(changedContentAt);
                 if (offset < 0) {
                     throw new IllegalStateException(
-                            "Expected to find '" + changedContentAt + "' in the causing exception's message", e);
+                            "Expected to find '" + changedContentAt + "' in the causing exception's message; found: "
+                                    + e.getMessage(),
+                            e);
                 }
                 msg = "File [" + basedir.toPath().relativize(destPath) + "] is not in sync with "
                         + CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH + ":\n\n"

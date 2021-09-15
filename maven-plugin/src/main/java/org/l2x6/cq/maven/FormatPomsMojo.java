@@ -42,7 +42,6 @@ import org.l2x6.maven.utils.MavenSourceTree;
 import org.l2x6.maven.utils.PomTransformer;
 import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.maven.utils.PomTransformer.Transformation;
-import org.l2x6.maven.utils.Utils;
 
 /**
  * Formats the {@code pom.xml} files in the source tree.
@@ -204,9 +203,7 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
             final Path base = scanner.getBasedir().toPath().toAbsolutePath().normalize();
             for (String scannerPath : scanner.getIncludedFiles()) {
                 final Path pomXmlAbsolutePath = base.resolve(scannerPath);
-                final String pomXmlRelPath = Utils
-                        .toUnixPath(tree.getRootDirectory().relativize(pomXmlAbsolutePath).toString());
-                if (tree.getModulesByPath().keySet().contains(pomXmlRelPath)) {
+                if (tree.getModuleByPath(pomXmlAbsolutePath) != null) {
                     /* Ignore unlinked modules */
                     new PomTransformer(pomXmlAbsolutePath, getCharset(), simpleElementWhitespace)
                             .transform(
