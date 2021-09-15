@@ -267,17 +267,14 @@ public class ProdExcludesMojo extends AbstractMojo {
                 .collect(Collectors.toSet());
         CqCommonUtils.updateVirtualDependencies(charset, simpleElementWhitespace, allVirtualExtensions, catalogPomPath);
 
-        /* BOMs */
-        updateBoms(fullTree, expandedIncludes, profiles);
-
         /* Enable the mixed tests in special modules */
         final Path mixedModuleDir = fullTree.getRootDirectory().resolve("product/integration-tests-mixed-jvm");
-        final Set<Ga> mixedTests = new TreeSet<Ga>();
+        final TreeSet<Ga> includesPlusTests = new TreeSet<>(expandedIncludes);
         tests.entrySet().stream()
                 .filter(en -> en.getValue() != TestCategory.PURE_PRODUCT)
                 .map(Entry::getKey)
                 .forEach(testGa -> {
-                    mixedTests.add(testGa);
+                    includesPlusTests.add(testGa);
                     final Module testModule = fullTree.getModulesByGa().get(testGa);
                     final Path testModulePath = fullTree.getRootDirectory().resolve(testModule.getPomPath()).getParent();
                     final String testModuleRelPath = Utils.toUnixPath(mixedModuleDir.relativize(testModulePath).toString());
@@ -296,6 +293,9 @@ public class ProdExcludesMojo extends AbstractMojo {
             new PomTransformer(mixedModulePath, charset, simpleElementWhitespace)
                     .transform(Transformation.addModules("mixed", mixedEntry.getValue()));
         }
+
+        /* BOMs */
+        updateBoms(fullTree, includesPlusTests, profiles);
 
         /* Uncomment the product module */
         new PomTransformer(workRoot.resolve("pom.xml"), charset, simpleElementWhitespace)
@@ -339,36 +339,41 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     void updateBoms(MavenSourceTree tree, Set<Ga> expandedIncludes, Predicate<Profile> profiles) {
 
-        for (Module module : tree.getModulesByGa().values()) {
-            final List<Transformation> transformations = new ArrayList<>();
-            for (Profile profile : module.getProfiles()) {
-                final Map<Edition, List<Ga>> gasByVersion = Stream
-                        .of(Edition.values())
-                        .collect(Collectors.toMap(x -> x, x -> new ArrayList<Ga>(), (m1, m2) -> m2, LinkedHashMap::new));
-                if (profiles.test(profile)) {
-                    for (Dependency managedDep : profile.getDependencyManagement()) {
-                        final Ga depGa = managedDep.resolveGa(tree, profiles);
-                        if (depGa.getGroupId().equals("org.apache.camel.quarkus")) {
+        for (Entry<Ga, Module> moduleEntry : tree.getModulesByGa().entrySet()) {
+            final Ga moduleGa = moduleEntry.getKey();
+            if (expandedIncludes.contains(moduleGa)) {
+                /* No need to edit the excluded modules */
+                final Module module = moduleEntry.getValue();
+                final List<Transformation> transformations = new ArrayList<>();
+                for (Profile profile : module.getProfiles()) {
+                    final Map<Edition, List<Ga>> gasByVersion = Stream
+                            .of(Edition.values())
+                            .collect(Collectors.toMap(x -> x, x -> new ArrayList<Ga>(), (m1, m2) -> m2, LinkedHashMap::new));
+                    if (profiles.test(profile)) {
+                        for (Dependency managedDep : profile.getDependencyManagement()) {
+                            final Ga depGa = managedDep.resolveGa(tree, profiles);
+                            if (depGa.getGroupId().equals("org.apache.camel.quarkus")) {
 
-                            final String rawExpression = managedDep.getVersion().getRawExpression();
-                            final Edition edition = expandedIncludes.contains(depGa)
-                                    ? Edition.PRODUCT
-                                    : Edition.COMMUNITY;
-                            if (!edition.versionExpressions.contains(rawExpression)) {
-                                gasByVersion.get(edition).add(depGa);
+                                final String rawExpression = managedDep.getVersion().getRawExpression();
+                                final Edition edition = expandedIncludes.contains(depGa)
+                                        ? Edition.PRODUCT
+                                        : Edition.COMMUNITY;
+                                if (!edition.versionExpressions.contains(rawExpression)) {
+                                    gasByVersion.get(edition).add(depGa);
+                                }
                             }
                         }
                     }
+                    gasByVersion.entrySet().stream()
+                            .filter(en -> !en.getValue().isEmpty())
+                            .forEach(en -> transformations
+                                    .add(Transformation.setManagedDependencyVersion(profile.getId(),
+                                            en.getKey().preferredVersionExpression, en.getValue())));
                 }
-                gasByVersion.entrySet().stream()
-                        .filter(en -> !en.getValue().isEmpty())
-                        .forEach(en -> transformations
-                                .add(Transformation.setManagedDependencyVersion(profile.getId(),
-                                        en.getKey().preferredVersionExpression, en.getValue())));
-            }
-            if (!transformations.isEmpty()) {
-                new PomTransformer(tree.getRootDirectory().resolve(module.getPomPath()), charset, simpleElementWhitespace)
-                        .transform(transformations);
+                if (!transformations.isEmpty()) {
+                    new PomTransformer(tree.getRootDirectory().resolve(module.getPomPath()), charset, simpleElementWhitespace)
+                            .transform(transformations);
+                }
             }
         }
 
