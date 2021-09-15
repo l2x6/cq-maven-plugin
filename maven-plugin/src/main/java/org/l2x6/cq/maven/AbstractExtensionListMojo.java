@@ -24,6 +24,7 @@ import java.util.stream.Stream;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.l2x6.maven.utils.MavenSourceTree;
+import org.l2x6.maven.utils.MavenSourceTree.Dependency;
 
 public abstract class AbstractExtensionListMojo extends AbstractMojo {
 
@@ -88,7 +89,7 @@ public abstract class AbstractExtensionListMojo extends AbstractMojo {
 
     public MavenSourceTree getTree() {
         if (tree == null) {
-            tree = MavenSourceTree.of(getRootModuleDirectory().resolve("pom.xml"), getCharset());
+            tree = MavenSourceTree.of(getRootModuleDirectory().resolve("pom.xml"), getCharset(), Dependency::isVirtual);
         }
         return tree;
     }
