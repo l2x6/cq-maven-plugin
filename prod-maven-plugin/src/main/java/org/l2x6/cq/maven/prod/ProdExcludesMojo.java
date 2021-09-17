@@ -19,21 +19,26 @@ package org.l2x6.cq.maven.prod;
 import com.google.gson.Gson;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.Reader;
+import java.io.StringWriter;
+import java.io.Writer;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -49,6 +54,7 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
+import org.apache.maven.shared.utils.io.IOUtil;
 import org.assertj.core.api.Assertions;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.maven.utils.Ga;
@@ -61,9 +67,14 @@ import org.l2x6.maven.utils.MavenSourceTree.Expression.NoSuchPropertyException;
 import org.l2x6.maven.utils.MavenSourceTree.Module;
 import org.l2x6.maven.utils.MavenSourceTree.Module.Profile;
 import org.l2x6.maven.utils.PomTransformer;
+import org.l2x6.maven.utils.PomTransformer.ContainerElement;
+import org.l2x6.maven.utils.PomTransformer.NodeGavtcs;
 import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.maven.utils.PomTransformer.Transformation;
+import org.l2x6.maven.utils.PomTransformer.TransformationContext;
 import org.l2x6.maven.utils.Utils;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
 
 /**
  */
@@ -86,17 +97,62 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     enum TestCategory {
         /** Covers only productized extensions, has all dependencies productized */
-        PURE_PRODUCT,
+        PURE_PRODUCT("product", false),
         /** Covers one or more productized extensions, is explicitly allowed to depend on community artifacts */
-        ALLOWED_MIXED,
-        /** None of the above, covers a mixture of productized and community artifacts */
-        MIXED;
+        MIXED_ALLOWED("allowed", true),
+        /** None of the above, covers a mixture of productized and community artifacts, JVM only */
+        MIXED_JVM("JVM", true),
+        /** None of the above, covers a mixture of productized and community artifacts, native */
+        MIXED_NATIVE("native", true);
+
+        private final String humanName;
+        private final boolean mixed;
+
+        private TestCategory(String name, boolean mixed) {
+            this.humanName = name;
+            this.mixed = mixed;
+        }
 
         TestCategory upgradeFrom(TestCategory oldValue) {
             if (oldValue == null || ordinal() <= oldValue.ordinal()) {
                 return this;
             }
             throw new IllegalStateException("Cannot upgrade from " + oldValue + " to " + this);
+        }
+
+        public boolean isMixed() {
+            return mixed;
+        }
+
+        void initializeMixedTestsPom(Path treeRootDir) {
+            final Writer out = new StringWriter();
+            try (Reader in = new InputStreamReader(
+                    getClass().getClassLoader().getResourceAsStream("mixed-tests-template-pom.xml"), StandardCharsets.UTF_8)) {
+                IOUtil.copy(in, out);
+            } catch (IOException e) {
+                throw new RuntimeException("Could not read classpath:mixed-tests-template-pom.xml", e);
+            }
+            final String template = out.toString();
+            final String content = template.replace("${key}", this.getKey()).replace("${name}", this.getHumanName());
+            final Path mixedModulePath = resolveMixedModulePath(treeRootDir);
+            try {
+                Files.createDirectories(mixedModulePath.getParent());
+                Files.write(mixedModulePath, content.getBytes(StandardCharsets.UTF_8));
+            } catch (IOException e) {
+                throw new RuntimeException("Could not write to " + mixedModulePath);
+            }
+        }
+
+        public String getKey() {
+            return humanName.toLowerCase(Locale.ROOT);
+        }
+
+        public Path resolveMixedModulePath(Path treeRootDir) {
+            return treeRootDir.resolve("product/integration-tests-mixed-" + getKey() + "/pom.xml");
+        }
+
+        public String getHumanName() {
+            return humanName;
         }
     }
 
@@ -145,6 +201,8 @@ public class ProdExcludesMojo extends AbstractMojo {
      */
     @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "SPACE")
     SimpleElementWhitespace simpleElementWhitespace;
+
+    boolean pureProductBom = false;
 
     /**
      * Overridden by {@link ProdExcludesCheckMojo}.
@@ -210,12 +268,22 @@ public class ProdExcludesMojo extends AbstractMojo {
          */
         final Path workRoot = isChecking() ? copyPoms(basedir.toPath()) : basedir.toPath();
 
-        final Map<String, Set<String>> foundMixedTests = Stream.of("jvm", "native")
-                .map(k -> new SimpleImmutableEntry<String, Set<String>>(k, new TreeSet<>()))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        for (String mixedKey : foundMixedTests.keySet()) {
-            final Path mixedModulePath = workRoot.resolve("product/integration-tests-mixed-" + mixedKey + "/pom.xml");
-            removeAllModules(mixedModulePath);
+        final Map<TestCategory, Set<String>> foundMixedTests = new EnumMap<>(TestCategory.class);
+        Stream.of(TestCategory.values()).filter(TestCategory::isMixed).forEach(k -> foundMixedTests.put(k, new TreeSet<>()));
+        final List<Transformation> transformations = new ArrayList<>();
+        for (TestCategory testCategory : foundMixedTests.keySet()) {
+            final Path mixedModulePath = testCategory.resolveMixedModulePath(workRoot);
+            transformations.add(
+                    Transformation.addModuleIfNeeded("integration-tests-mixed-" + testCategory.getKey(), String::compareTo));
+            if (!Files.isRegularFile(mixedModulePath)) {
+                testCategory.initializeMixedTestsPom(workRoot);
+            } else {
+                removeAllModules(mixedModulePath);
+            }
+        }
+        if (!transformations.isEmpty()) {
+            new PomTransformer(workRoot.resolve("product/pom.xml"), charset, simpleElementWhitespace)
+                    .transform(transformations);
         }
 
         final Path catalogPomPath = workRoot.resolve("catalog/pom.xml");
@@ -243,7 +311,7 @@ public class ProdExcludesMojo extends AbstractMojo {
 
         /* Add the found product tests to the includes */
         tests.entrySet().stream()
-                .filter(en -> en.getValue() == TestCategory.PURE_PRODUCT)
+                .filter(en -> !en.getValue().mixed)
                 .map(Entry::getKey)
                 .forEach(expandedIncludes::add);
         /* The tests may require some additional modules */
@@ -268,31 +336,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         CqCommonUtils.updateVirtualDependencies(charset, simpleElementWhitespace, allVirtualExtensions, catalogPomPath);
 
         /* Enable the mixed tests in special modules */
-        final Path mixedModuleDir = fullTree.getRootDirectory().resolve("product/integration-tests-mixed-jvm");
-        final TreeSet<Ga> includesPlusTests = new TreeSet<>(expandedIncludes);
-        tests.entrySet().stream()
-                .filter(en -> en.getValue() != TestCategory.PURE_PRODUCT)
-                .map(Entry::getKey)
-                .forEach(testGa -> {
-                    includesPlusTests.add(testGa);
-                    final Module testModule = fullTree.getModulesByGa().get(testGa);
-                    final Path testModulePath = fullTree.getRootDirectory().resolve(testModule.getPomPath()).getParent();
-                    final String testModuleRelPath = Utils.toUnixPath(mixedModuleDir.relativize(testModulePath).toString());
-                    if (testModule.getPomPath().startsWith("extensions-jvm")) {
-                        /* This is a test of a JVM-only extension */
-                        foundMixedTests.get("jvm").add(testModuleRelPath);
-                    } else {
-                        /* This is a regular test of an extension that supports native */
-                        foundMixedTests.get("native").add(testModuleRelPath);
-                    }
-                });
-
-        for (Entry<String, Set<String>> mixedEntry : foundMixedTests.entrySet()) {
-            final Path mixedModulePath = fullTree.getRootDirectory()
-                    .resolve("product/integration-tests-mixed-" + mixedEntry.getKey() + "/pom.xml");
-            new PomTransformer(mixedModulePath, charset, simpleElementWhitespace)
-                    .transform(Transformation.addModules("mixed", mixedEntry.getValue()));
-        }
+        final TreeSet<Ga> includesPlusTests = updateMixedTests(foundMixedTests, fullTree, expandedIncludes, tests);
 
         /* BOMs */
         updateBoms(fullTree, includesPlusTests, profiles);
@@ -330,6 +374,47 @@ public class ProdExcludesMojo extends AbstractMojo {
             throw new MojoFailureException(sb.toString());
         }
 
+    }
+
+    public TreeSet<Ga> updateMixedTests(final Map<TestCategory, Set<String>> foundMixedTests, final MavenSourceTree fullTree,
+            Set<Ga> expandedIncludes, final Map<Ga, TestCategory> tests) {
+        final Path buildParentItPom = fullTree.getRootDirectory().resolve("poms/build-parent-it/pom.xml");
+        final Path productBuildParentItPom = fullTree.getRootDirectory().resolve("product/build-parent-it/pom.xml");
+        final Path mixedModuleDir = fullTree.getRootDirectory().resolve("product/integration-tests-mixed-jvm");
+        final TreeSet<Ga> includesPlusTests = new TreeSet<>(expandedIncludes);
+        tests.entrySet().stream()
+                .forEach(en -> {
+                    final Ga testGa = en.getKey();
+                    final Module testModule = fullTree.getModulesByGa().get(testGa);
+                    final Path absTestPom = fullTree.getRootDirectory().resolve(testModule.getPomPath());
+                    final Path testModulePath = absTestPom.getParent();
+                    final Path newParent;
+                    final String newParentArtifactId;
+                    if (en.getValue().mixed) {
+                        includesPlusTests.add(testGa);
+                        newParent = buildParentItPom;
+                        newParentArtifactId = "camel-quarkus-build-parent-it";
+                        final String testModuleRelPath = Utils.toUnixPath(mixedModuleDir.relativize(testModulePath).toString());
+                        foundMixedTests.get(en.getValue()).add(testModuleRelPath);
+                    } else {
+                        newParent = productBuildParentItPom;
+                        newParentArtifactId = "camel-quarkus-product-build-parent-it";
+                    }
+
+                    if (pureProductBom) {
+                        final String newParentPath = Utils.toUnixPath(testModulePath.relativize(newParent).toString());
+                        new PomTransformer(absTestPom, charset, simpleElementWhitespace)
+                                .transform(Transformation.setParent(newParentArtifactId, newParentPath));
+                    }
+                });
+
+        for (Entry<TestCategory, Set<String>> mixedEntry : foundMixedTests.entrySet()) {
+            final Path mixedModulePath = fullTree.getRootDirectory()
+                    .resolve("product/integration-tests-mixed-" + mixedEntry.getKey().getKey() + "/pom.xml");
+            new PomTransformer(mixedModulePath, charset, simpleElementWhitespace)
+                    .transform(Transformation.addModules("mixed", mixedEntry.getValue()));
+        }
+        return includesPlusTests;
     }
 
     void removeAllModules(final Path pomXml) {
@@ -377,6 +462,103 @@ public class ProdExcludesMojo extends AbstractMojo {
             }
         }
 
+        if (pureProductBom) {
+            /* off for now */
+            /*
+             * Pure product BOM:
+             * Currently, we remove only the ${camel-quarkus-community.version} dependencies.
+             * This is not perfect, we should also switch depending on Quarkus prod BOM, which does not exist
+             * and/or we'd need to perform the analysis of the whole dependency graph and remove all non-prodictized items
+             * (I wonder whether it is a good idea/doable at all)
+             */
+            Stream<String> moduleNames = Stream.of(
+                    copyPom(
+                            tree,
+                            tree.getModulesByPath().get("poms/bom/pom.xml"),
+                            Transformation.removeManagedDependencies(true, true,
+                                    gavtcs -> "${camel-quarkus-community.version}".equals(gavtcs.getVersion()))),
+                    copyPom(
+                            tree,
+                            tree.getModulesByPath().get("poms/bom-test/pom.xml"),
+                            replaceManagedArtifactId("camel-quarkus-bom", "camel-quarkus-product-bom"),
+                            Transformation.removeManagedDependencies(true, true,
+                                    gavtcs -> "${camel-quarkus-community.version}".equals(gavtcs.getVersion()))),
+                    copyPom(
+                            tree,
+                            tree.getModulesByPath().get("poms/build-parent/pom.xml"),
+                            replaceManagedArtifactId("camel-quarkus-bom", "camel-quarkus-product-bom"),
+                            addMixedProfile("camel-quarkus-bom")),
+                    copyPom(
+                            tree,
+                            tree.getModulesByPath().get("poms/build-parent-it/pom.xml"),
+                            replaceManagedArtifactId("camel-quarkus-bom-test", "camel-quarkus-product-bom-test"),
+                            addMixedProfile("camel-quarkus-bom-test")));
+
+            final List<Transformation> transformations = new ArrayList<>();
+            transformations.add(Transformation.uncommentModules(MODULE_COMMENT));
+            moduleNames
+                    .map(m -> Transformation.addModuleIfNeeded(m, String::compareTo))
+                    .forEach(transformations::add);
+
+            new PomTransformer(
+                    tree.getRootDirectory().resolve("product/pom.xml"),
+                    charset,
+                    simpleElementWhitespace)
+                            .transform(transformations);
+        }
+
+    }
+
+    Transformation addMixedProfile(String bomArtifactId) {
+        return (Document document, TransformationContext context) -> {
+            ContainerElement profile = context.getOrAddContainerElements("profiles").addChildContainerElement("profile");
+            profile.addChildTextElement("id", "mixed");
+            ContainerElement deps = profile.addChildContainerElement("dependencyManagement")
+                    .addChildContainerElement("dependencies");
+            deps.addGavtcs(new Gavtcs("org.apache.camel.quarkus", bomArtifactId, "${project.version}", "pom", null, "import"));
+        };
+    }
+
+    Transformation replaceManagedArtifactId(final String findArtifactId, final String replaceArtifactId) {
+        return (Document document, TransformationContext context) -> {
+            final NodeGavtcs bom = context.getManagedDependencies().stream()
+                    .filter(dep -> findArtifactId.equals(dep.getArtifactId()))
+                    .findFirst()
+                    .get();
+            bom.getNode().childElementsStream()
+                    .forEach(child -> {
+                        final Element node = child.getNode();
+                        if ("artifactId".equals(node.getLocalName())) {
+                            node.setTextContent(replaceArtifactId);
+                        }
+                    });
+        };
+    }
+
+    String copyPom(MavenSourceTree tree, Module source, Transformation... transformations) {
+        final Path sourcePath = tree.getRootDirectory().resolve(source.getPomPath());
+        final Path destinationPath = tree.getRootDirectory().resolve(source.getPomPath().replace("poms/", "product/"));
+        try {
+            Files.createDirectories(destinationPath.getParent());
+            Files.copy(sourcePath, destinationPath, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new RuntimeException("Could not copy " + sourcePath + " to " + destinationPath, e);
+        }
+
+        List<Transformation> transformationList = new ArrayList<>();
+        transformationList.add(Transformation.setParent("camel-quarkus-product", "../pom.xml"));
+        transformationList.add((Document document, TransformationContext context) -> {
+            ContainerElement project = context.getContainerElement("project").get();
+            project.addOrSetChildTextElement("artifactId",
+                    source.getGav().getArtifactId().getRawExpression().replace("camel-quarkus-", "camel-quarkus-product-"));
+            project.addOrSetChildTextElement("name",
+                    source.getName().replace("Camel Quarkus :: ", "Camel Quarkus :: Product :: "));
+        });
+        Stream.of(transformations).forEach(transformationList::add);
+
+        new PomTransformer(destinationPath, charset, simpleElementWhitespace).transform(transformationList);
+
+        return destinationPath.getParent().getFileName().toString();
     }
 
     static boolean isResolvable(MavenSourceTree tree, Ga ga, Predicate<Profile> profiles, String rawEpression) {
@@ -410,11 +592,12 @@ public class ProdExcludesMojo extends AbstractMojo {
         final Map<Ga, Set<Ga>> testModules = collectIntegrationTests(tree, profiles);
 
         final Map<Ga, TestCategory> tests = new TreeMap<>();
-        testModules.keySet().stream().forEach(ga -> tests.put(ga, TestCategory.MIXED));
+        testModules.keySet().stream().forEach(ga -> tests.put(ga, findInitialTestCategory(tree, ga)));
 
         getLog().info("Test coverage:");
         for (Ga extensionGa : expandedExtensions) {
-            if (!extensionGa.getArtifactId().startsWith("camel-quarkus-support-")) {
+            final String extensionArtifactId = extensionGa.getArtifactId();
+            if (!extensionArtifactId.startsWith("camel-quarkus-support-")) {
                 /* Do not analyze the test coverage of the ancillary extensions */
                 final Set<Ga> extAllowedMixedTests = allowedMixedTests.getOrDefault(extensionGa, Collections.emptySet());
                 boolean covered = false;
@@ -427,22 +610,31 @@ public class ProdExcludesMojo extends AbstractMojo {
                             tests.compute(testGa, (k, oldVal) -> TestCategory.PURE_PRODUCT.upgradeFrom(oldVal));
                             covered = true;
                             getLog().info(
-                                    " - " + extensionGa.getArtifactId() + " is covered by "
+                                    " - " + extensionArtifactId + " is covered by "
                                             + testGa.getArtifactId());
                         } else if (extAllowedMixedTests.contains(testGa)) {
                             /* This test is allowed to be mixed for this specific extension */
-                            tests.compute(testGa, (k, oldVal) -> TestCategory.ALLOWED_MIXED.upgradeFrom(oldVal));
+                            tests.compute(testGa, (k, oldVal) -> TestCategory.MIXED_ALLOWED.upgradeFrom(oldVal));
                             covered = true;
                             getLog().info(
-                                    " - " + extensionGa.getArtifactId() + " is covered by an explicitly allowed mixed test "
+                                    " - " + extensionArtifactId + " is covered by an explicitly allowed mixed test "
                                             + testGa.getArtifactId());
                         } else if (!covered) {
                             /* Store what is missing to be able to report later */
+                            final TreeSet<Ga> missingDeps = testModule.getValue().stream()
+                                    .filter(ga -> !productizedGas.contains(ga))
+                                    .collect(Collectors.toCollection(TreeSet::new));
+                            if (testGa.getArtifactId().startsWith(
+                                    extensionArtifactId.replace("camel-quarkus-", "camel-quarkus-integration-test-"))) {
+                                getLog().warn(
+                                        " - " + extensionArtifactId + " cannot be covered by " + testGa.getArtifactId()
+                                                + " because of missing dependencies:\n    - "
+                                                + missingDeps.stream().map(Ga::getArtifactId)
+                                                        .collect(Collectors.joining("\n    - ")));
+                            }
                             testsWithMissingDependencies.put(
                                     testGa,
-                                    testModule.getValue().stream()
-                                            .filter(ga -> !productizedGas.contains(ga))
-                                            .collect(Collectors.toCollection(TreeSet::new)));
+                                    missingDeps);
                         }
                     }
                 }
@@ -452,6 +644,17 @@ public class ProdExcludesMojo extends AbstractMojo {
             }
         }
         return tests;
+    }
+
+    static TestCategory findInitialTestCategory(MavenSourceTree tree, Ga ga) {
+        final Module module = tree.getModulesByGa().get(ga);
+        final String pomPath = module.getPomPath();
+        if (pomPath.startsWith("extensions-jvm/")) {
+            return TestCategory.MIXED_JVM;
+        } else if (pomPath.startsWith("integration-tests/") || pomPath.startsWith("integration-test-groups/")) {
+            return TestCategory.MIXED_NATIVE;
+        }
+        throw new IllegalStateException("Could not assign a category to test " + pomPath);
     }
 
     public Map<Ga, Set<Ga>> collectIntegrationTests(final MavenSourceTree tree, Predicate<Profile> profiles) {

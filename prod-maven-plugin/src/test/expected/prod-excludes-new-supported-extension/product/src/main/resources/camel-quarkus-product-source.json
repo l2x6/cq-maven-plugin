@@ -6,7 +6,10 @@
         },
         "camel-quarkus-direct": {
             "jvmSupportedSince": "2.1.0",
-            "nativeSupportedSince": "2.1.0"
+            "nativeSupportedSince": "2.1.0",
+            "allowedMixedTests": [
+                "camel-quarkus-integration-test-direct"
+            ]
         }
     },
     "additionalProductizedArtifacts": [
