@@ -21,9 +21,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import org.l2x6.maven.utils.Utils;
 
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -66,24 +69,43 @@ public class TestUtils {
 
     public static void assertTreesMatch(Path expected, Path actual) throws IOException {
         final Set<Path> expectedFiles = new LinkedHashSet<>();
-        Files.walk(expected).filter(Files::isRegularFile).forEach(p -> {
-            final Path relative = expected.relativize(p);
-            expectedFiles.add(relative);
-            final Path actualPath = actual.resolve(relative);
-            org.assertj.core.api.Assertions.assertThat(actualPath).hasSameTextualContentAs(p, StandardCharsets.UTF_8);
-        });
+        try (Stream<Path> files = Files.walk(expected)) {
+            files
+                    .filter(Files::isRegularFile)
+                    .sorted(relUnixPathComparator(expected))
+                    .forEach(p -> {
+                        final Path relative = expected.relativize(p);
+                        expectedFiles.add(relative);
+                        final Path actualPath = actual.resolve(relative);
+                        org.assertj.core.api.Assertions.assertThat(actualPath).hasSameTextualContentAs(p,
+                                StandardCharsets.UTF_8);
+                    });
+        }
 
         final Set<Path> unexpectedFiles = new LinkedHashSet<>();
-        Files.walk(actual).filter(Files::isRegularFile).forEach(p -> {
-            final Path relative = actual.relativize(p);
-            if (!expectedFiles.contains(relative)) {
-                unexpectedFiles.add(relative);
-            }
-        });
+        try (Stream<Path> files = Files.walk(actual)) {
+            files
+                    .filter(Files::isRegularFile)
+                    .sorted(relUnixPathComparator(actual))
+                    .forEach(p -> {
+                        final Path relative = actual.relativize(p);
+                        if (!expectedFiles.contains(relative)) {
+                            unexpectedFiles.add(relative);
+                        }
+                    });
+        }
         if (!unexpectedFiles.isEmpty()) {
             fail(String.format("Files found under [%s] but not defined as expected under [%s]:%s", actual,
                     expected, unexpectedFiles.stream().map(Path::toString).collect(Collectors.joining("\n    "))));
         }
+    }
+
+    static Comparator<Path> relUnixPathComparator(Path rootDir) {
+        return (Path p1, Path p2) -> {
+            final String p1Rel = Utils.toUnixPath(rootDir.relativize(p1).toString());
+            final String p2Rel = Utils.toUnixPath(rootDir.relativize(p2).toString());
+            return p1Rel.compareTo(p2Rel);
+        };
     }
 
 }

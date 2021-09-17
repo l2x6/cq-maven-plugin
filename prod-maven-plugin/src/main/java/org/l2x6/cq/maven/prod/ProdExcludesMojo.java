@@ -709,13 +709,17 @@ public class ProdExcludesMojo extends AbstractMojo {
                 Assertions.assertThat(file).hasSameTextualContentAs(destPath);
             } catch (AssertionError e) {
                 String msg = e.getMessage();
-                final String changedContentAt = "Changed content at";
-                int offset = msg.indexOf(changedContentAt);
+                final String contentAt = "content at line";
+                int offset = msg.indexOf(contentAt);
                 if (offset < 0) {
                     throw new IllegalStateException(
-                            "Expected to find '" + changedContentAt + "' in the causing exception's message; found: "
+                            "Expected to find '" + contentAt + "' in the causing exception's message; found: "
                                     + e.getMessage(),
                             e);
+                }
+                char ch;
+                while ((ch = msg.charAt(--offset)) != '\n') {
+
                 }
                 msg = "File [" + basedir.toPath().relativize(destPath) + "] is not in sync with "
                         + CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH + ":\n\n"
@@ -727,6 +731,7 @@ public class ProdExcludesMojo extends AbstractMojo {
     }
 
     void visitPoms(Path src, Consumer<Path> pomConsumer) {
+        Set<Path> paths = new TreeSet<>();
         try {
             Files.walkFileTree(src, new SimpleFileVisitor<Path>() {
 
@@ -746,7 +751,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                     final String fileName = file.getFileName().toString();
                     if (fileName.equals("pom.xml")) {
-                        pomConsumer.accept(file);
+                        paths.add(file);
                     }
                     return FileVisitResult.CONTINUE;
                 }
@@ -754,6 +759,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         } catch (IOException e) {
             throw new RuntimeException("Could not visit pom.xml files under " + src, e);
         }
+        paths.stream().forEach(pomConsumer);
     }
 
 }
