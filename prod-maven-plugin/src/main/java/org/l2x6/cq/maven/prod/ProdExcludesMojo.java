@@ -158,6 +158,7 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     static final String CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH = "product/src/main/resources/camel-quarkus-product-source.json";
     static final String MODULE_COMMENT = "disabled by cq-prod-maven-plugin:prod-excludes";
+    static final String DEFAULT_REQUIRED_PRODUCTIZED_CAMEL_ARTIFACTS_TXT = "target/required-productized-camel-artifacts.txt";
     /**
      * The basedir
      *
@@ -201,6 +202,16 @@ public class ProdExcludesMojo extends AbstractMojo {
      */
     @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "SPACE")
     SimpleElementWhitespace simpleElementWhitespace;
+
+    /**
+     * Where to write a list of Camel artifacts required by Camel Quarkus productized extensions.
+     * It is a text file one artifactId per line.
+     *
+     * @since 2.3.0
+     */
+    @Parameter(property = "cq.requiredProductizedCamelArtifacts", defaultValue = "${project.basedir}/"
+            + DEFAULT_REQUIRED_PRODUCTIZED_CAMEL_ARTIFACTS_TXT)
+    File requiredProductizedCamelArtifacts;
 
     boolean pureProductBom = false;
 
@@ -323,6 +334,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                 .map(Ga::getArtifactId)
                 .sorted()
                 .forEach(a -> getLog().debug(" - " + a));
+        writeRequiredProductizedCamelArtifacts(fullTree, expandedIncludes, profiles);
 
         /* Comment all non-productized modules in the tree */
         fullTree.unlinkModules(expandedIncludes, profiles, charset, simpleElementWhitespace,
@@ -468,7 +480,8 @@ public class ProdExcludesMojo extends AbstractMojo {
              * Pure product BOM:
              * Currently, we remove only the ${camel-quarkus-community.version} dependencies.
              * This is not perfect, we should also switch depending on Quarkus prod BOM, which does not exist
-             * and/or we'd need to perform the analysis of the whole dependency graph and remove all non-prodictized items
+             * and/or we'd need to perform the analysis of the whole dependency graph and remove all non-prodictized
+             * items
              * (I wonder whether it is a good idea/doable at all)
              */
             Stream<String> moduleNames = Stream.of(
@@ -728,6 +741,36 @@ public class ProdExcludesMojo extends AbstractMojo {
                 throw new RuntimeException(msg);
             }
         });
+    }
+
+    void writeRequiredProductizedCamelArtifacts(MavenSourceTree tree, Set<Ga> expandedIncludes, Predicate<Profile> profiles) {
+        final Path destPath = requiredProductizedCamelArtifacts.toPath();
+        try {
+            Files.createDirectories(destPath.getParent());
+        } catch (IOException e1) {
+            throw new RuntimeException("Could not create " + destPath.getParent());
+        }
+        try (Writer out = Files.newBufferedWriter(destPath, charset)) {
+            expandedIncludes.stream()
+                    .map(ga -> tree.getModulesByGa().get(ga))
+                    .flatMap(module -> module.getProfiles().stream())
+                    .flatMap(profile -> profile.getDependencies().stream())
+                    .map(dep -> dep.resolveGa(tree, profiles))
+                    .filter(depGa -> "org.apache.camel".equals(depGa.getGroupId()))
+                    .map(Ga::getArtifactId)
+                    .distinct()
+                    .sorted()
+                    .forEach(artifactId -> {
+                        try {
+                            out.write(artifactId);
+                            out.write('\n');
+                        } catch (IOException e) {
+                            throw new RuntimeException("Could not write to " + destPath);
+                        }
+                    });
+        } catch (IOException e) {
+            throw new RuntimeException("Could not write to " + destPath);
+        }
     }
 
     void visitPoms(Path src, Consumer<Path> pomConsumer) {

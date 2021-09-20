@@ -44,6 +44,8 @@ public class ProdExcludesMojoTest {
         scanner.setIncludes("extensions-jvm/*/integration-test/pom.xml", "integration-tests/*/pom.xml",
                 "integration-test-groups/*/*/pom.xml");
         mojo.integrationTests = Collections.singletonList(scanner);
+        mojo.requiredProductizedCamelArtifacts = basePath
+                .resolve(ProdExcludesMojo.DEFAULT_REQUIRED_PRODUCTIZED_CAMEL_ARTIFACTS_TXT).toFile();
         return mojo;
     }
 

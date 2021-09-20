@@ -1,0 +1,2 @@
+camel-avro
+camel-catalog
