@@ -46,6 +46,7 @@ public class ProdExcludesMojoTest {
         mojo.integrationTests = Collections.singletonList(scanner);
         mojo.requiredProductizedCamelArtifacts = basePath
                 .resolve(ProdExcludesMojo.DEFAULT_REQUIRED_PRODUCTIZED_CAMEL_ARTIFACTS_TXT).toFile();
+        mojo.jenkinsfile = basePath.resolve("Jenkinsfile.redhat").toFile();
         return mojo;
     }
 
