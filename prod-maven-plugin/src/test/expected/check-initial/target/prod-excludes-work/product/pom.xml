@@ -36,6 +36,7 @@
         <module>integration-tests-mixed-allowed</module>
         <module>integration-tests-mixed-jvm</module>
         <module>integration-tests-mixed-native</module>
+        <module>integration-tests-product</module>
     </modules>
 
     <build>

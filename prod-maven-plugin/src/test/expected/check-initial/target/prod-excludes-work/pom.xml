@@ -208,7 +208,7 @@
         <!-- <module>extensions-jvm</module> disabled by cq-prod-maven-plugin:prod-excludes -->
         <module>catalog</module>
         <module>product</module>
-        <module>integration-tests</module>
+        <!-- <module>integration-tests</module> disabled by cq-prod-maven-plugin:prod-excludes -->
     </modules>
 
     <developers>

@@ -30,20 +30,14 @@
     <artifactId>camel-quarkus-integration-tests-mixed-native</artifactId>
     <packaging>pom</packaging>
 
-    <name>Camel Quarkus :: Integration Tests Mixed Native</name>
-    <description>Tests covering partly or wholy non-productized extensions</description>
-
-    <properties>
-        <quarkus.banner.enabled>false</quarkus.banner.enabled>
-    </properties>
+    <name>Camel Quarkus :: Integration Tests :: Mixed Native</name>
 
     <profiles>
         <profile>
             <id>mixed</id>
             <modules>
-                <module>../../integration-tests/direct</module>
+                <module>group-01</module>
             </modules>
         </profile>
     </profiles>
-
 </project>
