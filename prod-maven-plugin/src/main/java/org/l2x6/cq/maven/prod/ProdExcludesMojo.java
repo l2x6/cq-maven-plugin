@@ -36,6 +36,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -50,7 +51,6 @@ import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -943,20 +943,36 @@ public class ProdExcludesMojo extends AbstractMojo {
             if (groups != null) {
                 return groups;
             }
-            int groupCount = Math.max(1, tests.size() / maxTestsPerGroup);
-            final List<TestGroup> groups = IntStream.range(0, groupCount)
-                    .mapToObj(i -> new TestGroup(i, category))
-                    .collect(Collectors.toList());
-            int groupIndex = 0;
 
             final Path anyGroupDir = tree.getRootDirectory().resolve("product/integration-tests-product/group-01");
+            Set<String> testPaths = tests.stream()
+                    .map(test -> {
+                        final Path testAbsPath = tree.getRootDirectory().resolve(tree.getModulesByGa().get(test).getPomPath())
+                                .getParent();
+                        return Utils.toUnixPath(anyGroupDir.relativize(testAbsPath).toString());
+                    })
+                    .collect(Collectors.toCollection(() -> new TreeSet<String>()));
 
-            for (Ga test : tests) {
-                final Path testAbsPath = tree.getRootDirectory().resolve(tree.getModulesByGa().get(test).getPomPath())
-                        .getParent();
-                final String testRelPath = Utils.toUnixPath(anyGroupDir.relativize(testAbsPath).toString());
-                groups.get(groupIndex).add(testRelPath);
-                groupIndex = (groupIndex + 1) % groupCount;
+            int groupCount = Math.max(1, tests.size() / maxTestsPerGroup);
+            final List<TestGroup> groups = new ArrayList<>(groupCount);
+
+            final int minGroupSize = tests.size() / groupCount;
+            final int rest = tests.size() % groupCount;
+            final Iterator<String> testIt = testPaths.iterator();
+            for (int i = 0; i < groupCount; i++) {
+                final TestGroup group = new TestGroup(i, category);
+                int groupSize = minGroupSize + (i < rest ? 1 : 0);
+                while (groupSize-- > 0) {
+                    group.add(testIt.next());
+                }
+                groups.add(group);
+            }
+            if (testIt.hasNext()) {
+                StringBuilder msg = new StringBuilder("Still remaining tests there in " + category + ": ");
+                while (testIt.hasNext()) {
+                    msg.append(testIt.next()).append(", ");
+                }
+                throw new IllegalStateException(msg.toString());
             }
             this.groups = groups;
             return groups;
