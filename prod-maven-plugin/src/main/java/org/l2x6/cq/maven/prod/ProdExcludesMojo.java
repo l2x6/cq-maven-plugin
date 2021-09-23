@@ -989,8 +989,8 @@ public class ProdExcludesMojo extends AbstractMojo {
             final Path categoryPomPath = category.resolveMixedModulePath(tree.getRootDirectory());
             final String version = tree.getRootModule().getGav().getVersion().asConstant();
             final String categoryArtifactId = "camel-quarkus-integration-tests-" + category.getKey();
-            initializeMixedTestsPom(categoryPomPath, "camel-quarkus-build-parent-it", version,
-                    "../../poms/build-parent-it/pom.xml", categoryArtifactId,
+            initializeMixedTestsPom(categoryPomPath, "camel-quarkus-product", version,
+                    "../pom.xml", categoryArtifactId,
                     "Integration Tests :: " + category.getHumanName());
             /* Link the Group poms in the Category pom */
             final String profile = category.isMixed() ? "mixed" : null;

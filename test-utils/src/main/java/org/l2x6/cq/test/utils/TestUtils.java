@@ -26,6 +26,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.maven.utils.Utils;
 
 import static org.junit.jupiter.api.Assertions.fail;
@@ -53,18 +54,10 @@ public class TestUtils {
     }
 
     public static Path newProjectDir(String copyPrefix) throws IOException {
-        final Path path = Paths.get("target/projects/" + copyPrefix);// + "-" + UUID.randomUUID().toString().substring(0, 7));
-        int count = 0;
-        while (count < 100) {
-            if (!Files.exists(path)) {
-                Files.createDirectories(path);
-                return path;
-            }
-            count++;
-        }
-
-        // if we have tried too many times we just give up instead of looping forever which could cause the test to never end
-        throw new RuntimeException("Unable to create a directory for copying the test application into: " + path);
+        final Path path = Paths.get("target/projects/" + copyPrefix);// + "-" +
+                                                                     // UUID.randomUUID().toString().substring(0, 7));
+        CqCommonUtils.ensureDirectoryExistsAndEmpty(path);
+        return path;
     }
 
     public static void assertTreesMatch(Path expected, Path actual) throws IOException {
