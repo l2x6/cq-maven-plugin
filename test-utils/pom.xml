@@ -34,6 +34,10 @@
             <artifactId>maven-utils</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.l2x6.cq</groupId>
+            <artifactId>cq-common</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
         </dependency>
