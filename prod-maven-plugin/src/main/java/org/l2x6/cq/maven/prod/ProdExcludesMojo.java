@@ -151,6 +151,7 @@ public class ProdExcludesMojo extends AbstractMojo {
     static final String CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH = "product/src/main/resources/camel-quarkus-product-source.json";
     static final String MODULE_COMMENT = "disabled by cq-prod-maven-plugin:prod-excludes";
     static final String DEFAULT_REQUIRED_PRODUCTIZED_CAMEL_ARTIFACTS_TXT = "target/required-productized-camel-artifacts.txt";
+    static final String DEFAULT_PRODUCTIZED_CAMEL_QUARKUS_ARTIFACTS_TXT = "target/productized-camel-quarkus-artifacts.txt";
     static final Pattern JVM_PARENT_MODULE_PATH_PATTERN = Pattern.compile("extensions-jvm/[^/]+/pom.xml");
     static final Pattern JENKINSFILE_PATTERN = Pattern
             .compile("(\\Q// %generated-stages-start%\n\\E)(.*)(\\Q// %generated-stages-end%\\E)", Pattern.DOTALL);
@@ -208,6 +209,16 @@ public class ProdExcludesMojo extends AbstractMojo {
     @Parameter(property = "cq.requiredProductizedCamelArtifacts", defaultValue = "${project.basedir}/"
             + DEFAULT_REQUIRED_PRODUCTIZED_CAMEL_ARTIFACTS_TXT)
     File requiredProductizedCamelArtifacts;
+
+    /**
+     * Where to write a list of Camel artifacts required by Camel Quarkus productized extensions.
+     * It is a text file one artifactId per line.
+     *
+     * @since 2.5.0
+     */
+    @Parameter(property = "cq.productizedCamelQuarkusArtifacts", defaultValue = "${project.basedir}/"
+            + DEFAULT_PRODUCTIZED_CAMEL_QUARKUS_ARTIFACTS_TXT)
+    File productizedCamelQuarkusArtifacts;
 
     /**
      * Number of nodes available to the CI. The tests will be split into as many groups.
@@ -337,12 +348,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         final Set<Ga> newIncludes = fullTree.findRequiredModules(expandedIncludes, profiles);
         expandedIncludes.addAll(newIncludes);
 
-        getLog().debug("Required modules:");
-        expandedIncludes.stream()
-                .map(Ga::getArtifactId)
-                .sorted()
-                .forEach(a -> getLog().debug(" - " + a));
-        writeRequiredProductizedCamelArtifacts(fullTree, expandedIncludes, profiles);
+        writeProdReports(fullTree, expandedIncludes, profiles);
 
         /* Comment all non-productized modules in the tree */
         minimizeTree(workRoot, expandedIncludes, tests, profiles);
@@ -802,14 +808,33 @@ public class ProdExcludesMojo extends AbstractMojo {
         });
     }
 
-    void writeRequiredProductizedCamelArtifacts(MavenSourceTree tree, Set<Ga> expandedIncludes, Predicate<Profile> profiles) {
-        final Path destPath = requiredProductizedCamelArtifacts.toPath();
+    void writeProdReports(MavenSourceTree tree, Set<Ga> expandedIncludes, Predicate<Profile> profiles) {
+        final Path cqFile = productizedCamelQuarkusArtifacts.toPath();
         try {
-            Files.createDirectories(destPath.getParent());
+            Files.createDirectories(cqFile.getParent());
         } catch (IOException e1) {
-            throw new RuntimeException("Could not create " + destPath.getParent());
+            throw new RuntimeException("Could not create " + cqFile.getParent());
         }
-        try (Writer out = Files.newBufferedWriter(destPath, charset)) {
+        getLog().debug("Required modules:");
+        try (Writer out = Files.newBufferedWriter(cqFile, charset)) {
+            expandedIncludes.stream()
+                    .map(Ga::getArtifactId)
+                    .sorted()
+                    .peek(artifactId -> getLog().debug(" - " + artifactId))
+                    .forEach(artifactId -> {
+                        try {
+                            out.write(artifactId);
+                            out.write('\n');
+                        } catch (IOException e) {
+                            throw new RuntimeException("Could not write to " + cqFile);
+                        }
+                    });
+        } catch (IOException e) {
+            throw new RuntimeException("Could not write to " + cqFile);
+        }
+
+        final Path camelFile = requiredProductizedCamelArtifacts.toPath();
+        try (Writer out = Files.newBufferedWriter(camelFile, charset)) {
             expandedIncludes.stream()
                     .map(ga -> tree.getModulesByGa().get(ga))
                     .flatMap(module -> module.getProfiles().stream())
@@ -824,11 +849,11 @@ public class ProdExcludesMojo extends AbstractMojo {
                             out.write(artifactId);
                             out.write('\n');
                         } catch (IOException e) {
-                            throw new RuntimeException("Could not write to " + destPath);
+                            throw new RuntimeException("Could not write to " + camelFile);
                         }
                     });
         } catch (IOException e) {
-            throw new RuntimeException("Could not write to " + destPath);
+            throw new RuntimeException("Could not write to " + camelFile);
         }
     }
 
