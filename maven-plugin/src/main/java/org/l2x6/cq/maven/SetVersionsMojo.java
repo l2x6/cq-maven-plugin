@@ -80,10 +80,15 @@ public class SetVersionsMojo extends AbstractMojo {
         basePath = basedir.toPath();
         charset = Charset.forName(encoding);
 
+        final Predicate<Profile> profiles = getProfiles();
+        MavenSourceTree.of(basePath.resolve("pom.xml"), charset).setVersions(newVersion, profiles, simpleElementWhitespace);
+    }
+
+    Predicate<Profile> getProfiles() {
         final Predicate<Profile> profiles = ActiveProfiles.of(
                 session.getCurrentProject().getActiveProfiles().stream()
                         .map(org.apache.maven.model.Profile::getId)
                         .toArray(String[]::new));
-        MavenSourceTree.of(basePath, charset).setVersions(newVersion, profiles, simpleElementWhitespace);
+        return profiles;
     }
 }
