@@ -27,7 +27,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.l2x6.cq.common.CqCommonUtils;
-import org.l2x6.maven.utils.Utils;
+import org.l2x6.pom.tuner.PomTunerUtils;
 
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -95,8 +95,8 @@ public class TestUtils {
 
     static Comparator<Path> relUnixPathComparator(Path rootDir) {
         return (Path p1, Path p2) -> {
-            final String p1Rel = Utils.toUnixPath(rootDir.relativize(p1).toString());
-            final String p2Rel = Utils.toUnixPath(rootDir.relativize(p2).toString());
+            final String p1Rel = PomTunerUtils.toUnixPath(rootDir.relativize(p1).toString());
+            final String p2Rel = PomTunerUtils.toUnixPath(rootDir.relativize(p2).toString());
             return p1Rel.compareTo(p2Rel);
         };
     }

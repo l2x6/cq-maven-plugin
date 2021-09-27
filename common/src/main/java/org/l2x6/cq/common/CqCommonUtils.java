@@ -39,10 +39,10 @@ import org.apache.camel.catalog.Kind;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
-import org.l2x6.maven.utils.Gavtcs;
-import org.l2x6.maven.utils.PomTransformer;
-import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
-import org.l2x6.maven.utils.PomTransformer.Transformation;
+import org.l2x6.pom.tuner.PomTransformer;
+import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.PomTransformer.Transformation;
+import org.l2x6.pom.tuner.model.Gavtcs;
 
 public class CqCommonUtils {
 

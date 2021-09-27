@@ -36,12 +36,12 @@ import org.apache.maven.shared.model.fileset.FileSet;
 import org.apache.maven.shared.model.fileset.util.FileSetManager;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.l2x6.cq.common.CqCommonUtils;
-import org.l2x6.maven.utils.Ga;
-import org.l2x6.maven.utils.Gavtcs;
-import org.l2x6.maven.utils.MavenSourceTree;
-import org.l2x6.maven.utils.PomTransformer;
-import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
-import org.l2x6.maven.utils.PomTransformer.Transformation;
+import org.l2x6.pom.tuner.MavenSourceTree;
+import org.l2x6.pom.tuner.PomTransformer;
+import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.PomTransformer.Transformation;
+import org.l2x6.pom.tuner.model.Ga;
+import org.l2x6.pom.tuner.model.Gavtcs;
 
 /**
  * Formats the {@code pom.xml} files in the source tree.

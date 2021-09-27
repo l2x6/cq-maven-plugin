@@ -23,8 +23,8 @@ import java.util.List;
 import java.util.stream.Stream;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugins.annotations.Parameter;
-import org.l2x6.maven.utils.MavenSourceTree;
-import org.l2x6.maven.utils.MavenSourceTree.Dependency;
+import org.l2x6.pom.tuner.MavenSourceTree;
+import org.l2x6.pom.tuner.model.Dependency;
 
 public abstract class AbstractExtensionListMojo extends AbstractMojo {
 

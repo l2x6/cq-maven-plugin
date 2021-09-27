@@ -26,7 +26,7 @@ import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.camel.tooling.model.ArtifactModel;
-import org.l2x6.maven.utils.Gavtcs;
+import org.l2x6.pom.tuner.model.Gavtcs;
 
 public class TemplateParams {
     public enum ExtensionStatus {

@@ -44,7 +44,7 @@ import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.logging.Log;
 import org.l2x6.cq.maven.TemplateParams.ExtensionStatus;
-import org.l2x6.maven.utils.MavenSourceTree.Module;
+import org.l2x6.pom.tuner.model.Module;
 
 public class CqUtils {
     public static final String CLASSPATH_PREFIX = "classpath:";

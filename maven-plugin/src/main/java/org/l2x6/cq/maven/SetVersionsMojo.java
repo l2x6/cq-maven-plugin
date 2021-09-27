@@ -26,10 +26,10 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
-import org.l2x6.maven.utils.MavenSourceTree;
-import org.l2x6.maven.utils.MavenSourceTree.ActiveProfiles;
-import org.l2x6.maven.utils.MavenSourceTree.Module.Profile;
-import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.MavenSourceTree;
+import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
+import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.model.Profile;
 
 /**
  * A faster and more advanced alternative to {@code versions:set}.
