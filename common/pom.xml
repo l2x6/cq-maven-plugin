@@ -39,8 +39,8 @@
         </dependency>
 
         <dependency>
-            <groupId>org.l2x6.maven-utils</groupId>
-            <artifactId>maven-utils</artifactId>
+            <groupId>org.l2x6.pom-tuner</groupId>
+            <artifactId>pom-tuner</artifactId>
         </dependency>
 
         <dependency>

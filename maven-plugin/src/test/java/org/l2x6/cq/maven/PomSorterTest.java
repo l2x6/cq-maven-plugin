@@ -28,10 +28,10 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.test.utils.TestUtils;
-import org.l2x6.maven.utils.Gavtcs;
-import org.l2x6.maven.utils.PomTransformer;
-import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
-import org.l2x6.maven.utils.PomTransformer.Transformation;
+import org.l2x6.pom.tuner.PomTransformer;
+import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.PomTransformer.Transformation;
+import org.l2x6.pom.tuner.model.Gavtcs;
 
 public class PomSorterTest {
 

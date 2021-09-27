@@ -61,22 +61,21 @@ import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.apache.maven.shared.utils.io.IOUtil;
 import org.assertj.core.api.Assertions;
 import org.l2x6.cq.common.CqCommonUtils;
-import org.l2x6.maven.utils.Ga;
-import org.l2x6.maven.utils.Gavtcs;
-import org.l2x6.maven.utils.MavenSourceTree;
-import org.l2x6.maven.utils.MavenSourceTree.ActiveProfiles;
-import org.l2x6.maven.utils.MavenSourceTree.Dependency;
-import org.l2x6.maven.utils.MavenSourceTree.Expression;
-import org.l2x6.maven.utils.MavenSourceTree.Expression.NoSuchPropertyException;
-import org.l2x6.maven.utils.MavenSourceTree.Module;
-import org.l2x6.maven.utils.MavenSourceTree.Module.Profile;
-import org.l2x6.maven.utils.PomTransformer;
-import org.l2x6.maven.utils.PomTransformer.ContainerElement;
-import org.l2x6.maven.utils.PomTransformer.NodeGavtcs;
-import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
-import org.l2x6.maven.utils.PomTransformer.Transformation;
-import org.l2x6.maven.utils.PomTransformer.TransformationContext;
-import org.l2x6.maven.utils.Utils;
+import org.l2x6.pom.tuner.ExpressionEvaluator;
+import org.l2x6.pom.tuner.MavenSourceTree;
+import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
+import org.l2x6.pom.tuner.PomTransformer;
+import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
+import org.l2x6.pom.tuner.PomTransformer.NodeGavtcs;
+import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.PomTransformer.Transformation;
+import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
+import org.l2x6.pom.tuner.PomTunerUtils;
+import org.l2x6.pom.tuner.model.Dependency;
+import org.l2x6.pom.tuner.model.Ga;
+import org.l2x6.pom.tuner.model.Gavtcs;
+import org.l2x6.pom.tuner.model.Module;
+import org.l2x6.pom.tuner.model.Profile;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
@@ -502,6 +501,7 @@ public class ProdExcludesMojo extends AbstractMojo {
     }
 
     void updateBoms(MavenSourceTree tree, Set<Ga> expandedIncludes, Predicate<Profile> profiles) {
+        final ExpressionEvaluator evaluator = tree.getExpressionEvaluator(profiles);
 
         for (Entry<Ga, Module> moduleEntry : tree.getModulesByGa().entrySet()) {
             final Ga moduleGa = moduleEntry.getKey();
@@ -515,7 +515,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                             .collect(Collectors.toMap(x -> x, x -> new ArrayList<Ga>(), (m1, m2) -> m2, LinkedHashMap::new));
                     if (profiles.test(profile)) {
                         for (Dependency managedDep : profile.getDependencyManagement()) {
-                            final Ga depGa = managedDep.resolveGa(tree, profiles);
+                            final Ga depGa = evaluator.evaluateGa(managedDep);
                             if (depGa.getGroupId().equals("org.apache.camel.quarkus")) {
 
                                 final String rawExpression = managedDep.getVersion().getRawExpression();
@@ -641,16 +641,6 @@ public class ProdExcludesMojo extends AbstractMojo {
         return destinationPath.getParent().getFileName().toString();
     }
 
-    static boolean isResolvable(MavenSourceTree tree, Ga ga, Predicate<Profile> profiles, String rawEpression) {
-        final Expression expr = new Expression.NonConstant(rawEpression, ga);
-        try {
-            expr.evaluate(tree, profiles);
-            return true;
-        } catch (NoSuchPropertyException e) {
-            return false;
-        }
-    }
-
     /**
      * @param  tree                the source tree
      * @param  productizedGas      {@link Set} of productized artifacts
@@ -738,20 +728,21 @@ public class ProdExcludesMojo extends AbstractMojo {
     }
 
     public Map<Ga, Set<Ga>> collectIntegrationTests(final MavenSourceTree tree, Predicate<Profile> profiles) {
+        final ExpressionEvaluator evaluator = tree.getExpressionEvaluator(profiles);
         final Map<Ga, Set<Ga>> testModules = new TreeMap<>();
         for (DirectoryScanner scanner : integrationTests) {
             scanner.scan();
             final Path base = scanner.getBasedir().toPath().toAbsolutePath().normalize();
             for (String scannerPath : scanner.getIncludedFiles()) {
                 final Path pomXmlPath = base.resolve(scannerPath);
-                final String pomXmlRelPath = Utils.toUnixPath(basedir.toPath().relativize(pomXmlPath).toString());
+                final String pomXmlRelPath = PomTunerUtils.toUnixPath(basedir.toPath().relativize(pomXmlPath).toString());
                 final Module testModule = tree.getModulesByPath().get(pomXmlRelPath);
                 if (testModule == null) {
                     throw new IllegalStateException("Could not find module for path " + pomXmlRelPath);
                 }
-                final Ga moduleGa = testModule.getGav().resolveGa(tree, profiles);
+                final Ga moduleGa = evaluator.evaluateGa(testModule.getGav());
                 final Set<Ga> deps = tree.collectTransitiveDependencies(moduleGa, profiles).stream()
-                        .map(dep -> dep.resolveGa(tree, profiles))
+                        .map(evaluator::evaluateGa)
                         /* keep only local extension dependencies */
                         .filter(dep -> tree.getModulesByGa().keySet()
                                 .contains(new Ga(dep.getGroupId(), dep.getArtifactId() + "-deployment")))
@@ -809,6 +800,7 @@ public class ProdExcludesMojo extends AbstractMojo {
     }
 
     void writeProdReports(MavenSourceTree tree, Set<Ga> expandedIncludes, Predicate<Profile> profiles) {
+        final ExpressionEvaluator evaluator = tree.getExpressionEvaluator(profiles);
         final Path cqFile = productizedCamelQuarkusArtifacts.toPath();
         try {
             Files.createDirectories(cqFile.getParent());
@@ -839,7 +831,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                     .map(ga -> tree.getModulesByGa().get(ga))
                     .flatMap(module -> module.getProfiles().stream())
                     .flatMap(profile -> profile.getDependencies().stream())
-                    .map(dep -> dep.resolveGa(tree, profiles))
+                    .map(evaluator::evaluateGa)
                     .filter(depGa -> "org.apache.camel".equals(depGa.getGroupId()))
                     .map(Ga::getArtifactId)
                     .distinct()
@@ -974,7 +966,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                     .map(test -> {
                         final Path testAbsPath = tree.getRootDirectory().resolve(tree.getModulesByGa().get(test).getPomPath())
                                 .getParent();
-                        return Utils.toUnixPath(anyGroupDir.relativize(testAbsPath).toString());
+                        return PomTunerUtils.toUnixPath(anyGroupDir.relativize(testAbsPath).toString());
                     })
                     .collect(Collectors.toCollection(() -> new TreeSet<String>()));
 

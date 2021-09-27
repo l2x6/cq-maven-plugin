@@ -81,7 +81,7 @@
         <maven-project.version>3.0-alpha-2</maven-project.version>
         <maven.plugin-tools.version>3.5</maven.plugin-tools.version>
         <maven.shared.file-management>3.0.0</maven.shared.file-management>
-        <maven-utils.version>3.7.1</maven-utils.version>
+        <pom-tuner.version>1.0.0</pom-tuner.version>
         <junit.version>5.6.0</junit.version>
         <google-client.version>1.23.0</google-client.version>
         <google-api-services-sheets.version>v4-rev493-1.23.0</google-api-services-sheets.version>
@@ -238,9 +238,9 @@
             </dependency>
 
             <dependency>
-                <groupId>org.l2x6.maven-utils</groupId>
-                <artifactId>maven-utils</artifactId>
-                <version>${maven-utils.version}</version>
+                <groupId>org.l2x6.pom-tuner</groupId>
+                <artifactId>pom-tuner</artifactId>
+                <version>${pom-tuner.version}</version>
             </dependency>
 
             <dependency>

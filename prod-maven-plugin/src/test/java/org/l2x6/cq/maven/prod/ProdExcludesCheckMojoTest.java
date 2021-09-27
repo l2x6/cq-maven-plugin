@@ -29,7 +29,7 @@ import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.l2x6.cq.test.utils.TestUtils;
-import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 
 public class ProdExcludesCheckMojoTest {
 

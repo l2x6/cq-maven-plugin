@@ -44,11 +44,11 @@ import org.apache.maven.project.MavenProject;
 import org.codehaus.plexus.component.configurator.expression.ExpressionEvaluationException;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.PomModelCache;
-import org.l2x6.maven.utils.PomTransformer;
-import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
-import org.l2x6.maven.utils.PomTransformer.Transformation;
-import org.l2x6.maven.utils.PomTransformer.TransformationContext;
-import org.l2x6.maven.utils.PomTransformer.WrappedNode;
+import org.l2x6.pom.tuner.PomTransformer;
+import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
+import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.PomTransformer.Transformation;
+import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.w3c.dom.Comment;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -148,7 +148,7 @@ public class SyncVersionsMojo extends AbstractMojo {
         @Override
         public void perform(Document document, TransformationContext context) {
             context.getContainerElement("project", "properties").ifPresent(props -> {
-                for (WrappedNode<Element> prop : props.childElements()) {
+                for (ContainerElement prop : props.childElements()) {
                     Comment nextComment = prop.nextSiblingCommentNode();
                     if (nextComment != null) {
                         final String commentText = nextComment.getNodeValue();

@@ -24,9 +24,9 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.junit.jupiter.api.Test;
 import org.l2x6.cq.test.utils.TestUtils;
-import org.l2x6.maven.utils.MavenSourceTree.ActiveProfiles;
-import org.l2x6.maven.utils.MavenSourceTree.Module.Profile;
-import org.l2x6.maven.utils.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
+import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.model.Profile;
 
 public class SetVersionsMojoTest {
 
