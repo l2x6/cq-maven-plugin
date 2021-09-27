@@ -49,6 +49,8 @@ public class ProdExcludesMojoTest {
         mojo.productizedCamelQuarkusArtifacts = basePath
                 .resolve(ProdExcludesMojo.DEFAULT_PRODUCTIZED_CAMEL_QUARKUS_ARTIFACTS_TXT).toFile();
         mojo.jenkinsfile = basePath.resolve("Jenkinsfile.redhat").toFile();
+        mojo.localRepository = basePath.resolve("target/local-maven-repo").toString();
+        mojo.camelVersion = "3.11.1-fuse1";
         return mojo;
     }
 
@@ -57,6 +59,8 @@ public class ProdExcludesMojoTest {
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
         final String testName = "prod-excludes-initial";
         final ProdExcludesMojo mojo = initMojo(TestUtils.createProjectFromTemplate("prod-excludes", testName));
+        mojo.remoteRepositoryBaseUris = Collections
+                .singletonList(Paths.get("src/test/maven-repos/initial").toAbsolutePath().normalize().toUri().toString());
         mojo.execute();
 
         TestUtils.assertTreesMatch(Paths.get("src/test/expected/" + testName), mojo.basedir.toPath());
@@ -68,6 +72,9 @@ public class ProdExcludesMojoTest {
         final String testName = "prod-excludes-new-supported-extension";
         final ProdExcludesMojo mojo = initMojo(
                 TestUtils.createProjectFromTemplate("../expected/prod-excludes-initial", testName));
+        mojo.remoteRepositoryBaseUris = Collections
+                .singletonList(Paths.get("src/test/maven-repos/new-supported-extension").toAbsolutePath().normalize().toUri()
+                        .toString());
 
         final Path dest = mojo.productJson.toPath();
         try (InputStream in = getClass().getClassLoader()

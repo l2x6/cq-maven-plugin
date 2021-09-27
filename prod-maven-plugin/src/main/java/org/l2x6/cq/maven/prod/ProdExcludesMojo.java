@@ -28,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -52,6 +53,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.apache.maven.model.Model;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -60,6 +62,7 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.apache.maven.shared.utils.io.IOUtil;
 import org.assertj.core.api.Assertions;
+import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.pom.tuner.ExpressionEvaluator;
 import org.l2x6.pom.tuner.MavenSourceTree;
@@ -83,19 +86,30 @@ import org.w3c.dom.Element;
  */
 @Mojo(name = "prod-excludes", threadSafe = true, requiresProject = false, inheritByDefault = false)
 public class ProdExcludesMojo extends AbstractMojo {
-    enum Edition {
+    enum CqEdition {
         PRODUCT(new HashSet<>(
                 Arrays.asList("${camel-quarkus.version}", "${project.version}")), "${camel-quarkus.version}"),
         COMMUNITY(Collections
                 .singleton("${camel-quarkus-community.version}"), "${camel-quarkus-community.version}");
 
-        Edition(Set<String> versionExpressions, String preferredVersionExpression) {
+        CqEdition(Set<String> versionExpressions, String preferredVersionExpression) {
             this.versionExpressions = versionExpressions;
             this.preferredVersionExpression = preferredVersionExpression;
         }
 
         private final Set<String> versionExpressions;
         private final String preferredVersionExpression;
+    }
+
+    enum CamelEdition {
+        PRODUCT("${camel.version}"),
+        COMMUNITY("${camel-community.version}");
+
+        CamelEdition(String versionExpression) {
+            this.versionExpression = versionExpression;
+        }
+
+        private final String versionExpression;
     }
 
     enum TestCategory {
@@ -243,6 +257,25 @@ public class ProdExcludesMojo extends AbstractMojo {
     @Parameter(property = "cq.jenkinsfileStageTemplate")
     File jenkinsfileStageTemplate;
 
+    /**
+     * @since 2.6.0
+     */
+    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
+    List<RemoteRepository> repositories;
+    List<String> remoteRepositoryBaseUris;
+
+    /**
+     * @since 2.6.0
+     */
+    @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
+    String localRepository;
+
+    /**
+     * @since 2.6.0
+     */
+    @Parameter(defaultValue = "${camel.version}", readonly = true)
+    String camelVersion;
+
     boolean pureProductBom = false;
 
     /**
@@ -347,7 +380,9 @@ public class ProdExcludesMojo extends AbstractMojo {
         final Set<Ga> newIncludes = fullTree.findRequiredModules(expandedIncludes, profiles);
         expandedIncludes.addAll(newIncludes);
 
-        writeProdReports(fullTree, expandedIncludes, profiles);
+        final Set<Ga> requiredCamelArtifacts = findRequiredCamelArtifacts(fullTree, expandedIncludes,
+                fullTree.getExpressionEvaluator(profiles));
+        writeProdReports(fullTree, expandedIncludes, profiles, requiredCamelArtifacts);
 
         /* Comment all non-productized modules in the tree */
         minimizeTree(workRoot, expandedIncludes, tests, profiles);
@@ -363,7 +398,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         final TreeSet<Ga> includesPlusTests = updateMixedTests(fullTree, expandedIncludes, tests);
 
         /* BOMs */
-        updateBoms(fullTree, includesPlusTests, profiles);
+        final Set<Ga> missingCamelArtifacts = updateBoms(fullTree, includesPlusTests, profiles, requiredCamelArtifacts);
 
         /* Uncomment the product module and comment test modules */
         new PomTransformer(workRoot.resolve("pom.xml"), charset, simpleElementWhitespace)
@@ -378,6 +413,17 @@ public class ProdExcludesMojo extends AbstractMojo {
 
         if (isChecking()) {
             assertPomsMatch(workRoot, basedir.toPath());
+        }
+
+        if (!missingCamelArtifacts.isEmpty()) {
+            throw new IllegalStateException(
+                    "The following Camel artifacts are not managed in in org.apache.camel:camel-bom:" + camelVersion
+                            + " but are required by extensions declared in "
+                            + CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH
+                            + ":\n - "
+                            + missingCamelArtifacts.stream()
+                                    .map(Ga::getArtifactId)
+                                    .collect(Collectors.joining("\n - ")));
         }
 
         if (!uncoveredExtensions.isEmpty()) {
@@ -500,8 +546,14 @@ public class ProdExcludesMojo extends AbstractMojo {
                 .transform(Transformation.removeAllModules("mixed", true, true));
     }
 
-    void updateBoms(MavenSourceTree tree, Set<Ga> expandedIncludes, Predicate<Profile> profiles) {
+    Set<Ga> updateBoms(MavenSourceTree tree, Set<Ga> expandedIncludes, Predicate<Profile> profiles,
+            Set<Ga> requiredCamelArtifacts) {
         final ExpressionEvaluator evaluator = tree.getExpressionEvaluator(profiles);
+
+        final Set<Ga> productizedCamelArtifacts = getProductizedCamelArtifacts(tree.getRootModule(), evaluator);
+        final Set<Ga> missingCamelArtifacts = requiredCamelArtifacts.stream()
+                .filter(ga -> !productizedCamelArtifacts.contains(ga))
+                .collect(Collectors.toCollection(TreeSet::new));
 
         for (Entry<Ga, Module> moduleEntry : tree.getModulesByGa().entrySet()) {
             final Ga moduleGa = moduleEntry.getKey();
@@ -510,29 +562,39 @@ public class ProdExcludesMojo extends AbstractMojo {
                 final Module module = moduleEntry.getValue();
                 final List<Transformation> transformations = new ArrayList<>();
                 for (Profile profile : module.getProfiles()) {
-                    final Map<Edition, List<Ga>> gasByVersion = Stream
-                            .of(Edition.values())
-                            .collect(Collectors.toMap(x -> x, x -> new ArrayList<Ga>(), (m1, m2) -> m2, LinkedHashMap::new));
-                    if (profiles.test(profile)) {
+
+                    if (profiles.test(profile) && !profile.getDependencyManagement().isEmpty()) {
+                        final Map<String, List<Ga>> gasByNewVersion = new LinkedHashMap<>();
+                        Stream.of(CqEdition.values())
+                                .forEach(edition -> gasByNewVersion.put(edition.preferredVersionExpression, new ArrayList<>()));
+                        Stream.of(CamelEdition.values())
+                                .forEach(edition -> gasByNewVersion.put(edition.versionExpression, new ArrayList<>()));
                         for (Dependency managedDep : profile.getDependencyManagement()) {
                             final Ga depGa = evaluator.evaluateGa(managedDep);
                             if (depGa.getGroupId().equals("org.apache.camel.quarkus")) {
-
                                 final String rawExpression = managedDep.getVersion().getRawExpression();
-                                final Edition edition = expandedIncludes.contains(depGa)
-                                        ? Edition.PRODUCT
-                                        : Edition.COMMUNITY;
+                                final CqEdition edition = expandedIncludes.contains(depGa)
+                                        ? CqEdition.PRODUCT
+                                        : CqEdition.COMMUNITY;
                                 if (!edition.versionExpressions.contains(rawExpression)) {
-                                    gasByVersion.get(edition).add(depGa);
+                                    gasByNewVersion.get(edition.preferredVersionExpression).add(depGa);
+                                }
+                            } else if (depGa.getGroupId().equals("org.apache.camel")) {
+                                final String rawExpression = managedDep.getVersion().getRawExpression();
+                                final CamelEdition edition = productizedCamelArtifacts.contains(depGa)
+                                        ? CamelEdition.PRODUCT
+                                        : CamelEdition.COMMUNITY;
+                                if (!rawExpression.equals(edition.versionExpression)) {
+                                    gasByNewVersion.get(edition.versionExpression).add(depGa);
                                 }
                             }
                         }
+                        gasByNewVersion.entrySet().stream()
+                                .filter(en -> !en.getValue().isEmpty())
+                                .forEach(en -> transformations
+                                        .add(Transformation.setManagedDependencyVersion(profile.getId(),
+                                                en.getKey(), en.getValue())));
                     }
-                    gasByVersion.entrySet().stream()
-                            .filter(en -> !en.getValue().isEmpty())
-                            .forEach(en -> transformations
-                                    .add(Transformation.setManagedDependencyVersion(profile.getId(),
-                                            en.getKey().preferredVersionExpression, en.getValue())));
                 }
                 if (!transformations.isEmpty()) {
                     new PomTransformer(tree.getRootDirectory().resolve(module.getPomPath()), charset, simpleElementWhitespace)
@@ -586,7 +648,22 @@ public class ProdExcludesMojo extends AbstractMojo {
                     simpleElementWhitespace)
                             .transform(transformations);
         }
+        return missingCamelArtifacts;
+    }
 
+    Set<Ga> getProductizedCamelArtifacts(Module cqRootModule, ExpressionEvaluator evaluator) {
+        remoteRepositoryBaseUris = remoteRepositoryBaseUris != null
+                ? remoteRepositoryBaseUris
+                : repositories.stream()
+                        .map(RemoteRepository::getUrl)
+                        .collect(Collectors.toList());
+        final Path localRepositoryPath = Paths.get(localRepository);
+        final Path camelBomPath = CqCommonUtils.copyArtifact(localRepositoryPath, "org.apache.camel", "camel-bom",
+                camelVersion, "pom", remoteRepositoryBaseUris);
+        final Model camelBomModel = CqCommonUtils.readPom(camelBomPath, charset);
+        return camelBomModel.getDependencyManagement().getDependencies().stream()
+                .map(dep -> new Ga(dep.getGroupId(), dep.getArtifactId()))
+                .collect(Collectors.toSet());
     }
 
     Transformation addMixedProfile(String bomArtifactId) {
@@ -799,8 +876,8 @@ public class ProdExcludesMojo extends AbstractMojo {
         });
     }
 
-    void writeProdReports(MavenSourceTree tree, Set<Ga> expandedIncludes, Predicate<Profile> profiles) {
-        final ExpressionEvaluator evaluator = tree.getExpressionEvaluator(profiles);
+    void writeProdReports(MavenSourceTree tree, Set<Ga> expandedIncludes, Predicate<Profile> profiles,
+            Set<Ga> requiredCamelArtifacts) {
         final Path cqFile = productizedCamelQuarkusArtifacts.toPath();
         try {
             Files.createDirectories(cqFile.getParent());
@@ -827,12 +904,7 @@ public class ProdExcludesMojo extends AbstractMojo {
 
         final Path camelFile = requiredProductizedCamelArtifacts.toPath();
         try (Writer out = Files.newBufferedWriter(camelFile, charset)) {
-            expandedIncludes.stream()
-                    .map(ga -> tree.getModulesByGa().get(ga))
-                    .flatMap(module -> module.getProfiles().stream())
-                    .flatMap(profile -> profile.getDependencies().stream())
-                    .map(evaluator::evaluateGa)
-                    .filter(depGa -> "org.apache.camel".equals(depGa.getGroupId()))
+            requiredCamelArtifacts.stream()
                     .map(Ga::getArtifactId)
                     .distinct()
                     .sorted()
@@ -847,6 +919,17 @@ public class ProdExcludesMojo extends AbstractMojo {
         } catch (IOException e) {
             throw new RuntimeException("Could not write to " + camelFile);
         }
+    }
+
+    public Set<Ga> findRequiredCamelArtifacts(MavenSourceTree tree, Set<Ga> expandedIncludes,
+            final ExpressionEvaluator evaluator) {
+        return expandedIncludes.stream()
+                .map(ga -> tree.getModulesByGa().get(ga))
+                .flatMap(module -> module.getProfiles().stream())
+                .flatMap(profile -> profile.getDependencies().stream())
+                .map(evaluator::evaluateGa)
+                .filter(depGa -> "org.apache.camel".equals(depGa.getGroupId()))
+                .collect(Collectors.toCollection(TreeSet::new));
     }
 
     void visitPoms(Path src, Consumer<Path> pomConsumer) {
