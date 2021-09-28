@@ -33,6 +33,6 @@
     <name>Camel Quarkus :: Integration Tests :: Mixed JVM :: Group 01</name>
 
     <modules>
-        <module>../../../extensions-jvm/asn1/integration-test</module>
+        <module>../../../integration-tests-jvm/asn1</module>
     </modules>
 </project>

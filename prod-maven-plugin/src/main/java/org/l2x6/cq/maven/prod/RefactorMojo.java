@@ -29,7 +29,6 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.apache.maven.plugin.AbstractMojo;
@@ -38,16 +37,13 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.l2x6.pom.tuner.MavenSourceTree;
-import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.Transformation;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
-import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.model.Module;
-import org.l2x6.pom.tuner.model.Profile;
 import org.w3c.dom.Document;
 
 /**
@@ -83,8 +79,12 @@ public class RefactorMojo extends AbstractMojo {
 
         final Path workDir = basedir.toPath();
         final Path rootPomPath = workDir.resolve("pom.xml");
-        final MavenSourceTree tree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
-        final Predicate<Profile> profiles = ActiveProfiles.of();
+
+        final MavenSourceTree initialTree = MavenSourceTree.of(rootPomPath, charset);
+
+        /* Re-link any previously commented modules */
+        final MavenSourceTree tree = initialTree.relinkModules(charset, simpleElementWhitespace,
+                ProdExcludesMojo.MODULE_COMMENT);
 
         final Path jvmTestsDir = workDir.resolve("integration-tests-jvm");
         try {

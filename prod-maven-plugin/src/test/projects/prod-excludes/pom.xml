@@ -210,6 +210,7 @@
         <module>catalog</module>
         <module>product</module>
         <module>integration-tests</module>
+        <module>integration-tests-jvm</module>
     </modules>
 
     <developers>
