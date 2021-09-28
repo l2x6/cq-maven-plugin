@@ -41,7 +41,9 @@ public class ProdExcludesMojoTest {
         mojo.simpleElementWhitespace = SimpleElementWhitespace.SPACE;
         final DirectoryScanner scanner = new DirectoryScanner();
         scanner.setBasedir(mojo.basedir);
-        scanner.setIncludes("extensions-jvm/*/integration-test/pom.xml", "integration-tests/*/pom.xml",
+        scanner.setIncludes(
+                "integration-tests/*/pom.xml",
+                "integration-tests-jvm/*/pom.xml",
                 "integration-test-groups/*/*/pom.xml");
         mojo.integrationTests = Collections.singletonList(scanner);
         mojo.requiredProductizedCamelArtifacts = basePath

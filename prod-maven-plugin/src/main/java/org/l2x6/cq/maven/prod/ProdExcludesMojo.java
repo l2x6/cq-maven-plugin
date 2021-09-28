@@ -299,6 +299,7 @@ public class ProdExcludesMojo extends AbstractMojo {
             integrationTests = Collections.emptyList();
         }
 
+        /* Collect the list of productize artifacts based on data from camel-quarkus-product-source.json */
         final Path absProdJson = basedir.toPath().resolve(productJson.toPath());
         final Set<Ga> includes = new TreeSet<Ga>();
         final Set<Ga> requiredExtensions = new TreeSet<Ga>();
@@ -404,12 +405,6 @@ public class ProdExcludesMojo extends AbstractMojo {
         new PomTransformer(workRoot.resolve("pom.xml"), charset, simpleElementWhitespace)
                 .transform(
                         Transformation.uncommentModules(MODULE_COMMENT, m -> m.equals("product")));
-        /* Comment all test modules under extensions-jvm */
-        fullTree.getModulesByPath().keySet().stream()
-                .filter(relPath -> JVM_PARENT_MODULE_PATH_PATTERN.matcher(relPath).matches())
-                .map(relPath -> fullTree.getRootDirectory().resolve(relPath))
-                .forEach(jvmParentPomPath -> new PomTransformer(jvmParentPomPath, charset, simpleElementWhitespace)
-                        .transform(Transformation.commentModules(Collections.singleton("integration-test"), MODULE_COMMENT)));
 
         if (isChecking()) {
             assertPomsMatch(workRoot, basedir.toPath());
@@ -453,7 +448,8 @@ public class ProdExcludesMojo extends AbstractMojo {
     }
 
     void minimizeTree(Path workRoot, Set<Ga> expandedIncludes, Map<Ga, TestCategory> tests, Predicate<Profile> profiles) {
-        final Set<String> testParents = new TreeSet<>(Arrays.asList("integration-tests", "integration-test-groups"));
+        final Set<String> testParents = new TreeSet<>(
+                Arrays.asList("integration-tests", "integration-tests-jvm", "integration-test-groups"));
         final Set<String> testParentArtifactIds = testParents.stream().map(base -> "camel-quarkus-" + base)
                 .collect(Collectors.toSet());
         final Path rootPomPath = workRoot.resolve("pom.xml");
@@ -796,7 +792,7 @@ public class ProdExcludesMojo extends AbstractMojo {
     static TestCategory findInitialTestCategory(MavenSourceTree tree, Ga ga) {
         final Module module = tree.getModulesByGa().get(ga);
         final String pomPath = module.getPomPath();
-        if (pomPath.startsWith("extensions-jvm/")) {
+        if (pomPath.startsWith("integration-tests-jvm/")) {
             return TestCategory.MIXED_JVM;
         } else if (pomPath.startsWith("integration-tests/") || pomPath.startsWith("integration-test-groups/")) {
             return TestCategory.MIXED_NATIVE;

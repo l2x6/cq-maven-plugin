@@ -22,17 +22,23 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.apache.camel.quarkus</groupId>
-        <artifactId>camel-quarkus-integration-tests-mixed-jvm</artifactId>
+        <artifactId>camel-quarkus-build-parent-it</artifactId>
         <version>2.2.0-SNAPSHOT</version>
-        <relativePath>../pom.xml</relativePath>
+        <relativePath>../poms/build-parent-it/pom.xml</relativePath>
     </parent>
 
-    <artifactId>camel-quarkus-integration-tests-mixed-jvm-group-01</artifactId>
+    <artifactId>camel-quarkus-integration-tests-jvm</artifactId>
     <packaging>pom</packaging>
 
-    <name>Camel Quarkus :: Integration Tests :: Mixed JVM :: Group 01</name>
+    <name>Camel Quarkus :: Integration Tests JVM</name>
+
+    <properties>
+        <quarkus.banner.enabled>false</quarkus.banner.enabled>
+    </properties>
 
     <modules>
-        <module>../../../integration-tests-jvm/asn1</module>
+        <!-- extensions a..z; do not remove this comment, it is important when sorting via  mvn process-resources -Pformat -->
+        <module>asn1</module>
     </modules>
+
 </project>
