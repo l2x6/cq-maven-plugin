@@ -23,9 +23,9 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.apache.camel.quarkus</groupId>
-        <artifactId>camel-quarkus-build-parent</artifactId>
+        <artifactId>camel-quarkus-extensions-jvm</artifactId>
         <version>0.1-SNAPSHOT</version>
-        <relativePath>../../poms/build-parent/pom.xml</relativePath>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>camel-quarkus-base64-parent</artifactId>
@@ -35,6 +35,5 @@
     <modules>
         <module>deployment</module>
         <module>runtime</module>
-        <module>integration-test</module>
     </modules>
 </project>

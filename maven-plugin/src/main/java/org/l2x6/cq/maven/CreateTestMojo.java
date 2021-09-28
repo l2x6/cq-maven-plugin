@@ -62,6 +62,7 @@ public class CreateTestMojo extends AbstractExtensionListMojo {
     static final String CQ_DEPLOYMENT_BOM_PATH = "${project.basedir}/poms/bom-deployment/pom.xml";
     static final String CQ_BOM_ENTRY_VERSION = "@{camel-quarkus.version}";
     static final String CQ_INTEGRATION_TESTS_PATH = "integration-tests/pom.xml";
+    static final String CQ_INTEGRATION_TESTS_JVM_PATH = "integration-tests-jvm/pom.xml";
     static final String CQ_TEMPLATES_URI_BASE = "tooling/create-extension-templates";
 
     static final String CQ_ADDITIONAL_RUNTIME_DEPENDENCIES = "org.apache.camel:camel-@{cq.artifactIdBase}:@{$}{camel.version}";
@@ -311,18 +312,12 @@ public class CreateTestMojo extends AbstractExtensionListMojo {
     }
 
     void generateItest(Configuration cfg, TemplateParams.Builder model) {
-        final Path itestParentPath;
-        final Path itestDir;
-        if (nativeSupported) {
-            if (itestParent == null) {
-                itestParent = basePath.resolve(CQ_INTEGRATION_TESTS_PATH).toFile();
-            }
-            itestParentPath = itestParent.toPath();
-            itestDir = itestParentPath.getParent().resolve(artifactIdBase);
-        } else {
-            itestParentPath = getExtensionProjectBaseDir().resolve("pom.xml");
-            itestDir = itestParentPath.getParent().resolve("integration-test");
+        if (itestParent == null) {
+            itestParent = basePath.resolve(nativeSupported ? CQ_INTEGRATION_TESTS_PATH : CQ_INTEGRATION_TESTS_JVM_PATH)
+                    .toFile();
         }
+        final Path itestParentPath = itestParent.toPath();
+        final Path itestDir = itestParentPath.getParent().resolve(artifactIdBase);
 
         final Model itestParent = CqCommonUtils.readPom(itestParentPath, getCharset());
         if (!"pom".equals(itestParent.getPackaging())) {
@@ -332,9 +327,7 @@ public class CreateTestMojo extends AbstractExtensionListMojo {
         }
         getLog().info(String.format("Adding module [%s] to [%s]", itestDir.getFileName().toString(), itestParentPath));
         pomTransformer(itestParentPath).transform(Transformation.addModule(itestDir.getFileName().toString()));
-        if (nativeSupported) {
-            PomSorter.sortModules(itestParentPath);
-        }
+        PomSorter.sortModules(itestParentPath);
 
         model.itestParentGroupId(getGroupId(itestParent));
         model.itestParentArtifactId(itestParent.getArtifactId());

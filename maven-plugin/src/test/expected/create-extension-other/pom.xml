@@ -15,6 +15,7 @@
     <modules>
         <module>extensions</module>
         <module>integration-tests</module>
+        <module>integration-tests-jvm</module>
     </modules>
 
 </project>

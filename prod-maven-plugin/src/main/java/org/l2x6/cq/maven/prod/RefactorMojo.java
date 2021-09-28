@@ -70,6 +70,7 @@ public class RefactorMojo extends AbstractMojo {
     String projectVersion;
 
     static final Pattern NAME_PATTERN = Pattern.compile("^Camel Quarkus :: ([^:]+) :: ([^:]+)$");
+    static final Pattern ARTIFACT_ID_PATTERN = Pattern.compile("^camel-quarkus-(.+?)-integration-test$");
 
     static final Pattern secondLevelPattern(String firstLevel) {
         return Pattern.compile(firstLevel + "/[^/]+/pom.xml");
@@ -143,14 +144,24 @@ public class RefactorMojo extends AbstractMojo {
                                     .transform(
                                             Transformation.setParent("camel-quarkus-build-parent-it",
                                                     "../../poms/build-parent-it/pom.xml"),
-                                            (Document document, TransformationContext context) -> context
-                                                    .getContainerElement("project", "name")
-                                                    .ifPresent(name -> {
-                                                        final String oldName = name.getNode().getTextContent();
-                                                        final String newName = NAME_PATTERN.matcher(oldName)
-                                                                .replaceFirst("Camel Quarkus :: Integration Tests :: $1");
-                                                        name.getNode().setTextContent(newName);
-                                                    }),
+                                            (Document document, TransformationContext context) -> {
+                                                context
+                                                        .getContainerElement("project", "name")
+                                                        .ifPresent(name -> {
+                                                            final String oldName = name.getNode().getTextContent();
+                                                            final String newName = NAME_PATTERN.matcher(oldName)
+                                                                    .replaceFirst("Camel Quarkus :: Integration Tests :: $1");
+                                                            name.getNode().setTextContent(newName);
+                                                        });
+                                                context
+                                                        .getContainerElement("project", "artifactId")
+                                                        .ifPresent(name -> {
+                                                            final String oldName = name.getNode().getTextContent();
+                                                            final String newName = ARTIFACT_ID_PATTERN.matcher(oldName)
+                                                                    .replaceFirst("camel-quarkus-integration-test-$1");
+                                                            name.getNode().setTextContent(newName);
+                                                        });
+                                            },
                                             Transformation.removeManagedDependencies(true, true,
                                                     gavtcs -> gavtcs.getArtifactId().startsWith("camel-quarkus-bom")),
                                             Transformation.addManagedDependency(appBomParam),

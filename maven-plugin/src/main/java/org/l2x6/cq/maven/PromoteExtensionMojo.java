@@ -131,6 +131,7 @@ public class PromoteExtensionMojo extends AbstractMojo {
         }
 
         final Path srcParentDir = sourceRootPath.resolve("extensions-jvm/" + artifactIdBase);
+        final Path jvmTestsDir = sourceRootPath.resolve("integration-tests-jvm");
         if (!Files.exists(srcParentDir)) {
             throw new RuntimeException(
                     "The directory of the extension to promote does not exist. Maybe a typo in the artifactIdBase parameter? "
@@ -138,7 +139,7 @@ public class PromoteExtensionMojo extends AbstractMojo {
         }
 
         /* Move the test */
-        final Path srcItestDir = srcParentDir.resolve("integration-test");
+        final Path srcItestDir = jvmTestsDir.resolve(artifactIdBase);
         final Path destItestDir = sourceRootPath.resolve("integration-tests/" + artifactIdBase);
         try {
             Files.move(srcItestDir, destItestDir, StandardCopyOption.REPLACE_EXISTING);
@@ -147,9 +148,9 @@ public class PromoteExtensionMojo extends AbstractMojo {
         }
 
         /* Remove the test module from the extension parent */
-        final Path srcParentPomPath = srcParentDir.resolve("pom.xml");
+        final Path srcParentPomPath = jvmTestsDir.resolve("pom.xml");
         new PomTransformer(srcParentPomPath, charset, simpleElementWhitespace)
-                .transform(Transformation.removeModule(true, true, "integration-test"));
+                .transform(Transformation.removeModule(true, true, artifactIdBase));
 
         /* Adjust the names in the test POM */
         adjustTestPom(artifactIdBase, destItestDir.resolve("pom.xml"), charset, templatesUriBase, simpleElementWhitespace);
@@ -230,18 +231,6 @@ public class PromoteExtensionMojo extends AbstractMojo {
 
     static void adjustTestPom(String baseArtifactId, Path path, Charset charset, String templatesUriBase,
             SimpleElementWhitespace simpleElementWhitespace) {
-        try {
-            String src = new String(Files.readAllBytes(path), charset);
-            src = ARTIFACT_ID_PATTERN.matcher(src).replaceFirst("<artifactId>camel-quarkus-integration-test-$1</artifactId>");
-            src = NAME_PATTERN.matcher(src).replaceFirst("<name>Camel Quarkus :: Integration Tests :: $1</name>");
-            src = RELATIVE_PATH_PATTERN.matcher(src).replaceFirst("");
-            src = src.replace("<artifactId>camel-quarkus-build-parent-it</artifactId>",
-                    "<artifactId>camel-quarkus-integration-tests</artifactId>");
-            Files.write(path, src.getBytes(charset));
-        } catch (IOException e) {
-            throw new RuntimeException("Could not read or write path " + path, e);
-        }
-
         /* Add the native profile at the end of integration-tests/${EXT}/pom.xml: */
         final DocumentFragment nativeProfile = loadNativeProfile(charset, templatesUriBase + "/integration-test-pom.xml");
         new PomTransformer(path, charset, simpleElementWhitespace)
