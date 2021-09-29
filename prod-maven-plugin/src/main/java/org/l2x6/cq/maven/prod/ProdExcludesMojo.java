@@ -75,6 +75,7 @@ import org.l2x6.pom.tuner.PomTransformer.Transformation;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.PomTunerUtils;
 import org.l2x6.pom.tuner.model.Dependency;
+import org.l2x6.pom.tuner.model.Expression;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.model.Module;
@@ -367,6 +368,8 @@ public class ProdExcludesMojo extends AbstractMojo {
         /* Add the modules required by the includes */
         Set<Ga> expandedIncludes = fullTree.findRequiredModules(includes, profiles);
 
+        updateVersions(fullTree, profiles);
+
         /* Tests */
         final Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions = new TreeMap<>();
         final Map<Ga, TestCategory> tests = analyzeTests(fullTree, expandedIncludes, profiles, uncoveredExtensions,
@@ -443,6 +446,56 @@ public class ProdExcludesMojo extends AbstractMojo {
                     .append(CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH)
                     .append("\nand running mvn org.l2x6.cq:cq-prod-maven-plugin:prod-excludes -N after that\n\n");
             throw new MojoFailureException(sb.toString());
+        }
+
+    }
+
+    void updateVersions(MavenSourceTree fullTree, Predicate<Profile> profiles) {
+        /* Check that all modules have the same version - another version may have slipped in when backporting */
+        final ExpressionEvaluator evaluator = fullTree.getExpressionEvaluator(profiles);
+        final Module rootModule = fullTree.getRootModule();
+        final String expectedVersion = rootModule.getGav().getVersion().asConstant();
+        for (Module module : fullTree.getModulesByGa().values()) {
+            if (!module.getPomPath().equals("pom.xml")) {
+                final String moduleVersion = module.getParentGav().getVersion().asConstant();
+                if (!expectedVersion.equals(moduleVersion)) {
+                    final Path pomPath = fullTree.getRootDirectory().resolve(module.getPomPath());
+                    new PomTransformer(pomPath, charset, simpleElementWhitespace)
+                            .transform(
+                                    (Document document, TransformationContext context) -> {
+                                        context
+                                                .getContainerElement("project", "parent")
+                                                .ifPresent(
+                                                        parent -> parent.addOrSetChildTextElement("version", expectedVersion));
+                                    });
+                }
+            }
+        }
+
+        /* Check that <camel-quarkus.version> is the same as project.version */
+        final List<Transformation> transformations = new ArrayList<PomTransformer.Transformation>();
+        final String camelQuarkusVersion = evaluator
+                .evaluate(Expression.of("${camel-quarkus.version}", evaluator.evaluateGa(rootModule.getGav())));
+        if (!camelQuarkusVersion.equals(expectedVersion)) {
+            transformations.add(Transformation.addOrSetProperty("camel-quarkus.version", expectedVersion));
+        }
+
+        /* Check that <camel.version> is the same as parent */
+        final String camelParentVersion = rootModule.getParentGav().getVersion().asConstant();
+        final String camelVersion = evaluator
+                .evaluate(Expression.of("${camel.version}", evaluator.evaluateGa(rootModule.getGav())));
+        if (!camelParentVersion.equals(camelVersion)) {
+            transformations.add(
+                    (Document document, TransformationContext context) -> {
+                        context
+                                .getContainerElement("project", "parent")
+                                .ifPresent(parent -> parent.addOrSetChildTextElement("version", camelVersion));
+                    });
+        }
+        if (!transformations.isEmpty()) {
+            final Path rootPomPath = fullTree.getRootDirectory().resolve(rootModule.getPomPath());
+            new PomTransformer(rootPomPath, charset, simpleElementWhitespace)
+                    .transform(transformations);
         }
 
     }

@@ -37,6 +37,8 @@
     <inceptionYear>2019</inceptionYear>
 
     <properties>
+        <camel-quarkus.version>2.3.0-SNAPSHOT</camel-quarkus.version>
+
         <!-- Primary dependencies - maintained manually -->
         <camel.major.minor>3.11</camel.major.minor> <!-- run after each change: cd docs && mvnd validate -->
         <camel.version>${camel.major.minor}.1-fuse1</camel.version>
