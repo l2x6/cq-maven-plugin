@@ -410,7 +410,8 @@ public class ProdExcludesMojo extends AbstractMojo {
                         Transformation.uncommentModules(MODULE_COMMENT, m -> m.equals("product")));
 
         if (isChecking()) {
-            assertPomsMatch(workRoot, basedir.toPath());
+            final MavenSourceTree finalTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
+            assertPomsMatch(workRoot, basedir.toPath(), finalTree.getModulesByPath().keySet());
         }
 
         if (!missingCamelArtifacts.isEmpty()) {
@@ -899,28 +900,31 @@ public class ProdExcludesMojo extends AbstractMojo {
         return dest;
     }
 
-    void assertPomsMatch(Path src, Path dest) {
+    void assertPomsMatch(Path src, Path dest, Set<String> activeRelativePomPaths) {
         visitPoms(src, file -> {
-            final Path destPath = dest.resolve(src.relativize(file));
-            try {
-                Assertions.assertThat(file).hasSameTextualContentAs(destPath);
-            } catch (AssertionError e) {
-                String msg = e.getMessage();
-                final String contentAt = "content at line";
-                int offset = msg.indexOf(contentAt);
-                if (offset < 0) {
-                    throw new IllegalStateException(
-                            "Expected to find '" + contentAt + "' in the causing exception's message; found: "
-                                    + e.getMessage(),
-                            e);
+            final Path relPomPath = src.relativize(file);
+            if (activeRelativePomPaths.contains(PomTunerUtils.toUnixPath(relPomPath.toString()))) {
+                final Path destPath = dest.resolve(relPomPath);
+                try {
+                    Assertions.assertThat(file).hasSameTextualContentAs(destPath);
+                } catch (AssertionError e) {
+                    String msg = e.getMessage();
+                    final String contentAt = "content at line";
+                    int offset = msg.indexOf(contentAt);
+                    if (offset < 0) {
+                        throw new IllegalStateException(
+                                "Expected to find '" + contentAt + "' in the causing exception's message; found: "
+                                        + e.getMessage(),
+                                e);
+                    }
+                    while (msg.charAt(--offset) != '\n') {
+                    }
+                    msg = "File [" + basedir.toPath().relativize(destPath) + "] is not in sync with "
+                            + CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH + ":\n\n"
+                            + msg.substring(offset)
+                            + "\n\n Consider running mvn org.l2x6.cq:cq-prod-maven-plugin:prod-excludes -N\n\n";
+                    throw new RuntimeException(msg);
                 }
-                while (msg.charAt(--offset) != '\n') {
-                }
-                msg = "File [" + basedir.toPath().relativize(destPath) + "] is not in sync with "
-                        + CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH + ":\n\n"
-                        + msg.substring(offset)
-                        + "\n\n Consider running mvn org.l2x6.cq:cq-prod-maven-plugin:prod-excludes -N\n\n";
-                throw new RuntimeException(msg);
             }
         });
     }
