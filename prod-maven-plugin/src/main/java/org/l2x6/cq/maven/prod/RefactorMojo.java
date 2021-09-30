@@ -97,8 +97,10 @@ public class RefactorMojo extends AbstractMojo {
         final Path buildParentPom = workDir.resolve("poms/build-parent/pom.xml");
 
         final Set<String> jvmTestModules = new TreeSet<>();
-        final Gavtcs appBomParam = new Gavtcs("${quarkus.platform.group-id}", "${quarkus.platform.artifact-id}",
+        final Gavtcs quarkusBomParam = new Gavtcs("${quarkus.platform.group-id}", "${quarkus.platform.artifact-id}",
                 "${quarkus.platform.version}", "pom", null, "import");
+        final Gavtcs cqBomParam = new Gavtcs("${camel-quarkus.platform.group-id}", "${camel-quarkus.platform.artifact-id}",
+                "${camel-quarkus.platform.version}", "pom", null, "import");
         final Gavtcs appBomLiteral = new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-bom",
                 "${camel-quarkus.version}", "pom", null, "import");
         final Gavtcs testBom = new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-bom-test", "${camel-quarkus.version}",
@@ -109,7 +111,7 @@ public class RefactorMojo extends AbstractMojo {
                 .forEach(ga -> {
                     Module m = tree.getModulesByGa().get(ga);
                     new PomTransformer(workDir.resolve(m.getPomPath()), charset, simpleElementWhitespace)
-                            .transform(Transformation.addManagedDependency(appBomLiteral));
+                            .transform(Transformation.addManagedDependencyIfNeeded(appBomLiteral));
                 });
 
         tree.getModulesByPath().values().stream()
@@ -119,8 +121,9 @@ public class RefactorMojo extends AbstractMojo {
                             .transform(
                                     Transformation.removeManagedDependencies(true, true,
                                             gavtcs -> gavtcs.getArtifactId().startsWith("camel-quarkus-bom")),
-                                    Transformation.addManagedDependency(appBomParam),
-                                    Transformation.addManagedDependency(testBom));
+                                    Transformation.addManagedDependencyIfNeeded(quarkusBomParam),
+                                    Transformation.addManagedDependencyIfNeeded(cqBomParam),
+                                    Transformation.addManagedDependencyIfNeeded(testBom));
                 });
 
         tree.getModulesByPath().keySet().stream()
@@ -137,8 +140,9 @@ public class RefactorMojo extends AbstractMojo {
                     final String artifactIdBase = jvmParentPom.getParent().getFileName().toString();
                     jvmTestModules.add(artifactIdBase);
 
+                    final Path testPom = jvmParentPom.getParent().resolve("integration-test/pom.xml");
                     new PomTransformer(
-                            jvmParentPom.getParent().resolve("integration-test/pom.xml"),
+                            testPom,
                             charset,
                             simpleElementWhitespace)
                                     .transform(
@@ -164,9 +168,9 @@ public class RefactorMojo extends AbstractMojo {
                                             },
                                             Transformation.removeManagedDependencies(true, true,
                                                     gavtcs -> gavtcs.getArtifactId().startsWith("camel-quarkus-bom")),
-                                            Transformation.addManagedDependency(appBomParam),
-                                            Transformation.addManagedDependency(testBom));
-
+                                            Transformation.addManagedDependencyIfNeeded(quarkusBomParam),
+                                            Transformation.addManagedDependencyIfNeeded(cqBomParam),
+                                            Transformation.addManagedDependencyIfNeeded(testBom));
                     /* Move the test dir */
                     try {
                         Files.move(jvmParentPom.getParent().resolve("integration-test"), jvmTestsDir.resolve(artifactIdBase));
@@ -187,7 +191,7 @@ public class RefactorMojo extends AbstractMojo {
                     .transform(
                             Transformation.setParent("camel-quarkus-build-parent",
                                     jvmTestsDir.relativize(buildParentPom).toString()),
-                            Transformation.addManagedDependency(appBomLiteral));
+                            Transformation.addManagedDependencyIfNeeded(appBomLiteral));
             tree.getModulesByPath().keySet().stream()
                     .filter(path -> pattern.matcher(path).matches())
                     .map(Paths::get)
@@ -204,7 +208,7 @@ public class RefactorMojo extends AbstractMojo {
                     });
         }
         new PomTransformer(workDir.resolve("integration-tests-support/pom.xml"), charset, simpleElementWhitespace)
-                .transform(Transformation.addManagedDependency(testBom));
+                .transform(Transformation.addManagedDependencyIfNeeded(testBom));
 
         new PomTransformer(rootPomPath, charset, simpleElementWhitespace)
                 .transform(Transformation.addModule("integration-tests-jvm"));
