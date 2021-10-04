@@ -62,8 +62,7 @@ public class ProdExcludesCheckMojoTest {
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
         final String testName = "check-initial";
         final ProdExcludesCheckMojo mojo = initMojo(TestUtils.createProjectFromTemplate("prod-excludes", testName));
-        mojo.remoteRepositoryBaseUris = Collections
-                .singletonList(Paths.get("src/test/maven-repos/initial").toAbsolutePath().normalize().toUri().toString());
+        mojo.localRepository = Paths.get("src/test/maven-repos/initial").toAbsolutePath().normalize().toString();
         try {
             mojo.execute();
             Assertions.fail("Expected a RuntimeException");
@@ -81,9 +80,8 @@ public class ProdExcludesCheckMojoTest {
         final String testName = "check-new-supported-extension";
         final ProdExcludesCheckMojo mojo = initMojo(
                 TestUtils.createProjectFromTemplate("../expected/prod-excludes-initial", testName));
-        mojo.remoteRepositoryBaseUris = Collections
-                .singletonList(Paths.get("src/test/maven-repos/new-supported-extension").toAbsolutePath().normalize().toUri()
-                        .toString());
+        mojo.localRepository = Paths.get("src/test/maven-repos/new-supported-extension").toAbsolutePath().normalize()
+                .toString();
 
         final Path dest = mojo.productJson.toPath();
         try (InputStream in = getClass().getClassLoader()

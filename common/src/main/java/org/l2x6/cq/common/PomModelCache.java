@@ -22,23 +22,31 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.maven.model.Model;
+import org.eclipse.aether.RepositorySystem;
+import org.eclipse.aether.RepositorySystemSession;
+import org.eclipse.aether.repository.RemoteRepository;
 
 public class PomModelCache {
 
     private final Map<String, Model> items = new HashMap<>();
     private final Path localRepositoryPath;
-    private final List<String> remoteRepositories;
+    private final List<RemoteRepository> remoteRepositories;
+    private final RepositorySystem repoSystem;
+    private final RepositorySystemSession repoSession;
 
-    public PomModelCache(Path localRepositoryPath, List<String> remoteRepositories) {
+    public PomModelCache(Path localRepositoryPath, List<RemoteRepository> remoteRepositories, RepositorySystem repoSystem,
+            RepositorySystemSession repoSession) {
         this.localRepositoryPath = localRepositoryPath;
         this.remoteRepositories = remoteRepositories;
+        this.repoSystem = repoSystem;
+        this.repoSession = repoSession;
     }
 
     public Model get(String groupId, String artifactId, String version) {
         final String key = groupId + ":" + artifactId + ":" + version;
         return items.computeIfAbsent(key, k -> {
             final Path cqPomPath = CqCommonUtils.copyArtifact(localRepositoryPath, groupId, artifactId, version,
-                    "pom", remoteRepositories);
+                    "pom", remoteRepositories, repoSystem, repoSession);
             final Model model = CqCommonUtils.readPom(cqPomPath, StandardCharsets.UTF_8);
             return model;
         });

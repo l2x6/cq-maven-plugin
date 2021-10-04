@@ -26,6 +26,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import org.apache.camel.catalog.Kind;
 import org.apache.camel.tooling.model.ArtifactModel;
@@ -33,9 +34,13 @@ import org.apache.camel.tooling.model.BaseModel;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
+import org.eclipse.aether.RepositorySystem;
+import org.eclipse.aether.RepositorySystemSession;
+import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.CqCatalog;
 import org.l2x6.cq.common.CqCatalog.Flavor;
 import org.l2x6.cq.common.CqCatalog.GavCqCatalog;
@@ -67,6 +72,15 @@ public class ExportComponentCsvMojo extends AbstractMojo {
     @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
     String localRepository;
 
+    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
+    List<RemoteRepository> repositories;
+
+    @Component
+    private RepositorySystem repoSystem;
+
+    @Parameter(defaultValue = "${repositorySystemSession}", readonly = true, required = true)
+    private RepositorySystemSession repoSession;
+
     /**
      * Execute goal.
      *
@@ -78,9 +92,10 @@ public class ExportComponentCsvMojo extends AbstractMojo {
     public void execute() throws MojoExecutionException, MojoFailureException {
         final Path localRepositoryPath = Paths.get(localRepository);
         final Path outputPath = outputDir.toPath();
-        try (GavCqCatalog camelCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camel, camelCatalogVersion);
+        try (GavCqCatalog camelCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camel, camelCatalogVersion, repositories,
+                repoSystem, repoSession);
                 GavCqCatalog camelQuarkusCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camelQuarkus,
-                        camelQuarkusCatalogVersion)) {
+                        camelQuarkusCatalogVersion, repositories, repoSystem, repoSession)) {
             CqCatalog.kinds().forEach(kind -> {
                 final Path outputFile = outputPath.resolve(kind.name() + "s.csv");
                 try (Writer out = Files.newBufferedWriter(outputFile, StandardCharsets.UTF_8)) {
