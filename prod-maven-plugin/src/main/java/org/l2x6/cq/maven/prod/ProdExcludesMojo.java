@@ -285,8 +285,6 @@ public class ProdExcludesMojo extends AbstractMojo {
     @Parameter(defaultValue = "${repositorySystemSession}", readonly = true, required = true)
     private RepositorySystemSession repoSession;
 
-    boolean pureProductBom = false;
-
     /**
      * Overridden by {@link ProdExcludesCheckMojo}.
      *
@@ -661,51 +659,6 @@ public class ProdExcludesMojo extends AbstractMojo {
             }
         }
 
-        if (pureProductBom) {
-            /* off for now */
-            /*
-             * Pure product BOM:
-             * Currently, we remove only the ${camel-quarkus-community.version} dependencies.
-             * This is not perfect, we should also switch depending on Quarkus prod BOM, which does not exist
-             * and/or we'd need to perform the analysis of the whole dependency graph and remove all non-prodictized
-             * items
-             * (I wonder whether it is a good idea/doable at all)
-             */
-            Stream<String> moduleNames = Stream.of(
-                    copyPom(
-                            tree,
-                            tree.getModulesByPath().get("poms/bom/pom.xml"),
-                            Transformation.removeManagedDependencies(true, true,
-                                    gavtcs -> "${camel-quarkus-community.version}".equals(gavtcs.getVersion()))),
-                    copyPom(
-                            tree,
-                            tree.getModulesByPath().get("poms/bom-test/pom.xml"),
-                            replaceManagedArtifactId("camel-quarkus-bom", "camel-quarkus-product-bom"),
-                            Transformation.removeManagedDependencies(true, true,
-                                    gavtcs -> "${camel-quarkus-community.version}".equals(gavtcs.getVersion()))),
-                    copyPom(
-                            tree,
-                            tree.getModulesByPath().get("poms/build-parent/pom.xml"),
-                            replaceManagedArtifactId("camel-quarkus-bom", "camel-quarkus-product-bom"),
-                            addMixedProfile("camel-quarkus-bom")),
-                    copyPom(
-                            tree,
-                            tree.getModulesByPath().get("poms/build-parent-it/pom.xml"),
-                            replaceManagedArtifactId("camel-quarkus-bom-test", "camel-quarkus-product-bom-test"),
-                            addMixedProfile("camel-quarkus-bom-test")));
-
-            final List<Transformation> transformations = new ArrayList<>();
-            transformations.add(Transformation.uncommentModules(MODULE_COMMENT));
-            moduleNames
-                    .map(m -> Transformation.addModuleIfNeeded(m, String::compareTo))
-                    .forEach(transformations::add);
-
-            new PomTransformer(
-                    tree.getRootDirectory().resolve("product/pom.xml"),
-                    charset,
-                    simpleElementWhitespace)
-                            .transform(transformations);
-        }
         return missingCamelArtifacts;
     }
 
