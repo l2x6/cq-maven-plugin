@@ -480,14 +480,20 @@ public class ProdExcludesMojo extends AbstractMojo {
         }
 
         /* Check that <camel-quarkus.version> is the same as project.version */
-        final List<Transformation> transformations = new ArrayList<PomTransformer.Transformation>();
-        final String camelQuarkusVersion = evaluator
-                .evaluate(Expression.of("${camel-quarkus.version}", evaluator.evaluateGa(rootModule.getGav())));
-        if (!camelQuarkusVersion.equals(expectedVersion)) {
-            transformations.add(Transformation.addOrSetProperty("camel-quarkus.version", expectedVersion));
+        for (Entry<String, Module> en : fullTree.getModulesByPath().entrySet()) {
+            final String relPath = en.getKey();
+            final Module bomModule = en.getValue();
+            final Expression cqVersion = bomModule.getProfiles().get(0)
+                    .getProperties().get("camel-quarkus.version");
+            if (cqVersion != null && cqVersion.isConstant() && !cqVersion.asConstant().equals(expectedVersion)) {
+                final Path absPath = fullTree.getRootDirectory().resolve(relPath);
+                new PomTransformer(absPath, charset, simpleElementWhitespace)
+                        .transform(Transformation.addOrSetProperty("camel-quarkus.version", expectedVersion));
+            }
         }
 
         /* Check that <camel.version> is the same as parent */
+        final List<Transformation> transformations = new ArrayList<PomTransformer.Transformation>();
         final String camelParentVersion = rootModule.getParentGav().getVersion().asConstant();
         final String camelVersion = evaluator
                 .evaluate(Expression.of("${camel.version}", evaluator.evaluateGa(rootModule.getGav())));
