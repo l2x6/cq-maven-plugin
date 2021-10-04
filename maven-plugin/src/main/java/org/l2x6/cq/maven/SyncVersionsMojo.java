@@ -25,7 +25,6 @@ import java.util.List;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.lifecycle.internal.MojoDescriptorCreator;
 import org.apache.maven.model.Dependency;
@@ -42,6 +41,8 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.codehaus.plexus.component.configurator.expression.ExpressionEvaluationException;
+import org.eclipse.aether.RepositorySystem;
+import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.PomModelCache;
 import org.l2x6.pom.tuner.PomTransformer;
@@ -107,6 +108,12 @@ public class SyncVersionsMojo extends AbstractMojo {
     @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "EMPTY")
     SimpleElementWhitespace simpleElementWhitespace;
 
+    @Component
+    private RepositorySystem repoSystem;
+
+    @Parameter(defaultValue = "${repositorySystemSession}", readonly = true, required = true)
+    private RepositorySystemSession repoSession;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
 
@@ -120,12 +127,9 @@ public class SyncVersionsMojo extends AbstractMojo {
             PluginParameterExpressionEvaluator evaluator = new PluginParameterExpressionEvaluator(session,
                     new MojoExecution(mojoDescriptor));
 
-            final List<String> remoteRepos = repositories.stream()
-                    .map(RemoteRepository::getUrl)
-                    .map(uri -> uri.endsWith("/") ? uri.substring(0, uri.length() - 1) : uri)
-                    .collect(Collectors.toList());
             new PomTransformer(pomXml, charset, simpleElementWhitespace)
-                    .transform(new UpdateVersionsTransformation(new PomModelCache(localRepositoryPath, remoteRepos), evaluator,
+                    .transform(new UpdateVersionsTransformation(
+                            new PomModelCache(localRepositoryPath, repositories, repoSystem, repoSession), evaluator,
                             getLog()));
         } catch (Exception e) {
             throw new RuntimeException(e);

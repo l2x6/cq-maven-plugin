@@ -18,7 +18,6 @@ package org.l2x6.cq.common;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.Reader;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -39,6 +38,13 @@ import org.apache.camel.catalog.Kind;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
+import org.eclipse.aether.RepositorySystem;
+import org.eclipse.aether.RepositorySystemSession;
+import org.eclipse.aether.artifact.DefaultArtifact;
+import org.eclipse.aether.repository.RemoteRepository;
+import org.eclipse.aether.resolution.ArtifactRequest;
+import org.eclipse.aether.resolution.ArtifactResolutionException;
+import org.eclipse.aether.resolution.ArtifactResult;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.Transformation;
@@ -56,35 +62,34 @@ public class CqCommonUtils {
     }
 
     public static Path copyJar(Path localRepository, String groupId, String artifactId, String version,
-            List<String> remoteRepositories) {
-        return copyArtifact(localRepository, groupId, artifactId, version, "jar", remoteRepositories);
+            List<RemoteRepository> remoteRepositories, RepositorySystem repoSystem, RepositorySystemSession repoSession) {
+        return copyArtifact(localRepository, groupId, artifactId, version, "jar", remoteRepositories, repoSystem, repoSession);
     }
 
     public static Path copyArtifact(Path localRepository, String groupId, String artifactId, String version, String type,
-            List<String> remoteRepositories) {
+            List<RemoteRepository> repositories, RepositorySystem repoSystem, RepositorySystemSession repoSession) {
         final String relativeJarPath = groupId.replace('.', '/') + "/" + artifactId + "/" + version + "/" + artifactId + "-"
                 + version + "." + type;
         final Path localPath = localRepository.resolve(relativeJarPath);
-        final boolean localExists = Files.exists(localPath);
-        Path result;
-        try {
-            result = Files.createTempFile(null, localPath.getFileName().toString());
-            try (InputStream in = (localExists ? Files.newInputStream(localPath)
-                    : openFirst(remoteRepositories, relativeJarPath));
-                    OutputStream out = Files.newOutputStream(result)) {
-                final byte[] buf = new byte[4096];
-                int len;
-                while ((len = in.read(buf)) >= 0) {
-                    out.write(buf, 0, len);
-                }
-            } catch (IOException e) {
-                throw new RuntimeException("Could not copy " + (localExists ? localPath : relativeJarPath) + " to " + result,
-                        e);
-            }
-        } catch (IOException e) {
-            throw new RuntimeException("Could not create temp file", e);
+        if (Files.exists(localPath)) {
+            return localPath;
         }
-        return result;
+        final org.eclipse.aether.artifact.Artifact aetherArtifact = new DefaultArtifact(
+                groupId,
+                artifactId,
+                null,
+                type,
+                version);
+
+        final ArtifactRequest req = new ArtifactRequest().setRepositories(repositories).setArtifact(aetherArtifact);
+        ArtifactResult resolutionResult;
+        try {
+            resolutionResult = repoSystem.resolveArtifact(repoSession, req);
+        } catch (ArtifactResolutionException e) {
+            throw new RuntimeException("Artifact " + aetherArtifact + " could not be resolved.", e);
+        }
+        return resolutionResult.getArtifact().getFile().toPath();
+
     }
 
     public static InputStream openFirst(List<String> remoteRepositories, String relativePath)

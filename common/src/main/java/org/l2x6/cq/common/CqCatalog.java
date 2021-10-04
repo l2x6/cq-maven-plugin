@@ -40,11 +40,11 @@ import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.camel.tooling.model.BaseModel;
 import org.apache.camel.tooling.model.ComponentModel;
 import org.apache.camel.tooling.model.EipModel;
+import org.eclipse.aether.RepositorySystem;
+import org.eclipse.aether.RepositorySystemSession;
+import org.eclipse.aether.repository.RemoteRepository;
 
 public class CqCatalog {
-    private static final List<String> REPOS = Collections.unmodifiableList(Arrays.asList(
-            "https://repo1.maven.org/maven2/",
-            "https://repository.apache.org/content/groups/public/"));
 
     public enum Flavor {
         camel("org.apache.camel", "camel-catalog") {
@@ -347,9 +347,10 @@ public class CqCatalog {
 
         private final FileSystem jarFileSystem;
 
-        public static GavCqCatalog open(Path localRepository, Flavor flavor, String version) {
+        public static GavCqCatalog open(Path localRepository, Flavor flavor, String version,
+                List<RemoteRepository> remoteRepositories, RepositorySystem repoSystem, RepositorySystemSession repoSession) {
             final Path jarPath = CqCommonUtils.copyJar(localRepository, flavor.getGroupId(), flavor.getArtifactId(), version,
-                    REPOS);
+                    remoteRepositories, repoSystem, repoSession);
             try {
                 final FileSystem fs = FileSystems.newFileSystem(jarPath, (ClassLoader) null);
                 return new GavCqCatalog(fs, flavor);

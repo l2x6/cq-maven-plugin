@@ -19,13 +19,18 @@ package org.l2x6.cq.maven;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.camel.tooling.model.BaseModel;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
+import org.eclipse.aether.RepositorySystem;
+import org.eclipse.aether.RepositorySystemSession;
+import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.CqCatalog;
 import org.l2x6.cq.common.CqCatalog.Flavor;
 import org.l2x6.cq.common.CqCatalog.GavCqCatalog;
@@ -49,6 +54,15 @@ public class VersionReportMojo extends AbstractMojo {
     @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
     String localRepository;
 
+    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
+    List<RemoteRepository> repositories;
+
+    @Component
+    private RepositorySystem repoSystem;
+
+    @Parameter(defaultValue = "${repositorySystemSession}", readonly = true, required = true)
+    private RepositorySystemSession repoSession;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         final Path localRepositoryPath = Paths.get(localRepository);
@@ -62,8 +76,10 @@ public class VersionReportMojo extends AbstractMojo {
         final StringBuilder counts = new StringBuilder();
         final StringBuilder details = new StringBuilder();
 
-        try (GavCqCatalog currentCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camelQuarkus, reportVersion);
-                GavCqCatalog previousCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camelQuarkus, baselineVersion)) {
+        try (GavCqCatalog currentCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camelQuarkus, reportVersion,
+                repositories, repoSystem, repoSession);
+                GavCqCatalog previousCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camelQuarkus, baselineVersion,
+                        repositories, repoSystem, repoSession)) {
 
             CqCatalog.kinds().forEach(kind -> {
                 final String pluralName = CqUtils.toCapCamelCase(kind.name() + "s");

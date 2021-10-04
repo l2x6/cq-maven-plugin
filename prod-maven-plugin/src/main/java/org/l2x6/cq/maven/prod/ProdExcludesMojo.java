@@ -57,11 +57,14 @@ import org.apache.maven.model.Model;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.apache.maven.shared.utils.io.IOUtil;
 import org.assertj.core.api.Assertions;
+import org.eclipse.aether.RepositorySystem;
+import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.pom.tuner.ExpressionEvaluator;
@@ -263,7 +266,6 @@ public class ProdExcludesMojo extends AbstractMojo {
      */
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     List<RemoteRepository> repositories;
-    List<String> remoteRepositoryBaseUris;
 
     /**
      * @since 2.6.0
@@ -276,6 +278,12 @@ public class ProdExcludesMojo extends AbstractMojo {
      */
     @Parameter(defaultValue = "${camel.version}", readonly = true)
     String camelVersion;
+
+    @Component
+    private RepositorySystem repoSystem;
+
+    @Parameter(defaultValue = "${repositorySystemSession}", readonly = true, required = true)
+    private RepositorySystemSession repoSession;
 
     boolean pureProductBom = false;
 
@@ -702,14 +710,9 @@ public class ProdExcludesMojo extends AbstractMojo {
     }
 
     Set<Ga> getProductizedCamelArtifacts(Module cqRootModule, ExpressionEvaluator evaluator) {
-        remoteRepositoryBaseUris = remoteRepositoryBaseUris != null
-                ? remoteRepositoryBaseUris
-                : repositories.stream()
-                        .map(RemoteRepository::getUrl)
-                        .collect(Collectors.toList());
-        final Path localRepositoryPath = Paths.get(localRepository);
-        final Path camelBomPath = CqCommonUtils.copyArtifact(localRepositoryPath, "org.apache.camel", "camel-bom",
-                camelVersion, "pom", remoteRepositoryBaseUris);
+
+        final Path camelBomPath = CqCommonUtils.copyArtifact(Paths.get(localRepository), "org.apache.camel", "camel-bom",
+                camelVersion, "pom", repositories, repoSystem, repoSession);
         final Model camelBomModel = CqCommonUtils.readPom(camelBomPath, charset);
         return camelBomModel.getDependencyManagement().getDependencies().stream()
                 .map(dep -> new Ga(dep.getGroupId(), dep.getArtifactId()))

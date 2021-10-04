@@ -67,9 +67,12 @@ import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugin.logging.Log;
+import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
+import org.eclipse.aether.RepositorySystem;
+import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.CqCatalog;
 import org.l2x6.cq.common.CqCatalog.Flavor;
@@ -112,6 +115,12 @@ public class SyncExtensionListMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     List<RemoteRepository> repositories;
 
+    @Component
+    private RepositorySystem repoSystem;
+
+    @Parameter(defaultValue = "${repositorySystemSession}", readonly = true, required = true)
+    private RepositorySystemSession repoSession;
+
     private static final Set<String> PRIMARY_LABELS = new LinkedHashSet<>(
             Arrays.asList("eip", "dataformat", "language", "rest", "configuration", "error"));
 
@@ -138,9 +147,10 @@ public class SyncExtensionListMojo extends AbstractMojo {
                     getCredentials(HTTP_TRANSPORT, JSON_FACTORY, SCOPES))
                             .setApplicationName(APPLICATION_NAME)
                             .build();
-            try (GavCqCatalog camelCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camel, camelVersion);
+            try (GavCqCatalog camelCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camel, camelVersion, repositories,
+                    repoSystem, repoSession);
                     GavCqCatalog camelQuarkusCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camelQuarkus,
-                            camelQuarkusVersion)) {
+                            camelQuarkusVersion, repositories, repoSystem, repoSession)) {
 
                 Map<Kind, Map<String, NativeSupport>> nativeSupportsMap = new HashMap<>();
 
@@ -271,11 +281,8 @@ public class SyncExtensionListMojo extends AbstractMojo {
     }
 
     String findCamelVersion(Path localRepositoryPath) {
-        final List<String> remoteRepos = repositories.stream()
-                .map(RemoteRepository::getUrl)
-                .collect(Collectors.toList());
         final Path cqPomPath = CqCommonUtils.copyArtifact(localRepositoryPath, Flavor.camelQuarkus.getGroupId(),
-                "camel-quarkus", camelQuarkusVersion, "pom", remoteRepos);
+                "camel-quarkus", camelQuarkusVersion, "pom", repositories, repoSystem, repoSession);
         final Model cqPomModel = CqCommonUtils.readPom(cqPomPath, StandardCharsets.UTF_8);
         final String camelMajorMinor = (String) Objects.requireNonNull(cqPomModel.getProperties().get("camel.major.minor"));
         final String camelVersion = (String) Objects.requireNonNull(cqPomModel.getProperties().get("camel.version"));
