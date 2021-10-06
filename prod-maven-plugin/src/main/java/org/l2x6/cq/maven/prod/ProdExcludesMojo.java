@@ -670,7 +670,7 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     Set<Ga> getProductizedCamelArtifacts(Module cqRootModule, ExpressionEvaluator evaluator) {
 
-        final Path camelBomPath = CqCommonUtils.copyArtifact(Paths.get(localRepository), "org.apache.camel", "camel-bom",
+        final Path camelBomPath = CqCommonUtils.resolveArtifact(Paths.get(localRepository), "org.apache.camel", "camel-bom",
                 camelVersion, "pom", repositories, repoSystem, repoSession);
         final Model camelBomModel = CqCommonUtils.readPom(camelBomPath, charset);
         return camelBomModel.getDependencyManagement().getDependencies().stream()

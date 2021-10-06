@@ -45,7 +45,7 @@ public class PomModelCache {
     public Model get(String groupId, String artifactId, String version) {
         final String key = groupId + ":" + artifactId + ":" + version;
         return items.computeIfAbsent(key, k -> {
-            final Path cqPomPath = CqCommonUtils.copyArtifact(localRepositoryPath, groupId, artifactId, version,
+            final Path cqPomPath = CqCommonUtils.resolveArtifact(localRepositoryPath, groupId, artifactId, version,
                     "pom", remoteRepositories, repoSystem, repoSession);
             final Model model = CqCommonUtils.readPom(cqPomPath, StandardCharsets.UTF_8);
             return model;
