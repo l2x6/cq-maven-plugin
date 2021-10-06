@@ -349,7 +349,7 @@ public class CqCatalog {
 
         public static GavCqCatalog open(Path localRepository, Flavor flavor, String version,
                 List<RemoteRepository> remoteRepositories, RepositorySystem repoSystem, RepositorySystemSession repoSession) {
-            final Path jarPath = CqCommonUtils.copyJar(localRepository, flavor.getGroupId(), flavor.getArtifactId(), version,
+            final Path jarPath = CqCommonUtils.resolveJar(localRepository, flavor.getGroupId(), flavor.getArtifactId(), version,
                     remoteRepositories, repoSystem, repoSession);
             try {
                 final FileSystem fs = FileSystems.newFileSystem(jarPath, (ClassLoader) null);

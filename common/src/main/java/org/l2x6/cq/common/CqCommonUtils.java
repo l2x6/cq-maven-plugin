@@ -18,6 +18,7 @@ package org.l2x6.cq.common;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Reader;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -61,12 +62,13 @@ public class CqCommonUtils {
     private CqCommonUtils() {
     }
 
-    public static Path copyJar(Path localRepository, String groupId, String artifactId, String version,
+    public static Path resolveJar(Path localRepository, String groupId, String artifactId, String version,
             List<RemoteRepository> remoteRepositories, RepositorySystem repoSystem, RepositorySystemSession repoSession) {
-        return copyArtifact(localRepository, groupId, artifactId, version, "jar", remoteRepositories, repoSystem, repoSession);
+        return resolveArtifact(localRepository, groupId, artifactId, version, "jar", remoteRepositories, repoSystem,
+                repoSession);
     }
 
-    public static Path copyArtifact(Path localRepository, String groupId, String artifactId, String version, String type,
+    public static Path resolveArtifact(Path localRepository, String groupId, String artifactId, String version, String type,
             List<RemoteRepository> repositories, RepositorySystem repoSystem, RepositorySystemSession repoSession) {
         final String relativeJarPath = groupId.replace('.', '/') + "/" + artifactId + "/" + version + "/" + artifactId + "-"
                 + version + "." + type;
@@ -90,6 +92,33 @@ public class CqCommonUtils {
         }
         return resolutionResult.getArtifact().getFile().toPath();
 
+    }
+
+    public static Path copyArtifact(Path localRepository, String groupId, String artifactId, String version, String type,
+            List<String> remoteRepositories) {
+        final String relativeJarPath = groupId.replace('.', '/') + "/" + artifactId + "/" + version + "/" + artifactId + "-"
+                + version + "." + type;
+        final Path localPath = localRepository.resolve(relativeJarPath);
+        final boolean localExists = Files.exists(localPath);
+        Path result;
+        try {
+            result = Files.createTempFile(null, localPath.getFileName().toString());
+            try (InputStream in = (localExists ? Files.newInputStream(localPath)
+                    : openFirst(remoteRepositories, relativeJarPath));
+                    OutputStream out = Files.newOutputStream(result)) {
+                final byte[] buf = new byte[4096];
+                int len;
+                while ((len = in.read(buf)) >= 0) {
+                    out.write(buf, 0, len);
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Could not copy " + (localExists ? localPath : relativeJarPath) + " to " + result,
+                        e);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Could not create temp file", e);
+        }
+        return result;
     }
 
     public static InputStream openFirst(List<String> remoteRepositories, String relativePath)

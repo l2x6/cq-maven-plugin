@@ -281,7 +281,7 @@ public class SyncExtensionListMojo extends AbstractMojo {
     }
 
     String findCamelVersion(Path localRepositoryPath) {
-        final Path cqPomPath = CqCommonUtils.copyArtifact(localRepositoryPath, Flavor.camelQuarkus.getGroupId(),
+        final Path cqPomPath = CqCommonUtils.resolveArtifact(localRepositoryPath, Flavor.camelQuarkus.getGroupId(),
                 "camel-quarkus", camelQuarkusVersion, "pom", repositories, repoSystem, repoSession);
         final Model cqPomModel = CqCommonUtils.readPom(cqPomPath, StandardCharsets.UTF_8);
         final String camelMajorMinor = (String) Objects.requireNonNull(cqPomModel.getProperties().get("camel.major.minor"));
