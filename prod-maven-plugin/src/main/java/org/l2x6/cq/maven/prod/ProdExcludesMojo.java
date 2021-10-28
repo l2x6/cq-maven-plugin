@@ -87,6 +87,8 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
 /**
+ * Unlink modules that should not be productized from Camel Quarkus source tree based on
+ * {@code product/src/main/resources/camel-quarkus-product-source.json}.
  */
 @Mojo(name = "prod-excludes", threadSafe = true, requiresProject = false, inheritByDefault = false)
 public class ProdExcludesMojo extends AbstractMojo {
