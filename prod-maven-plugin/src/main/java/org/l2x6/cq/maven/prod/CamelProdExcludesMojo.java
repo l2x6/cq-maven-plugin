@@ -261,6 +261,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        handleExcludedTargetDirectories(basePath, fullTree, excludes);
 
         updateVersions(fullTree, profiles);
 
@@ -313,6 +314,20 @@ public class CamelProdExcludesMojo extends AbstractMojo {
             final MavenSourceTree finalTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
             assertPomsMatch(workRoot, basePath, finalTree.getModulesByPath().keySet());
         }
+
+    }
+
+    void handleExcludedTargetDirectories(final Path basePath, final MavenSourceTree fullTree, final Set<Ga> excludes) {
+        /* Clean the target folders in all excluded modules so that Camel plugins do not see any stale content there */
+        excludes.stream()
+                .map(ga -> fullTree.getModulesByGa().get(ga))
+                .map(Module::getPomPath)
+                .map(basePath::resolve)
+                .map(Path::getParent)
+                .map(absPath -> absPath.resolve("target"))
+                .filter(Files::isDirectory)
+                .forEach(CqCommonUtils::deleteDirectory);
+
 
     }
 
