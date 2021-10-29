@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.l2x6.cq.maven.prod;
+package org.l2x6.cq.camel.maven.prod;
 
 import org.apache.maven.plugins.annotations.Mojo;
 

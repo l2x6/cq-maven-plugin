@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.l2x6.cq.maven.prod;
+package org.l2x6.cq.camel.maven.prod;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -42,6 +42,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+import org.apache.camel.maven.packaging.ComponentDslMojo;
 import org.apache.commons.io.IOUtils;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -49,6 +50,8 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
+import org.apache.maven.project.MavenProject;
+import org.apache.maven.project.MavenProjectHelper;
 import org.assertj.core.api.Assertions;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
@@ -65,6 +68,7 @@ import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Module;
 import org.l2x6.pom.tuner.model.Profile;
+import org.sonatype.plexus.build.incremental.DefaultBuildContext;
 import org.w3c.dom.Document;
 
 /**
@@ -151,6 +155,11 @@ public class CamelProdExcludesMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "${repositorySystemSession}", readonly = true, required = true)
     private RepositorySystemSession repoSession;
+
+    @Parameter(property = "project", required = true, readonly = true)
+    protected MavenProject project;
+    @Component
+    protected MavenProjectHelper projectHelper;
 
     /**
      * Overridden by {@link ProdExcludesCheckMojo}.
@@ -340,6 +349,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
         /*
          * Unpack the community jars of excluded components to their target/classes so that Camel plugins find it there
          */
+        project.getBasedir();
         excludes.stream()
                 .map(ga -> fullTree.getModulesByGa().get(ga))
                 .filter(CamelProdExcludesMojo::isComponent)
@@ -348,7 +358,9 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                     final Path jarPath = CqCommonUtils.resolveArtifact(Paths.get(localRepository), "org.apache.camel",
                             artifactId,
                             camelCommunityVersion, "jar", repositories, repoSystem, repoSession);
-                    final File outputDir = basePath.resolve(module.getPomPath()).getParent().resolve("target/classes").toFile();
+                    final Path pomFilePath = basePath.resolve(module.getPomPath());
+                    final Path moduleBaseDir = pomFilePath.getParent();
+                    final File outputDir = moduleBaseDir.resolve("target/classes").toFile();
                     try (ZipFile zipFile = new ZipFile(jarPath.toFile())) {
                         final Enumeration<? extends ZipEntry> entries = zipFile.entries();
                         while (entries.hasMoreElements()) {
@@ -367,7 +379,28 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                     } catch (IOException e) {
                         throw new RuntimeException("Could not extract " + jarPath + " to " + outputDir);
                     }
+
+                    /* Execute ComponentDslMojo in the excluded component modules */
+                    getLog().info("Executing ComponentDslMojo in " + moduleBaseDir);
+                    final File origFile = project.getFile();
+                    project.setFile(pomFilePath.toFile());
+                    final String originalBuildDir = project.getBuild().getDirectory();
+                    project.getBuild().setDirectory(moduleBaseDir.resolve("target").toString());
+                    try {
+                        ComponentDslMojo mojo = new ComponentDslMojo();
+                        mojo.setLog(getLog());
+                        mojo.setPluginContext(getPluginContext());
+                        mojo.execute(project, projectHelper, new DefaultBuildContext());
+
+                    } catch (Exception e) {
+                        throw new RuntimeException("Could not excute ComponentDslMojo in " + moduleBaseDir, e);
+                    } finally {
+                        project.setFile(origFile);
+                        project.getBuild().setDirectory(originalBuildDir);
+                    }
+
                 });
+
     }
 
     static boolean isComponent(Module module) {
