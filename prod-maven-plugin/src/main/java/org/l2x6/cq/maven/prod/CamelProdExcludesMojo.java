@@ -17,16 +17,21 @@
 package org.l2x6.cq.maven.prod;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -35,6 +40,9 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+import org.apache.commons.io.IOUtils;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -261,7 +269,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        handleExcludedTargetDirectories(basePath, fullTree, excludes);
+        handleExcludedTargetDirectories(basePath, fullTree, excludes, profiles);
 
         updateVersions(fullTree, profiles);
 
@@ -317,7 +325,8 @@ public class CamelProdExcludesMojo extends AbstractMojo {
 
     }
 
-    void handleExcludedTargetDirectories(final Path basePath, final MavenSourceTree fullTree, final Set<Ga> excludes) {
+    void handleExcludedTargetDirectories(final Path basePath, final MavenSourceTree fullTree, final Set<Ga> excludes,
+            Predicate<Profile> profiles) {
         /* Clean the target folders in all excluded modules so that Camel plugins do not see any stale content there */
         excludes.stream()
                 .map(ga -> fullTree.getModulesByGa().get(ga))
@@ -328,7 +337,42 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                 .filter(Files::isDirectory)
                 .forEach(CqCommonUtils::deleteDirectory);
 
+        /*
+         * Unpack the community jars of excluded components to their target/classes so that Camel plugins find it there
+         */
+        excludes.stream()
+                .map(ga -> fullTree.getModulesByGa().get(ga))
+                .filter(CamelProdExcludesMojo::isComponent)
+                .forEach(module -> {
+                    final String artifactId = module.getGav().getArtifactId().asConstant();
+                    final Path jarPath = CqCommonUtils.resolveArtifact(Paths.get(localRepository), "org.apache.camel",
+                            artifactId,
+                            camelCommunityVersion, "jar", repositories, repoSystem, repoSession);
+                    final File outputDir = basePath.resolve(module.getPomPath()).getParent().resolve("target/classes").toFile();
+                    try (ZipFile zipFile = new ZipFile(jarPath.toFile())) {
+                        final Enumeration<? extends ZipEntry> entries = zipFile.entries();
+                        while (entries.hasMoreElements()) {
+                            final ZipEntry entry = entries.nextElement();
+                            final File entryDestination = new File(outputDir, entry.getName());
+                            if (entry.isDirectory()) {
+                                entryDestination.mkdirs();
+                            } else {
+                                entryDestination.getParentFile().mkdirs();
+                                try (InputStream in = zipFile.getInputStream(entry);
+                                        OutputStream out = new FileOutputStream(entryDestination)) {
+                                    IOUtils.copy(in, out);
+                                }
+                            }
+                        }
+                    } catch (IOException e) {
+                        throw new RuntimeException("Could not extract " + jarPath + " to " + outputDir);
+                    }
+                });
+    }
 
+    static boolean isComponent(Module module) {
+        return "jar".equals(module.getPackaging())
+                && (module.getPomPath().startsWith("components/") || module.getPomPath().startsWith("core/"));
     }
 
     void updateVersions(MavenSourceTree fullTree, Predicate<Profile> profiles) {
