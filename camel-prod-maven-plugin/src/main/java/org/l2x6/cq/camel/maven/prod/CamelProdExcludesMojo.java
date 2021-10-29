@@ -162,7 +162,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
     protected MavenProjectHelper projectHelper;
 
     /**
-     * Overridden by {@link ProdExcludesCheckMojo}.
+     * Overridden by {@link CamelProdExcludesCheckMojo}.
      *
      * @return {@code always false}
      */
