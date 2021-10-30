@@ -479,7 +479,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                     msg = "File [" + basedir.toPath().relativize(destPath) + "] is not in sync with "
                             + requiredProductizedCamelArtifacts + ":\n\n"
                             + msg.substring(offset)
-                            + "\n\n Consider running mvn org.l2x6.cq:cq-prod-maven-plugin:prod-excludes -N\n\n";
+                            + "\n\n Consider running mvn org.l2x6.cq:cq-camel-prod-maven-plugin:camel-prod-excludes -N\n\n";
                     switch (onCheckFailure) {
                     case FAIL:
                         throw new RuntimeException(msg);
