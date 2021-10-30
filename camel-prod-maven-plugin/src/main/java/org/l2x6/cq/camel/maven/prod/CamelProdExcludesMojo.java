@@ -101,12 +101,25 @@ public class CamelProdExcludesMojo extends AbstractMojo {
     Charset charset;
 
     /**
-     * Skip the execution of this mojo.
+     * Skip the execution of the whole mojo.
      *
      * @since 2.11.0
      */
     @Parameter(property = "cq.camel-prod-excludes.skip", defaultValue = "false")
     boolean skip;
+
+    /**
+     * What should happen when the checks performed by this plugin fail. Possible values: {@code WARN}, {@code FAIL},
+     * {@code IGNORE}.
+     *
+     * @since 2.13.0
+     */
+    @Parameter(property = "cq.onCheckFailure", defaultValue = "FAIL")
+    OnFailure onCheckFailure;
+
+    enum OnFailure {
+        WARN, FAIL, IGNORE
+    }
 
     /**
      * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
@@ -327,7 +340,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                             "${camel-community.version}"));
         });
 
-        if (isChecking()) {
+        if (isChecking() && onCheckFailure != OnFailure.IGNORE) {
             final MavenSourceTree finalTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
             assertPomsMatch(workRoot, basePath, finalTree.getModulesByPath().keySet());
         }
@@ -467,7 +480,17 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                             + requiredProductizedCamelArtifacts + ":\n\n"
                             + msg.substring(offset)
                             + "\n\n Consider running mvn org.l2x6.cq:cq-prod-maven-plugin:prod-excludes -N\n\n";
-                    throw new RuntimeException(msg);
+                    switch (onCheckFailure) {
+                    case FAIL:
+                        throw new RuntimeException(msg);
+                    case WARN:
+                        getLog().warn(msg);
+                        break;
+                    case IGNORE:
+                        break;
+                    default:
+                        throw new IllegalStateException("Unexpected " + OnFailure.class + " value " + onCheckFailure);
+                    }
                 }
             }
         });
