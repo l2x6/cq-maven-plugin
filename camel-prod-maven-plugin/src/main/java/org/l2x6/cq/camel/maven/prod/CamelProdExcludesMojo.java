@@ -27,7 +27,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -52,11 +51,11 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.MavenProjectHelper;
-import org.assertj.core.api.Assertions;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.CqCommonUtils;
+import org.l2x6.cq.common.OnFailure;
 import org.l2x6.pom.tuner.MavenSourceTree;
 import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
 import org.l2x6.pom.tuner.PomTransformer;
@@ -70,6 +69,8 @@ import org.l2x6.pom.tuner.model.Module;
 import org.l2x6.pom.tuner.model.Profile;
 import org.sonatype.plexus.build.incremental.DefaultBuildContext;
 import org.w3c.dom.Document;
+
+import static java.util.stream.Collectors.joining;
 
 /**
  * Unlink modules that should not be productized from Camel source tree based on
@@ -116,10 +117,6 @@ public class CamelProdExcludesMojo extends AbstractMojo {
      */
     @Parameter(property = "cq.onCheckFailure", defaultValue = "FAIL")
     OnFailure onCheckFailure;
-
-    enum OnFailure {
-        WARN, FAIL, IGNORE
-    }
 
     /**
      * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
@@ -174,6 +171,8 @@ public class CamelProdExcludesMojo extends AbstractMojo {
     @Component
     protected MavenProjectHelper projectHelper;
 
+    private Predicate<Path> additionalFiles;
+
     /**
      * Overridden by {@link CamelProdExcludesCheckMojo}.
      *
@@ -197,6 +196,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
         if (camelCommunityVersion == null || camelCommunityVersion.trim().isEmpty()) {
             camelCommunityVersion = "3.11.1";
         }
+        additionalFiles = path -> false;
 
         /* Collect the initial set of includes */
         Set<Ga> includes;
@@ -216,7 +216,8 @@ public class CamelProdExcludesMojo extends AbstractMojo {
          * Let's edit the pom.xml files out of the real source tree if we are just checking or pom editing is not
          * desired
          */
-        final Path workRoot = isChecking() ? copyPoms(basePath, basePath.resolve("target/prod-excludes-work")) : basePath;
+        final Path workRoot = isChecking()
+                ? CqCommonUtils.copyPoms(basePath, basePath.resolve("target/prod-excludes-work"), additionalFiles) : basePath;
 
         final Path rootPomPath = workRoot.resolve("pom.xml");
         new PomTransformer(rootPomPath, charset, simpleElementWhitespace)
@@ -238,7 +239,8 @@ public class CamelProdExcludesMojo extends AbstractMojo {
         });
 
         /* Make a copy of the originalFullTree */
-        final Path originalFullTreeCopyDir = copyPoms(workRoot, basePath.resolve("target/originalFullTreeCopy"));
+        final Path originalFullTreeCopyDir = CqCommonUtils.copyPoms(workRoot, basePath.resolve("target/originalFullTreeCopy"),
+                additionalFiles);
 
         /* Remove non-prod components from camel-allcomponents in the copy */
         new PomTransformer(originalFullTreeCopyDir.resolve("core/camel-allcomponents/pom.xml"), charset,
@@ -342,7 +344,16 @@ public class CamelProdExcludesMojo extends AbstractMojo {
 
         if (isChecking() && onCheckFailure != OnFailure.IGNORE) {
             final MavenSourceTree finalTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
-            assertPomsMatch(workRoot, basePath, finalTree.getModulesByPath().keySet());
+            CqCommonUtils.assertPomsMatch(
+                    workRoot,
+                    basePath,
+                    finalTree.getModulesByPath().keySet(),
+                    additionalFiles,
+                    charset,
+                    basedir.toPath(),
+                    requiredProductizedCamelArtifacts.toPath(),
+                    onCheckFailure,
+                    getLog()::warn);
         }
 
     }
@@ -441,59 +452,6 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                 }
             }
         }
-    }
-
-    private Path copyPoms(Path src, Path dest) {
-        CqCommonUtils.ensureDirectoryExistsAndEmpty(dest);
-        visitPoms(src, file -> {
-            final Path destPath = dest.resolve(src.relativize(file));
-            try {
-                Files.createDirectories(destPath.getParent());
-                Files.copy(file, destPath, StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException e) {
-                throw new RuntimeException("Could not copy " + file + " to " + destPath, e);
-            }
-        });
-        return dest;
-    }
-
-    void assertPomsMatch(Path src, Path dest, Set<String> activeRelativePomPaths) {
-        visitPoms(src, file -> {
-            final Path relPomPath = src.relativize(file);
-            if (activeRelativePomPaths.contains(PomTunerUtils.toUnixPath(relPomPath.toString()))) {
-                final Path destPath = dest.resolve(relPomPath);
-                try {
-                    Assertions.assertThat(file).hasSameTextualContentAs(destPath);
-                } catch (AssertionError e) {
-                    String msg = e.getMessage();
-                    final String contentAt = "content at line";
-                    int offset = msg.indexOf(contentAt);
-                    if (offset < 0) {
-                        throw new IllegalStateException(
-                                "Expected to find '" + contentAt + "' in the causing exception's message; found: "
-                                        + e.getMessage(),
-                                e);
-                    }
-                    while (msg.charAt(--offset) != '\n') {
-                    }
-                    msg = "File [" + basedir.toPath().relativize(destPath) + "] is not in sync with "
-                            + requiredProductizedCamelArtifacts + ":\n\n"
-                            + msg.substring(offset)
-                            + "\n\n Consider running mvn org.l2x6.cq:cq-camel-prod-maven-plugin:camel-prod-excludes -N\n\n";
-                    switch (onCheckFailure) {
-                    case FAIL:
-                        throw new RuntimeException(msg);
-                    case WARN:
-                        getLog().warn(msg);
-                        break;
-                    case IGNORE:
-                        break;
-                    default:
-                        throw new IllegalStateException("Unexpected " + OnFailure.class + " value " + onCheckFailure);
-                    }
-                }
-            }
-        });
     }
 
     void visitPoms(Path src, Consumer<Path> pomConsumer) {

@@ -30,14 +30,20 @@ import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+import java.util.TreeSet;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.apache.camel.catalog.Kind;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
+import org.assertj.core.util.diff.Delta;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
@@ -49,7 +55,10 @@ import org.eclipse.aether.resolution.ArtifactResult;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.Transformation;
+import org.l2x6.pom.tuner.PomTunerUtils;
 import org.l2x6.pom.tuner.model.Gavtcs;
+
+import static java.util.stream.Collectors.joining;
 
 public class CqCommonUtils {
 
@@ -58,6 +67,8 @@ public class CqCommonUtils {
     private static final int CREATE_RETRY_COUNT = 256;
     private static final long DELETE_RETRY_MILLIS = 5000L;
     private static final boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+
+    private static final Pattern SIMPLE_XML_ELEMENT_PATTERN = Pattern.compile("\\s+/>");
 
     private CqCommonUtils() {
     }
@@ -307,6 +318,118 @@ public class CqCommonUtils {
         } else {
             ensureDirectoryExists(dir);
         }
+    }
+
+    public static List<Delta<String>> compareFiles(Path actual, Path expected, Charset charset) {
+        List<String> actualLines;
+        try {
+            actualLines = Files.readAllLines(actual, charset);
+        } catch (IOException e) {
+            throw new RuntimeException("Could not read " + actual);
+        }
+        List<String> expectedLines;
+        try {
+            expectedLines = Files.readAllLines(expected, charset);
+        } catch (IOException e) {
+            throw new RuntimeException("Could not read " + expected);
+        }
+        if (actual.getFileName().toString().endsWith(".xml") || expected.getFileName().toString().endsWith(".xml")) {
+            /* normalize XML */
+            normalizeXML(actualLines);
+            normalizeXML(expectedLines);
+        }
+        return org.assertj.core.util.diff.DiffUtils.diff(actualLines, expectedLines).getDeltas();
+    }
+
+    static List<String> normalizeXML(List<String> lines) {
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
+            lines.set(i, SIMPLE_XML_ELEMENT_PATTERN.matcher(line).replaceAll("/>"));
+        }
+        return lines;
+    }
+
+    public static void visitPoms(Path src, Consumer<Path> pomConsumer, final Predicate<Path> additionalFiles) {
+        Set<Path> paths = new TreeSet<>();
+        try {
+            Files.walkFileTree(src, new SimpleFileVisitor<Path>() {
+
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
+                        throws IOException {
+                    final String dirName = dir.getFileName().toString();
+                    if ((dirName.equals("target") || dirName.equals("src"))
+                            && Files.isRegularFile(dir.getParent().resolve("pom.xml"))) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    } else {
+                        return FileVisitResult.CONTINUE;
+                    }
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                    final String fileName = file.getFileName().toString();
+                    if (fileName.equals("pom.xml") || additionalFiles.test(file)) {
+                        paths.add(file);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException e) {
+            throw new RuntimeException("Could not visit pom.xml files under " + src, e);
+        }
+        paths.stream()
+                .forEach(pomConsumer);
+    }
+
+    public static Path copyPoms(Path src, Path dest, Predicate<Path> additionalFiles) {
+        ensureDirectoryExistsAndEmpty(dest);
+        visitPoms(
+                src,
+                file -> {
+                    final Path destPath = dest.resolve(src.relativize(file));
+                    try {
+                        Files.createDirectories(destPath.getParent());
+                        Files.copy(file, destPath, StandardCopyOption.REPLACE_EXISTING);
+                    } catch (IOException e) {
+                        throw new RuntimeException("Could not copy " + file + " to " + destPath, e);
+                    }
+                },
+                additionalFiles);
+        return dest;
+    }
+
+    public static void assertPomsMatch(Path src, Path dest, Set<String> activeRelativePomPaths, Predicate<Path> additionalFiles,
+            Charset charset, Path basedir, Path referenceFile, OnFailure onCheckFailure, Consumer<String> warn) {
+        visitPoms(
+                src,
+                file -> {
+                    final Path relPomPath = src.relativize(file);
+                    if (activeRelativePomPaths.contains(PomTunerUtils.toUnixPath(relPomPath.toString()))) {
+                        final Path destPath = dest.resolve(relPomPath);
+
+                        List<Delta<String>> diffs = CqCommonUtils.compareFiles(file, destPath, charset);
+                        if (!diffs.isEmpty()) {
+                            String msg = "File [" + PomTunerUtils.toUnixPath(basedir.relativize(destPath).toString())
+                                    + "] is not in sync with "
+                                    + PomTunerUtils.toUnixPath(basedir.relativize(referenceFile).toString()) + ":\n\n    "
+                                    + diffs.stream().map(Delta::toString).collect(joining("\n    "))
+                                    + "\n\n Consider running mvn org.l2x6.cq:cq-camel-prod-maven-plugin:camel-prod-excludes -N\n\n";
+                            switch (onCheckFailure) {
+                            case FAIL:
+                                throw new RuntimeException(msg);
+                            case WARN:
+                                warn.accept(msg);
+                                break;
+                            case IGNORE:
+                                break;
+                            default:
+                                throw new IllegalStateException("Unexpected " + OnFailure.class + " value " + onCheckFailure);
+                            }
+                        }
+                    }
+                },
+                additionalFiles);
     }
 
 }
