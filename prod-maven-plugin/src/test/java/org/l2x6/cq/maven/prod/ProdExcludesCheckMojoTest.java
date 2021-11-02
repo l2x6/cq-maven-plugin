@@ -28,6 +28,7 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.l2x6.cq.common.OnFailure;
 import org.l2x6.cq.test.utils.TestUtils;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 
@@ -54,6 +55,7 @@ public class ProdExcludesCheckMojoTest {
         mojo.jenkinsfile = basePath.resolve("Jenkinsfile.redhat").toFile();
         mojo.localRepository = basePath.resolve("target/local-maven-repo").toString();
         mojo.camelVersion = "3.11.1-fuse1";
+        mojo.onCheckFailure = OnFailure.FAIL;
         return mojo;
     }
 

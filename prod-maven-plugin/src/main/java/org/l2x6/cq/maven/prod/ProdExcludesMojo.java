@@ -25,13 +25,10 @@ import java.io.StringWriter;
 import java.io.Writer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -47,7 +44,6 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -62,11 +58,11 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.apache.maven.shared.utils.io.IOUtil;
-import org.assertj.core.api.Assertions;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.CqCommonUtils;
+import org.l2x6.cq.common.OnFailure;
 import org.l2x6.pom.tuner.ExpressionEvaluator;
 import org.l2x6.pom.tuner.MavenSourceTree;
 import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
@@ -167,7 +163,7 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     }
 
-    static final String CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH = "product/src/main/resources/camel-quarkus-product-source.json";
+    public static final String CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH = "product/src/main/resources/camel-quarkus-product-source.json";
     static final String MODULE_COMMENT = "disabled by cq-prod-maven-plugin:prod-excludes";
     static final String DEFAULT_REQUIRED_PRODUCTIZED_CAMEL_ARTIFACTS_TXT = "target/required-productized-camel-artifacts.txt";
     static final String DEFAULT_PRODUCTIZED_CAMEL_QUARKUS_ARTIFACTS_TXT = "target/productized-camel-quarkus-artifacts.txt";
@@ -281,11 +277,22 @@ public class ProdExcludesMojo extends AbstractMojo {
     @Parameter(defaultValue = "${camel.version}", readonly = true)
     String camelVersion;
 
+    /**
+     * What should happen when the checks performed by this plugin fail. Possible values: {@code WARN}, {@code FAIL},
+     * {@code IGNORE}.
+     *
+     * @since 2.14.0
+     */
+    @Parameter(property = "cq.onCheckFailure", defaultValue = "FAIL")
+    OnFailure onCheckFailure;
+
     @Component
     private RepositorySystem repoSystem;
 
     @Parameter(defaultValue = "${repositorySystemSession}", readonly = true, required = true)
     private RepositorySystemSession repoSession;
+
+    private Predicate<Path> additionalFiles;
 
     /**
      * Overridden by {@link ProdExcludesCheckMojo}.
@@ -307,6 +314,9 @@ public class ProdExcludesMojo extends AbstractMojo {
         if (integrationTests == null) {
             integrationTests = Collections.emptyList();
         }
+        final Path jenkinsfileName = jenkinsfile.toPath().getFileName();
+
+        additionalFiles = path -> jenkinsfileName.equals(path.getFileName());
 
         /* Collect the list of productize artifacts based on data from camel-quarkus-product-source.json */
         final Path absProdJson = basedir.toPath().resolve(productJson.toPath());
@@ -350,7 +360,12 @@ public class ProdExcludesMojo extends AbstractMojo {
          * Let's edit the pom.xml files out of the real source tree if we are just checking or pom editing is not
          * desired
          */
-        final Path workRoot = isChecking() ? copyPoms(basedir.toPath()) : basedir.toPath();
+        final Path workRoot = isChecking()
+                ? CqCommonUtils.copyPoms(
+                        basedir.toPath(),
+                        basedir.toPath().resolve("target/prod-excludes-work"),
+                        additionalFiles)
+                : basedir.toPath();
 
         new PomTransformer(workRoot.resolve("product/pom.xml"), charset, simpleElementWhitespace)
                 .transform(Transformation.removeAllModules(null, true, true));
@@ -419,7 +434,16 @@ public class ProdExcludesMojo extends AbstractMojo {
 
         if (isChecking()) {
             final MavenSourceTree finalTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
-            assertPomsMatch(workRoot, basedir.toPath(), finalTree.getModulesByPath().keySet());
+            CqCommonUtils.assertPomsMatch(
+                    workRoot,
+                    basedir.toPath(),
+                    finalTree.getModulesByPath().keySet(),
+                    additionalFiles,
+                    charset,
+                    basedir.toPath(),
+                    productJson.toPath(),
+                    onCheckFailure,
+                    getLog()::warn);
         }
 
         if (!missingCamelArtifacts.isEmpty()) {
@@ -850,50 +874,6 @@ public class ProdExcludesMojo extends AbstractMojo {
         return testModules;
     }
 
-    private Path copyPoms(Path src) {
-        final Path dest = src.resolve("target/prod-excludes-work");
-        CqCommonUtils.ensureDirectoryExistsAndEmpty(dest);
-        visitPoms(src, file -> {
-            final Path destPath = dest.resolve(src.relativize(file));
-            try {
-                Files.createDirectories(destPath.getParent());
-                Files.copy(file, destPath, StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException e) {
-                throw new RuntimeException("Could not copy " + file + " to " + destPath, e);
-            }
-        });
-        return dest;
-    }
-
-    void assertPomsMatch(Path src, Path dest, Set<String> activeRelativePomPaths) {
-        visitPoms(src, file -> {
-            final Path relPomPath = src.relativize(file);
-            if (activeRelativePomPaths.contains(PomTunerUtils.toUnixPath(relPomPath.toString()))) {
-                final Path destPath = dest.resolve(relPomPath);
-                try {
-                    Assertions.assertThat(file).hasSameTextualContentAs(destPath);
-                } catch (AssertionError e) {
-                    String msg = e.getMessage();
-                    final String contentAt = "content at line";
-                    int offset = msg.indexOf(contentAt);
-                    if (offset < 0) {
-                        throw new IllegalStateException(
-                                "Expected to find '" + contentAt + "' in the causing exception's message; found: "
-                                        + e.getMessage(),
-                                e);
-                    }
-                    while (msg.charAt(--offset) != '\n') {
-                    }
-                    msg = "File [" + basedir.toPath().relativize(destPath) + "] is not in sync with "
-                            + CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH + ":\n\n"
-                            + msg.substring(offset)
-                            + "\n\n Consider running mvn org.l2x6.cq:cq-prod-maven-plugin:prod-excludes -N\n\n";
-                    throw new RuntimeException(msg);
-                }
-            }
-        });
-    }
-
     void writeProdReports(MavenSourceTree tree, Set<Ga> expandedIncludes, Predicate<Profile> profiles,
             Set<Ga> requiredCamelArtifacts) {
         final Path cqFile = productizedCamelQuarkusArtifacts.toPath();
@@ -948,40 +928,6 @@ public class ProdExcludesMojo extends AbstractMojo {
                 .map(evaluator::evaluateGa)
                 .filter(depGa -> "org.apache.camel".equals(depGa.getGroupId()))
                 .collect(Collectors.toCollection(TreeSet::new));
-    }
-
-    void visitPoms(Path src, Consumer<Path> pomConsumer) {
-        String jenkinsfileName = jenkinsfile.toPath().getFileName().toString();
-        Set<Path> paths = new TreeSet<>();
-        try {
-            Files.walkFileTree(src, new SimpleFileVisitor<Path>() {
-
-                @Override
-                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
-                        throws IOException {
-                    final String dirName = dir.getFileName().toString();
-                    if ((dirName.equals("target") || dirName.equals("src"))
-                            && Files.isRegularFile(dir.getParent().resolve("pom.xml"))) {
-                        return FileVisitResult.SKIP_SUBTREE;
-                    } else {
-                        return FileVisitResult.CONTINUE;
-                    }
-                }
-
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    final String fileName = file.getFileName().toString();
-                    if (fileName.equals("pom.xml") || fileName.equals(jenkinsfileName)) {
-                        paths.add(file);
-                    }
-                    return FileVisitResult.CONTINUE;
-                }
-            });
-        } catch (IOException e) {
-            throw new RuntimeException("Could not visit pom.xml files under " + src, e);
-        }
-        paths.stream()
-                .forEach(pomConsumer);
     }
 
     static void initializeMixedTestsPom(Path destinationPath, String parentArtifactId, String version, String parentPath,
