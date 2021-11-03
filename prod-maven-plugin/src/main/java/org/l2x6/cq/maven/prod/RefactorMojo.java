@@ -17,34 +17,27 @@
 package org.l2x6.cq.maven.prod;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.charset.Charset;
-import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.util.Arrays;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.List;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
+import java.util.stream.Collectors;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
-import org.l2x6.pom.tuner.MavenSourceTree;
+import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.l2x6.pom.tuner.PomTransformer;
+import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
+import org.l2x6.pom.tuner.PomTransformer.NodeGavtcs;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
-import org.l2x6.pom.tuner.PomTransformer.Transformation;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
-import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gavtcs;
-import org.l2x6.pom.tuner.model.Module;
 import org.w3c.dom.Document;
+import org.w3c.dom.DocumentFragment;
+import org.w3c.dom.Node;
 
 /**
  * An ad hoc refactoring.
@@ -65,6 +58,14 @@ public class RefactorMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.version}", readonly = true)
     String projectVersion;
 
+    /**
+     * A list of {@link DirectoryScanner}s selecting integration test {@code pom.xml} files.
+     *
+     * @since 1.4.0
+     */
+    @Parameter
+    List<DirectoryScanner> integrationTests;
+
     static final Pattern NAME_PATTERN = Pattern.compile("^Camel Quarkus :: ([^:]+) :: ([^:]+)$");
     static final Pattern ARTIFACT_ID_PATTERN = Pattern.compile("^camel-quarkus-(.+?)-integration-test$");
 
@@ -77,178 +78,56 @@ public class RefactorMojo extends AbstractMojo {
     public void execute() throws MojoExecutionException, MojoFailureException {
         charset = Charset.forName(encoding);
 
-        final Path workDir = basedir.toPath();
-        final Path rootPomPath = workDir.resolve("pom.xml");
+        for (DirectoryScanner scanner : integrationTests) {
+            scanner.scan();
+            final Path base = scanner.getBasedir().toPath().toAbsolutePath().normalize();
+            for (String scannerPath : scanner.getIncludedFiles()) {
+                final Path pomXmlPath = base.resolve(scannerPath);
 
-        final MavenSourceTree initialTree = MavenSourceTree.of(rootPomPath, charset);
+                new PomTransformer(pomXmlPath, charset, simpleElementWhitespace).transform(
+                        (Document document, TransformationContext context) -> {
+                            final List<NodeGavtcs> virtualDeps = context.getDependencies().stream()
+                                    .filter(Gavtcs::isVirtualDeployment)
+                                    .collect(Collectors.toList());
 
-        /* Re-link any previously commented modules */
-        final MavenSourceTree tree = initialTree.relinkModules(charset, simpleElementWhitespace,
-                ProdExcludesMojo.MODULE_COMMENT);
+                            if (!virtualDeps.isEmpty()) {
 
-        final Path jvmTestsDir = workDir.resolve("integration-tests-jvm");
-        try {
-            Files.createDirectories(jvmTestsDir);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+                                final ContainerElement profile = context
+                                        .getOrAddContainerElement("profiles")
+                                        .addChildContainerElement("profile");
+                                profile.addChildTextElement("id", "virtualDependencies", profile.getOrAddLastIndent());
+                                profile
+                                        .addChildContainerElement("activation")
+                                        .addChildContainerElement("property")
+                                        .addChildTextElement("name", "!virtualDependencies");
+
+                                final ContainerElement newDeps = profile
+                                        .addChildContainerElement("dependencies");
+                                for (NodeGavtcs dep : virtualDeps) {
+                                    final DocumentFragment fragment = dep.getNode()
+                                            .getFragment();
+                                    context.reIndent(fragment, context.getIndentationString() + context.getIndentationString()
+                                            + context.getIndentationString() + context.getIndentationString());
+                                    newDeps.addFragment(fragment);
+                                }
+                            }
+                        });
+            }
         }
-        final Path anyJvmTestsDir = workDir.resolve("integration-tests-jvm/foo");
-        final Path buildParentItPom = workDir.resolve("poms/build-parent-it/pom.xml");
-        final Path buildParentPom = workDir.resolve("poms/build-parent/pom.xml");
-
-        final Set<String> jvmTestModules = new TreeSet<>();
-        final Gavtcs quarkusBomParam = new Gavtcs("${quarkus.platform.group-id}", "${quarkus.platform.artifact-id}",
-                "${quarkus.platform.version}", "pom", null, "import");
-        final Gavtcs cqBomParam = new Gavtcs("${camel-quarkus.platform.group-id}", "${camel-quarkus.platform.artifact-id}",
-                "${camel-quarkus.platform.version}", "pom", null, "import");
-        final Gavtcs appBomLiteral = new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-bom",
-                "${camel-quarkus.version}", "pom", null, "import");
-        final Gavtcs testBom = new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-bom-test", "${camel-quarkus.version}",
-                "pom", null, "import");
-
-        Stream.of("catalog")
-                .map(base -> new Ga("org.apache.camel.quarkus", "camel-quarkus-" + base))
-                .forEach(ga -> {
-                    Module m = tree.getModulesByGa().get(ga);
-                    new PomTransformer(workDir.resolve(m.getPomPath()), charset, simpleElementWhitespace)
-                            .transform(Transformation.addManagedDependencyIfNeeded(appBomLiteral));
-                });
-
-        tree.getModulesByPath().values().stream()
-                .filter(m -> m.getParentGav().getArtifactId().asConstant().equals("camel-quarkus-build-parent-it"))
-                .forEach(m -> {
-                    new PomTransformer(workDir.resolve(m.getPomPath()), charset, simpleElementWhitespace)
-                            .transform(
-                                    Transformation.removeManagedDependencies(true, true,
-                                            gavtcs -> gavtcs.getArtifactId().startsWith("camel-quarkus-bom")),
-                                    Transformation.addManagedDependencyIfNeeded(quarkusBomParam),
-                                    Transformation.addManagedDependencyIfNeeded(cqBomParam),
-                                    Transformation.addManagedDependencyIfNeeded(testBom));
-                });
-
-        tree.getModulesByPath().keySet().stream()
-                .filter(path -> secondLevelPattern("extensions-jvm").matcher(path).matches())
-                .map(Paths::get)
-                .map(workDir::resolve)
-                .forEach(jvmParentPom -> {
-                    /* Remove the test module from the pom file */
-                    new PomTransformer(jvmParentPom, charset, simpleElementWhitespace)
-                            .transform(
-                                    Transformation.removeModule(true, true, "integration-test"),
-                                    Transformation.setParent("camel-quarkus-extensions-jvm", "../pom.xml"));
-
-                    final String artifactIdBase = jvmParentPom.getParent().getFileName().toString();
-                    jvmTestModules.add(artifactIdBase);
-
-                    final Path testPom = jvmParentPom.getParent().resolve("integration-test/pom.xml");
-                    new PomTransformer(
-                            testPom,
-                            charset,
-                            simpleElementWhitespace)
-                                    .transform(
-                                            Transformation.setParent("camel-quarkus-build-parent-it",
-                                                    "../../poms/build-parent-it/pom.xml"),
-                                            (Document document, TransformationContext context) -> {
-                                                context
-                                                        .getContainerElement("project", "name")
-                                                        .ifPresent(name -> {
-                                                            final String oldName = name.getNode().getTextContent();
-                                                            final String newName = NAME_PATTERN.matcher(oldName)
-                                                                    .replaceFirst("Camel Quarkus :: Integration Tests :: $1");
-                                                            name.getNode().setTextContent(newName);
-                                                        });
-                                                context
-                                                        .getContainerElement("project", "artifactId")
-                                                        .ifPresent(name -> {
-                                                            final String oldName = name.getNode().getTextContent();
-                                                            final String newName = ARTIFACT_ID_PATTERN.matcher(oldName)
-                                                                    .replaceFirst("camel-quarkus-integration-test-$1");
-                                                            name.getNode().setTextContent(newName);
-                                                        });
-                                            },
-                                            Transformation.removeManagedDependencies(true, true,
-                                                    gavtcs -> gavtcs.getArtifactId().startsWith("camel-quarkus-bom")),
-                                            Transformation.addManagedDependencyIfNeeded(quarkusBomParam),
-                                            Transformation.addManagedDependencyIfNeeded(cqBomParam),
-                                            Transformation.addManagedDependencyIfNeeded(testBom));
-                    /* Move the test dir */
-                    try {
-                        Files.move(jvmParentPom.getParent().resolve("integration-test"), jvmTestsDir.resolve(artifactIdBase));
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                });
-
-        ProdExcludesMojo.initializeMixedTestsPom(jvmTestsDir.resolve("pom.xml"), "camel-quarkus", projectVersion,
-                "../pom.xml", "camel-quarkus-integration-tests-jvm", "Integration Tests :: JVM");
-        new PomTransformer(jvmTestsDir.resolve("pom.xml"), charset, simpleElementWhitespace)
-                .transform(Transformation.addModulesIfNeeded(null, String::compareTo, jvmTestModules));
-
-        for (String dir : Arrays.asList("extensions", "extensions-core", "extensions-support", "extensions-jvm",
-                "integration-tests-support")) {
-            final Pattern pattern = secondLevelPattern(dir);
-            new PomTransformer(workDir.resolve(dir + "/pom.xml"), charset, simpleElementWhitespace)
-                    .transform(
-                            Transformation.setParent("camel-quarkus-build-parent",
-                                    jvmTestsDir.relativize(buildParentPom).toString()),
-                            Transformation.addManagedDependencyIfNeeded(appBomLiteral));
-            tree.getModulesByPath().keySet().stream()
-                    .filter(path -> pattern.matcher(path).matches())
-                    .map(Paths::get)
-                    .map(workDir::resolve)
-                    .forEach(moduleParentPom -> {
-                        new PomTransformer(moduleParentPom, charset, simpleElementWhitespace)
-                                .transform(
-                                        Transformation.setParent("camel-quarkus-" + dir, "../pom.xml"),
-                                        Transformation.removeManagedDependencies(true, true,
-                                                gavtcs -> gavtcs.getArtifactId().startsWith("camel-quarkus-bom")),
-                                        Transformation.removeIfEmpty(true, true, "project", "dependencyManagement",
-                                                "dependencies"),
-                                        Transformation.removeIfEmpty(true, true, "project", "dependencyManagement"));
-                    });
-        }
-        new PomTransformer(workDir.resolve("integration-tests-support/pom.xml"), charset, simpleElementWhitespace)
-                .transform(Transformation.addManagedDependencyIfNeeded(testBom));
-
-        new PomTransformer(rootPomPath, charset, simpleElementWhitespace)
-                .transform(Transformation.addModule("integration-tests-jvm"));
-
-        new PomTransformer(workDir.resolve("poms/bom-test/pom.xml"), charset, simpleElementWhitespace)
-                .transform(Transformation.removeManagedDependencies(true, true,
-                        gavtcs -> gavtcs.getArtifactId().startsWith("camel-quarkus-bom")));
-        new PomTransformer(workDir.resolve("poms/build-parent/pom.xml"), charset, simpleElementWhitespace)
-                .transform(
-                        (Document document, TransformationContext context) -> context
-                                .getContainerElement("project", "dependencyManagement")
-                                .ifPresent(deps -> deps.remove(true, true)));
-        new PomTransformer(workDir.resolve("poms/build-parent-it/pom.xml"), charset, simpleElementWhitespace)
-                .transform(
-                        (Document document, TransformationContext context) -> context
-                                .getContainerElement("project", "dependencyManagement")
-                                .ifPresent(deps -> deps.remove(true, true)));
-
     }
 
-    void copyDir(final Path src, final Path dest) {
-        try {
-            Files.walkFileTree(src, new SimpleFileVisitor<Path>() {
-                @Override
-                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
-                        throws IOException {
-                    Files.createDirectories(dest.resolve(src.relativize(dir)));
-                    return FileVisitResult.CONTINUE;
-                }
+    static class NodePredicate implements Predicate<Node> {
+        private boolean virtualMarkerHit = false;
 
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    Path destFile = dest.resolve(src.relativize(file));
-                    Files.copy(file, destFile, StandardCopyOption.REPLACE_EXISTING);
-                    return FileVisitResult.CONTINUE;
-                }
-            });
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        @Override
+        public boolean test(Node prevSibling) {
+            return !virtualMarkerHit && (TransformationContext
+                    .isWhiteSpaceNode(prevSibling)
+                    || (prevSibling.getNodeType() == Node.COMMENT_NODE
+                            && !(virtualMarkerHit = prevSibling.getTextContent().contains(
+                                    "The following dependencies guarantee that this module is built after them."))));
         }
+
     }
 
 }
