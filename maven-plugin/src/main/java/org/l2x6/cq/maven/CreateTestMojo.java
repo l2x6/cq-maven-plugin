@@ -35,7 +35,6 @@ import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.Transformation;
-import org.l2x6.pom.tuner.model.Gavtcs;
 
 /**
  * Scaffolds a new test.
@@ -341,11 +340,8 @@ public class CreateTestMojo extends AbstractExtensionListMojo {
                 .collect(Collectors.toSet());
         new PomTransformer(itestPomPath, getCharset(), simpleElementWhitespace)
                 .transform(
-                        Transformation.updateMappedDependencies(
-                                Gavtcs::isVirtualDeployment,
-                                Gavtcs.deploymentVitualMapper(gavtcs -> extensionArtifactIds.contains(gavtcs.getArtifactId())),
-                                Gavtcs.scopeAndTypeFirstComparator(),
-                                CqCommonUtils.VIRTUAL_DEPS_INITIAL_COMMENT),
+                        FormatPomsMojo
+                                .updateTestVirtualDependencies(gavtcs -> extensionArtifactIds.contains(gavtcs.getArtifactId())),
                         Transformation.keepFirst(CqCommonUtils.virtualDepsCommentXPath(), true));
 
         if (nativeSupported) {

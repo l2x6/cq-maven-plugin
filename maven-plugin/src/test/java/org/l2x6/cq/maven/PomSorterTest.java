@@ -26,12 +26,9 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
-import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.test.utils.TestUtils;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
-import org.l2x6.pom.tuner.PomTransformer.Transformation;
-import org.l2x6.pom.tuner.model.Gavtcs;
 
 public class PomSorterTest {
 
@@ -68,11 +65,9 @@ public class PomSorterTest {
                     .filter(p -> Files.exists(p))
                     .forEach(pomXmlPath -> {
                         new PomTransformer(pomXmlPath, StandardCharsets.UTF_8, SimpleElementWhitespace.EMPTY)
-                                .transform(Transformation.updateMappedDependencies(
-                                        Gavtcs::isVirtualDeployment,
-                                        Gavtcs.deploymentVitualMapper(gavtcs -> aids.contains(gavtcs.getArtifactId())),
-                                        Gavtcs.scopeAndTypeFirstComparator(),
-                                        CqCommonUtils.VIRTUAL_DEPS_INITIAL_COMMENT));
+                                .transform(
+                                        FormatPomsMojo.updateTestVirtualDependencies(
+                                                gavtcs -> aids.contains(gavtcs.getArtifactId())));
                     });
         }
 

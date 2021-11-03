@@ -22,10 +22,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -38,10 +42,13 @@ import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.pom.tuner.MavenSourceTree;
 import org.l2x6.pom.tuner.PomTransformer;
+import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.Transformation;
+import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gavtcs;
+import org.w3c.dom.Document;
 
 /**
  * Formats the {@code pom.xml} files in the source tree.
@@ -205,13 +212,10 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
                 final Path pomXmlAbsolutePath = base.resolve(scannerPath);
                 if (tree.getModuleByPath(pomXmlAbsolutePath) != null) {
                     /* Ignore unlinked modules */
+
                     new PomTransformer(pomXmlAbsolutePath, getCharset(), simpleElementWhitespace)
                             .transform(
-                                    Transformation.updateMappedDependencies(
-                                            Gavtcs::isVirtualDeployment,
-                                            Gavtcs.deploymentVitualMapper(gavtcs -> allExtensions.contains(gavtcs)),
-                                            Gavtcs.scopeAndTypeFirstComparator(),
-                                            CqCommonUtils.VIRTUAL_DEPS_INITIAL_COMMENT),
+                                    updateTestVirtualDependencies(gavtcs -> allExtensions.contains(gavtcs)),
                                     Transformation.keepFirst(CqCommonUtils.virtualDepsCommentXPath(), true));
                 }
             }
@@ -236,6 +240,62 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
             }
         }
 
+    }
+
+    public static Transformation updateTestVirtualDependencies(final Predicate<Gavtcs> isExtension) {
+        return (Document document, TransformationContext context) -> {
+            final Comparator<Gavtcs> comparator = Gavtcs.scopeAndTypeFirstComparator();
+            final Function<Gavtcs, Optional<Gavtcs>> dependencyMapper = Gavtcs
+                    .deploymentVirtualMapper(isExtension);
+            final Set<? extends Gavtcs> deps = context.getDependencies();
+            final Set<Gavtcs> newMappedDeps = new TreeSet<>(comparator);
+
+            for (Gavtcs dep : deps) {
+                dependencyMapper
+                        .apply(dep)
+                        .ifPresent(mappedDep -> {
+                            newMappedDeps.add(mappedDep);
+                        });
+            }
+
+            final Optional<ContainerElement> optionalProfile = context
+                    .getProfileParent("virtualDependencies");
+            if (!newMappedDeps.isEmpty()) {
+                final ContainerElement profile;
+                if (optionalProfile.isPresent()) {
+                    profile = optionalProfile.get();
+                } else {
+                    profile = context
+                            .getOrAddContainerElement("profiles")
+                            .addChildContainerElement("profile");
+                    profile.addChildTextElement("id", "virtualDependencies",
+                            profile.getOrAddLastIndent());
+                    profile
+                            .addChildContainerElement("activation")
+                            .addChildContainerElement("property")
+                            .addChildTextElement("name", "!virtualDependencies");
+                }
+                final ContainerElement virtualDepsElement = profile
+                        .getOrAddChildContainerElement("dependencies");
+
+                newMappedDeps.forEach(
+                        mappedDep -> virtualDepsElement.addGavtcsIfNeeded(mappedDep, comparator));
+
+                virtualDepsElement.childElements().iterator().next()
+                        .prependCommentIfNeeded(CqCommonUtils.VIRTUAL_DEPS_INITIAL_COMMENT);
+            }
+
+            /* Remove stale mapped deps */
+            if (optionalProfile.isPresent()) {
+                final ContainerElement virtualDepsElement = optionalProfile.get()
+                        .getOrAddChildContainerElement("dependencies");
+                virtualDepsElement.childElementsStream()
+                        .map(ContainerElement::asGavtcs)
+                        .filter(dep -> !newMappedDeps.contains(dep))
+                        .forEach(dep -> dep.getNode().remove(true, true));
+
+            }
+        };
     }
 
     public static void updateVirtualDependenciesAllExtensions(List<DirectoryScanner> updateVirtualDependenciesAllExtensions,
