@@ -99,7 +99,7 @@ public class RefactorMojo extends AbstractMojo {
                                 profile
                                         .addChildContainerElement("activation")
                                         .addChildContainerElement("property")
-                                        .addChildTextElement("name", "!virtualDependencies");
+                                        .addChildTextElement("name", "!noVirtualDependencies");
 
                                 final ContainerElement newDeps = profile
                                         .addChildContainerElement("dependencies");
