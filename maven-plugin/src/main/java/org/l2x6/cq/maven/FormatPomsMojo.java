@@ -273,7 +273,7 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
                     profile
                             .addChildContainerElement("activation")
                             .addChildContainerElement("property")
-                            .addChildTextElement("name", "!virtualDependencies");
+                            .addChildTextElement("name", "!noVirtualDependencies");
                 }
                 final ContainerElement virtualDepsElement = profile
                         .getOrAddChildContainerElement("dependencies");
