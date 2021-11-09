@@ -40,6 +40,7 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.apache.camel.catalog.Kind;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
@@ -56,6 +57,7 @@ import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.Transformation;
 import org.l2x6.pom.tuner.PomTunerUtils;
+import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gavtcs;
 
 import static java.util.stream.Collectors.joining;
@@ -430,6 +432,17 @@ public class CqCommonUtils {
                     }
                 },
                 additionalFiles);
+    }
+
+    /**
+     * @param  gas the universe to filter from
+     * @return     a {@link Stream} of runtime extension {@link Ga}s
+     */
+    public static Stream<Ga> filterExtensions(Stream<Ga> gas) {
+        return gas
+                .filter(ga -> ga.getArtifactId().endsWith("-deployment"))
+                .map(ga -> new Ga(ga.getGroupId(),
+                        ga.getArtifactId().substring(0, ga.getArtifactId().length() - "-deployment".length())));
     }
 
 }

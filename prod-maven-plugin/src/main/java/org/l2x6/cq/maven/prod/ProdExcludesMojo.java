@@ -768,10 +768,7 @@ public class ProdExcludesMojo extends AbstractMojo {
     Map<Ga, TestCategory> analyzeTests(final MavenSourceTree tree, final Set<Ga> productizedGas, Predicate<Profile> profiles,
             Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions, Map<Ga, Set<Ga>> allowedMixedTests) {
         getLog().debug("Included extensions before considering tests:");
-        final Set<Ga> expandedExtensions = productizedGas.stream()
-                .filter(ga -> ga.getArtifactId().endsWith("-deployment"))
-                .map(ga -> new Ga(ga.getGroupId(),
-                        ga.getArtifactId().substring(0, ga.getArtifactId().length() - "-deployment".length())))
+        final Set<Ga> expandedExtensions = CqCommonUtils.filterExtensions(productizedGas.stream())
                 .peek(ga -> getLog().debug(" - " + ga.getArtifactId()))
                 .collect(Collectors.toCollection(TreeSet::new));
 
