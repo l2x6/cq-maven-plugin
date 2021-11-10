@@ -16,6 +16,7 @@
  */
 package org.l2x6.cq.camel.maven.prod;
 
+import com.google.common.base.Objects;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -31,8 +32,10 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Consumer;
@@ -70,8 +73,6 @@ import org.l2x6.pom.tuner.model.Profile;
 import org.sonatype.plexus.build.incremental.DefaultBuildContext;
 import org.w3c.dom.Document;
 
-import static java.util.stream.Collectors.joining;
-
 /**
  * Unlink modules that should not be productized from Camel source tree based on
  * {@code product/src/main/resources/required-productized-camel-artifacts.txt}.
@@ -83,6 +84,52 @@ public class CamelProdExcludesMojo extends AbstractMojo {
 
     static final String MODULE_COMMENT = "disabled by cq-prod-maven-plugin:camel-prod-excludes";
     static final String DEFAULT_REQUIRED_PRODUCTIZED_CAMEL_ARTIFACTS_TXT = "target/required-productized-camel-artifacts.txt";
+
+    interface AnyVersionStyle {
+        String getExpectedVersion(String literalVersion);
+    }
+
+    enum CamelVersionStyle implements AnyVersionStyle {
+        PROJECT_VERSION {
+            @Override
+            public String getExpectedVersion(String literalVersion) {
+                return "${project.version}";
+            }
+        },
+        LITERAL {
+            @Override
+            public String getExpectedVersion(String literalVersion) {
+                return literalVersion;
+            }
+        },
+        NONE {
+            @Override
+            public String getExpectedVersion(String literalVersion) {
+                return null;
+            }
+        };
+    }
+
+    enum CamelCommunityVersionStyle implements AnyVersionStyle {
+        CAMEL_COMMUNITY_VERSION {
+            @Override
+            public String getExpectedVersion(String literalVersion) {
+                return "${camel-community.version}";
+            }
+        },
+        LITERAL {
+            @Override
+            public String getExpectedVersion(String literalVersion) {
+                return literalVersion;
+            }
+        },
+        NONE {
+            @Override
+            public String getExpectedVersion(String literalVersion) {
+                return null;
+            }
+        };
+    }
 
     /**
      * The basedir
@@ -151,8 +198,13 @@ public class CamelProdExcludesMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     List<RemoteRepository> repositories;
 
+    /**
+     * @since 2.11.0
+     */
     @Parameter(property = "cq.camelCommunityVersion", defaultValue = "${camel-community.version}")
     String camelCommunityVersion;
+
+    Map<String, VersionStyle> versionStylesByPath;
 
     /**
      * @since 2.11.0
@@ -283,6 +335,11 @@ public class CamelProdExcludesMojo extends AbstractMojo {
             getLog().info(" - " + ga.getArtifactId());
         }
 
+        versionStylesByPath = new HashMap<>();
+        fullTree.getModulesByGa().values().stream()
+                .forEach(m -> VersionStyle.autodetect(m, camelCommunityVersion, project.getVersion(), expandedIncludes)
+                        .ifPresent(vs -> versionStylesByPath.put(m.getPomPath(), vs)));
+
         final Set<Ga> excludes = fullTree.complement(expandedIncludes);
         final String exclText = excludes.stream()
                 .map(ga -> ":" + ga.getArtifactId())
@@ -307,26 +364,29 @@ public class CamelProdExcludesMojo extends AbstractMojo {
             final List<Transformation> transformations = new ArrayList<>();
 
             for (Profile profile : module.getProfiles()) {
-                final Set<Ga> changeDeps = profile.getDependencies().stream()
-                        .filter(dep -> "org.apache.camel".equals(dep.getGroupId().asConstant()) && dep.getVersion() != null)
-                        .map(dep -> new Ga(dep.getGroupId().asConstant(), dep.getArtifactId().asConstant()))
-                        .filter(excludes::contains)
-                        .collect(Collectors.toCollection(HashSet::new));
-                if (!changeDeps.isEmpty()) {
-                    transformations
-                            .add(Transformation.setDependencyVersion(profile.getId(), "${camel-community.version}",
-                                    changeDeps));
+                if (!profile.getDependencies().isEmpty()) {
+                    profile.getDependencies().stream()
+                            .filter(dep -> "org.apache.camel".equals(dep.getGroupId().asConstant()) && dep.getVersion() != null)
+                            .forEach(dep -> {
+                                final Ga ga = new Ga(dep.getGroupId().asConstant(), dep.getArtifactId().asConstant());
+                                final VersionStyle vs = versionStylesByPath.get(module.getPomPath());
+                                vs.getTransformation(false, excludes.contains(ga), profile.getId(), ga,
+                                        dep.getVersion().getRawExpression())
+                                        .ifPresent(transformations::add);
+                            });
                 }
-                final Set<Ga> changeManagedDeps = profile.getDependencyManagement().stream()
-                        .filter(dep -> "org.apache.camel".equals(dep.getGroupId().asConstant()))
-                        .map(dep -> new Ga(dep.getGroupId().asConstant(), dep.getArtifactId().asConstant()))
-                        .filter(excludes::contains)
-                        .collect(Collectors.toCollection(HashSet::new));
-                if (!changeManagedDeps.isEmpty()) {
-                    final String version = module.getPomPath().equals("bom/camel-bom/pom.xml") ? camelCommunityVersion
-                            : "${camel-community.version}";
-                    transformations.add(Transformation.setManagedDependencyVersion(profile.getId(),
-                            version, excludes));
+
+                if (!profile.getDependencyManagement().isEmpty()) {
+                    profile.getDependencyManagement().stream()
+                            .filter(dep -> "org.apache.camel".equals(dep.getGroupId().asConstant())
+                                    && !"camel-bom".equals(dep.getArtifactId().asConstant()))
+                            .forEach(dep -> {
+                                final Ga ga = new Ga(dep.getGroupId().asConstant(), dep.getArtifactId().asConstant());
+                                final VersionStyle vs = versionStylesByPath.get(module.getPomPath());
+                                vs.getTransformation(true, excludes.contains(ga), profile.getId(), ga,
+                                        dep.getVersion().getRawExpression())
+                                        .ifPresent(transformations::add);
+                            });
                 }
             }
             if (!transformations.isEmpty()) {
@@ -487,4 +547,102 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                 .forEach(pomConsumer);
     }
 
+    public static class VersionStyle {
+
+        static Optional<VersionStyle> autodetect(Module module, String camelCommunityVersion, String camelVersion,
+                Set<Ga> includes) {
+            if ("bom/camel-bom/pom.xml".equals(module.getPomPath())) {
+                return Optional.of(new VersionStyle(camelCommunityVersion, camelVersion, CamelVersionStyle.PROJECT_VERSION,
+                        CamelCommunityVersionStyle.LITERAL));
+            }
+
+            final boolean importsCamelBom = module.getProfiles().get(0).getDependencyManagement().stream()
+                    .anyMatch(dep -> "org.apache.camel".equals(dep.getGroupId().asConstant())
+                            && "camel-bom".equals(dep.getArtifactId().asConstant()));
+
+            final Optional<String> firstManagedCamelArtifact = module.getProfiles().get(0).getDependencyManagement().stream()
+                    .filter(dep -> "org.apache.camel".equals(dep.getGroupId().asConstant())
+                            && !"camel-bom".equals(dep.getArtifactId().asConstant()))
+                    .map(dep -> dep.getVersion().getRawExpression())
+                    .findFirst();
+
+            if (importsCamelBom) {
+                return Optional.of(new VersionStyle(camelCommunityVersion, camelVersion, CamelVersionStyle.NONE,
+                        CamelCommunityVersionStyle.NONE));
+            } else if (firstManagedCamelArtifact.isPresent()) {
+                if (firstManagedCamelArtifact.get().startsWith("$")) {
+                    return Optional.of(new VersionStyle(camelCommunityVersion, camelVersion, CamelVersionStyle.PROJECT_VERSION,
+                            CamelCommunityVersionStyle.CAMEL_COMMUNITY_VERSION));
+                } else {
+                    return Optional.of(new VersionStyle(camelCommunityVersion, camelVersion, CamelVersionStyle.LITERAL,
+                            CamelCommunityVersionStyle.LITERAL));
+                }
+            } else {
+                final Optional<String> firstCamelDependency = module
+                        .getProfiles()
+                        .get(0)
+                        .getDependencies()
+                        .stream()
+                        .filter(dep -> "org.apache.camel".equals(dep.getGroupId().getRawExpression())
+                                && dep.getVersion() != null)
+                        .map(dep -> dep.getVersion().getRawExpression())
+                        .findFirst();
+                if (firstCamelDependency.isPresent()) {
+                    if (firstCamelDependency.get().startsWith("$")) {
+                        return Optional
+                                .of(new VersionStyle(camelCommunityVersion, camelVersion, CamelVersionStyle.PROJECT_VERSION,
+                                        CamelCommunityVersionStyle.CAMEL_COMMUNITY_VERSION));
+                    } else {
+                        return Optional.of(new VersionStyle(camelCommunityVersion, camelVersion, CamelVersionStyle.LITERAL,
+                                CamelCommunityVersionStyle.LITERAL));
+                    }
+                } else {
+                    return Optional.empty();
+                }
+            }
+        }
+
+        private final String camelCommunityVersion;
+        private final String camelVersion;
+        private final CamelVersionStyle camelVersionStyle;
+        private final CamelCommunityVersionStyle camelCommunityVersionStyle;
+
+        public VersionStyle(String camelCommunityVersion, String camelVersion, CamelVersionStyle camelVersionStyle,
+                CamelCommunityVersionStyle camelCommunityVersionStyle) {
+            this.camelCommunityVersion = camelCommunityVersion;
+            this.camelVersion = camelVersion;
+            this.camelVersionStyle = camelVersionStyle;
+            this.camelCommunityVersionStyle = camelCommunityVersionStyle;
+        }
+
+        public CamelVersionStyle getCamelVersionStyle() {
+            return camelVersionStyle;
+        }
+
+        public CamelCommunityVersionStyle getCamelCommunityVersionStyle() {
+            return camelCommunityVersionStyle;
+        }
+
+        public Optional<Transformation> getTransformation(
+                boolean isManagement,
+                boolean isCommunity,
+                String profileId,
+                Ga ga,
+                String actualVersion) {
+
+            final String literalVersion = isCommunity ? camelCommunityVersion : camelVersion;
+            final String expectedVersion = isCommunity ? camelCommunityVersionStyle.getExpectedVersion(literalVersion)
+                    : camelVersionStyle.getExpectedVersion(literalVersion);
+
+            if (Objects.equal(actualVersion, expectedVersion)) {
+                return Optional.empty();
+            }
+            return Optional.of(
+                    isManagement
+                            ? Transformation.setManagedDependencyVersion(profileId, expectedVersion,
+                                    Collections.singleton(ga))
+                            : Transformation.setDependencyVersion(profileId, expectedVersion,
+                                    Collections.singleton(ga)));
+        }
+    }
 }
