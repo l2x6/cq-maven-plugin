@@ -167,6 +167,7 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
                     return true;
                 }
             });
+            Files.createDirectories(runtimeDependenciesOfSupportedExtensions.toPath().getParent());
             Files.write(
                     runtimeDependenciesOfSupportedExtensions.toPath(),
                     (result
