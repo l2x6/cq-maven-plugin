@@ -700,7 +700,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                 camelVersion, "pom", repositories, repoSystem, repoSession);
         final Model camelBomModel = CqCommonUtils.readPom(camelBomPath, charset);
         return camelBomModel.getDependencyManagement().getDependencies().stream()
-                .filter(dep -> "${project.version}".equals(dep.getVersion()))
+                .filter(dep -> "${project.version}".equals(dep.getVersion()) || camelVersion.equals(dep.getVersion()))
                 .map(dep -> new Ga(dep.getGroupId(), dep.getArtifactId()))
                 .collect(Collectors.toSet());
     }
