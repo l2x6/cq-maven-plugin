@@ -20,10 +20,16 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
+import org.apache.maven.artifact.versioning.ComparableVersion;
+import org.apache.maven.model.Model;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -40,29 +46,38 @@ import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.graph.DependencyVisitor;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.CqCommonUtils;
-import org.l2x6.pom.tuner.MavenSourceTree;
-import org.l2x6.pom.tuner.model.Dependency;
+import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gav;
 
 /**
- * List the transitive runtime dependencies of all supported extensions.
+ * List the transitive dependencies of all, of supported extensions and the rest that neither needs to get productized
+ * nor aligned by PNC.
  *
- * @since 2.16.0
+ * @since 2.17.0
  */
 @Mojo(name = "transitive-deps", threadSafe = true, requiresProject = true, inheritByDefault = false)
 public class TransitiveDependenciesMojo extends AbstractMojo {
+
     /**
-     * The basedir
+     * The version of the current source tree
      *
-     * @since 2.16.0
+     * @since 2.17.0
      */
     @Parameter(property = "cq.version", defaultValue = "${project.version}")
     String version;
 
     /**
+     * The Camel Quarkus community version
+     *
+     * @since 2.17.0
+     */
+    @Parameter(property = "camel-quarkus-community.version")
+    String camelQuarkusCommunityVersion;
+
+    /**
      * The basedir
      *
-     * @since 2.16.0
+     * @since 2.17.0
      */
     @Parameter(property = "cq.basedir", defaultValue = "${project.basedir}")
     File basedir;
@@ -70,7 +85,7 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
     /**
      * Encoding to read and write files in the current source tree
      *
-     * @since 2.16.0
+     * @since 2.17.0
      */
     @Parameter(defaultValue = "utf-8", required = true, property = "cq.encoding")
     String encoding;
@@ -79,7 +94,7 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
     /**
      * Skip the execution of this mojo.
      *
-     * @since 2.16.0
+     * @since 2.17.0
      */
     @Parameter(property = "cq.transitive-deps.skip", defaultValue = "false")
     boolean skip;
@@ -88,20 +103,32 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
      * Where to write a list of runtime dependencies of all Camel Quarkus productized extensions.
      * It is a text file one artifactId per line.
      *
-     * @since 2.16.0
+     * @since 2.17.0
      */
-    @Parameter(property = "cq.runtimeDependenciesOfSupportedExtensions", defaultValue = "${basedir}/target/all-runtime-dependencies.txt")
-    File runtimeDependenciesOfSupportedExtensions;
+    @Parameter(property = "cq.productizedDependenciesFile", defaultValue = "${basedir}/product/src/main/generated/transitive-dependencies-productized.txt")
+    File productizedDependenciesFile;
 
     /**
-     * @since 2.16.0
+     * Where to write a list of runtime dependencies of all Camel Quarkus productized extensions.
+     * It is a text file one artifactId per line.
+     *
+     * @since 2.17.0
      */
+    @Parameter(property = "cq.allTransitivesFile", defaultValue = "${basedir}/product/src/main/generated/transitive-dependencies-all.txt")
+    File allDependenciesFile;
+
+    /**
+     * Where to write a list of runtime dependencies of all Camel Quarkus productized extensions.
+     * It is a text file one artifactId per line.
+     *
+     * @since 2.17.0
+     */
+    @Parameter(property = "cq.nonProductizedDependenciesFile", defaultValue = "${basedir}/product/src/main/generated/transitive-dependencies-non-productized.txt")
+    File nonProductizedDependenciesFile;
+
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     List<RemoteRepository> repositories;
 
-    /**
-     * @since 2.16.0
-     */
     @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
     String localRepository;
 
@@ -119,66 +146,140 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
             return;
         }
         charset = Charset.forName(encoding);
-        final MavenSourceTree tree = MavenSourceTree.of(basedir.toPath().resolve("pom.xml"), charset, Dependency::isVirtual);
 
-        final org.eclipse.aether.artifact.Artifact rootArtifact = new DefaultArtifact(
-                "org.apache.camel.quarkus",
-                "camel-quarkus-all-extensions",
-                null,
-                "pom",
-                version);
+        final Model bomModel = CqCommonUtils.readPom(basedir.toPath().resolve("poms/bom/pom.xml"), charset);
 
-        CollectRequest request = new CollectRequest();
-        request.setRepositories(repositories);
-        request.setRoot(new org.eclipse.aether.graph.Dependency(rootArtifact, null));
-
-        final org.eclipse.aether.artifact.Artifact bomArtifact = new DefaultArtifact(
-                "org.apache.camel.quarkus",
-                "camel-quarkus-bom",
-                null,
-                "pom",
-                version);
-        request.addManagedDependency(new org.eclipse.aether.graph.Dependency(bomArtifact, "import"));
-
-        CqCommonUtils.filterExtensions(tree.getModulesByGa().keySet().stream())
-                .forEach(extension -> {
-                    request.addDependency(new org.eclipse.aether.graph.Dependency(new DefaultArtifact(
-                            extension.getGroupId(),
-                            extension.getArtifactId(),
-                            null,
-                            "jar",
-                            version), null));
+        final Map<String, Boolean> cqArtifactIds = new TreeMap<>();
+        bomModel.getDependencyManagement().getDependencies().stream()
+                .filter(dep -> dep.getGroupId().equals("org.apache.camel.quarkus"))
+                .forEach(dep -> {
+                    switch (dep.getVersion()) {
+                    case "${camel-quarkus.version}":
+                        cqArtifactIds.put(dep.getArtifactId(), true);
+                        break;
+                    case "${camel-quarkus-community.version}":
+                        cqArtifactIds.put(dep.getArtifactId(), false);
+                        break;
+                    default:
+                        throw new IllegalStateException(
+                                "Unexpected version of an artifact with groupId 'org.apache.camel.quarkus': " + dep.getVersion()
+                                        + "; expected ${camel-quarkus.version} or ${camel-quarkus-community.version}");
+                    }
                 });
 
-        try {
-            final Set<Gav> result = new TreeSet<>();
-            final DependencyNode rootNode = repoSystem.collectDependencies(repoSession, request).getRoot();
-            rootNode.accept(new DependencyVisitor() {
+        /*
+         * Remove the runtime artifacts from the set, because their -deployment counterparts will pull the runtime deps
+         * anyway
+         */
+        for (Iterator<String> it = cqArtifactIds.keySet().iterator(); it.hasNext();) {
+            final String artifactId = it.next();
+            if (!artifactId.endsWith("-deployment") && cqArtifactIds.containsKey(artifactId + "-deployment")) {
+                it.remove();
+            }
+        }
 
-                @Override
-                public boolean visitLeave(DependencyNode node) {
-                    return true;
-                }
+        final DependencyCollector collector = new DependencyCollector();
 
-                @Override
-                public boolean visitEnter(DependencyNode node) {
-                    final Artifact a = node.getArtifact();
-                    result.add(new Gav(a.getGroupId(), a.getArtifactId(), a.getVersion()));
-                    return true;
-                }
+        cqArtifactIds.entrySet().stream()
+                .forEach(artifactId -> {
+
+                    final Boolean isProd = artifactId.getValue();
+                    final DefaultArtifact artifact = new DefaultArtifact(
+                            "org.apache.camel.quarkus",
+                            artifactId.getKey(),
+                            null,
+                            "pom",
+                            isProd ? version : camelQuarkusCommunityVersion);
+
+                    final CollectRequest request = new CollectRequest()
+                            .setRepositories(repositories)
+                            .setRoot(new org.eclipse.aether.graph.Dependency(artifact, null));
+                    try {
+                        final DependencyNode rootNode = repoSystem.collectDependencies(repoSession, request).getRoot();
+                        collector.isProd = isProd;
+                        rootNode.accept(collector);
+                    } catch (DependencyCollectionException e) {
+                        throw new RuntimeException("Could not resolve dependencies", e);
+                    }
+                });
+
+        final Map<Ga, Set<ComparableVersion>> multiversionedProdArtifacts = findMultiversionedArtifacts(
+                collector.prodTransitives);
+        if (!multiversionedProdArtifacts.isEmpty()) {
+            getLog().warn("Found dependencies of productized artifacts with multiple versions:");
+            multiversionedProdArtifacts.entrySet().forEach(en -> {
+                System.out.println("- " + en.getKey() + ": " + en.getValue());
             });
-            Files.createDirectories(runtimeDependenciesOfSupportedExtensions.toPath().getParent());
+        }
+
+        final Set<Ga> allTransitiveGas = toGas(collector.allTransitives);
+        write(allTransitiveGas, allDependenciesFile.toPath());
+        final Set<Ga> prodTransitiveGas = toGas(collector.prodTransitives);
+        write(prodTransitiveGas, productizedDependenciesFile.toPath());
+        final Set<Ga> nonProdTransitives = allTransitiveGas.stream()
+                .filter(dep -> !prodTransitiveGas.contains(dep))
+                .collect(Collectors.toCollection(TreeSet::new));
+        write(nonProdTransitives, nonProductizedDependenciesFile.toPath());
+    }
+
+    static Set<Ga> toGas(Set<Gav> gavs) {
+        return gavs.stream()
+                .map(Gav::toGa)
+                .collect(Collectors.toCollection(TreeSet::new));
+    }
+
+    static Map<Ga, Set<ComparableVersion>> findMultiversionedArtifacts(Set<Gav> prodTransitives) {
+        Map<Ga, Set<ComparableVersion>> result = new TreeMap<>();
+        prodTransitives.stream()
+                .forEach(gav -> {
+                    final Ga key = gav.toGa();
+                    Set<ComparableVersion> versions = result.computeIfAbsent(key, k -> new TreeSet<>());
+                    versions.add(new ComparableVersion(gav.getVersion()));
+                });
+        for (Iterator<Map.Entry<Ga, Set<ComparableVersion>>> it = result.entrySet().iterator(); it.hasNext();) {
+            final Map.Entry<Ga, Set<ComparableVersion>> en = it.next();
+            if (en.getValue().size() <= 1) {
+                it.remove();
+            }
+        }
+        return result;
+    }
+
+    void write(Set<Ga> deps, Path path) {
+        try {
+            Files.createDirectories(path.getParent());
             Files.write(
-                    runtimeDependenciesOfSupportedExtensions.toPath(),
-                    (result
+                    path,
+                    (deps
                             .stream()
-                            .map(Gav::toString)
+                            .map(Ga::toString)
                             .collect(Collectors.joining("\n")) + "\n").getBytes(charset));
-        } catch (DependencyCollectionException e) {
-            throw new RuntimeException("Could not resolve dependencies", e);
         } catch (IOException e) {
-            throw new RuntimeException("Could not write to " + runtimeDependenciesOfSupportedExtensions, e);
+            throw new RuntimeException("Could not write to " + path, e);
         }
     }
 
+    static class DependencyCollector implements DependencyVisitor {
+        private boolean isProd;
+
+        private final Set<Gav> prodTransitives = new TreeSet<>();
+        private final Set<Gav> allTransitives = new TreeSet<>();
+
+        @Override
+        public boolean visitLeave(DependencyNode node) {
+            return true;
+        }
+
+        @Override
+        public boolean visitEnter(DependencyNode node) {
+            final Artifact a = node.getArtifact();
+            final Gav gav = new Gav(a.getGroupId(), a.getArtifactId(), a.getVersion());
+            allTransitives.add(gav);
+            if (isProd) {
+                prodTransitives.add(gav);
+            }
+            return true;
+        }
+
+    }
 }
