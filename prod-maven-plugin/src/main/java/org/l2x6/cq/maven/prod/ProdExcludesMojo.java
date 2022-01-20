@@ -427,6 +427,8 @@ public class ProdExcludesMojo extends AbstractMojo {
         /* BOMs */
         final Set<Ga> missingCamelArtifacts = updateBoms(fullTree, includesPlusTests, profiles, requiredCamelArtifacts);
 
+        updateSuperApp(workRoot, requiredExtensions, fullTree.getRootModule().getGav().getVersion().asConstant());
+
         /* Uncomment the product module and comment test modules */
         new PomTransformer(workRoot.resolve("pom.xml"), charset, simpleElementWhitespace)
                 .transform(
@@ -481,6 +483,29 @@ public class ProdExcludesMojo extends AbstractMojo {
             throw new MojoFailureException(sb.toString());
         }
 
+    }
+
+    void updateSuperApp(Path workRoot, Set<Ga> requiredExtensions, String version) {
+
+        final Path productPomPath = workRoot.resolve("product/pom.xml");
+        new PomTransformer(productPomPath, charset, simpleElementWhitespace)
+                .transform(Transformation.addModuleIfNeeded("superapp", String::compareTo));
+
+        final Path pomXmlPath = workRoot.resolve("product/superapp/pom.xml");
+        initializeMixedTestsPom(pomXmlPath, "camel-quarkus-build-parent-it", version,
+                "../../poms/build-parent-it/pom.xml", "camel-quarkus-superapp",
+                "Camel Quarkus :: Superapp");
+
+        new PomTransformer(pomXmlPath, charset, simpleElementWhitespace)
+                .transform(
+                        Transformation.addOrSetProperty("enforcer.skip", "false"),
+                        Transformation.removeDependencies(null, true, true, gavtcs -> true),
+                        (Document document, TransformationContext context) -> {
+                            final ContainerElement deps = context.getOrAddContainerElements("dependencies");
+                            requiredExtensions.forEach(ga -> {
+                                deps.addGavtcs(new Gavtcs(ga.getGroupId(), ga.getArtifactId(), null));
+                            });
+                        });
     }
 
     void updateVersions(MavenSourceTree fullTree, Predicate<Profile> profiles) {
