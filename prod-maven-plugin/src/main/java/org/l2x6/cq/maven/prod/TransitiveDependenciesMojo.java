@@ -24,6 +24,7 @@ import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -48,6 +49,7 @@ import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gav;
+import org.l2x6.pom.tuner.model.GavSet;
 
 /**
  * List the transitive dependencies of all, of supported extensions and the rest that neither needs to get productized
@@ -126,6 +128,17 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
     @Parameter(property = "cq.nonProductizedDependenciesFile", defaultValue = "${basedir}/product/src/main/generated/transitive-dependencies-non-productized.txt")
     File nonProductizedDependenciesFile;
 
+    /**
+     * A map from Camel Quarkus artifactIds to comma separated list of {@code groupId:artifactId} patterns.
+     * Used for assigning shaded dependencies to a Camel Quarkus artifact when deciding whether the given transitive
+     * needs
+     * to get productized.
+     *
+     * @since 2.18.0
+     */
+    @Parameter(property = "cq.additionalExtensionDependencies")
+    Map<String, String> additionalExtensionDependencies;
+
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     List<RemoteRepository> repositories;
 
@@ -146,11 +159,27 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
             return;
         }
         charset = Charset.forName(encoding);
+        final TreeMap<String, GavSet> additionalDependenciesMap = new TreeMap<>();
+        if (additionalExtensionDependencies != null) {
+            for (Entry<String, String> en : additionalExtensionDependencies.entrySet()) {
+                additionalDependenciesMap.put(en.getKey(), GavSet.builder().includes(en.getValue()).build());
+            }
+        }
 
         final Model bomModel = CqCommonUtils.readPom(basedir.toPath().resolve("poms/bom/pom.xml"), charset);
 
+        final Set<Ga> ownManagedGas = new TreeSet<>();
+        final Map<String, Set<Ga>> bomGroups = new TreeMap<>();
+
         final Map<String, Boolean> cqArtifactIds = new TreeMap<>();
         bomModel.getDependencyManagement().getDependencies().stream()
+                .peek(dep -> {
+                    if (!"import".equals(dep.getScope())) {
+                        final Ga ga = new Ga(dep.getGroupId(), dep.getArtifactId());
+                        ownManagedGas.add(ga);
+                        bomGroups.computeIfAbsent(dep.getVersion(), k -> new TreeSet<>()).add(ga);
+                    }
+                })
                 .filter(dep -> dep.getGroupId().equals("org.apache.camel.quarkus"))
                 .forEach(dep -> {
                     switch (dep.getVersion()) {
@@ -165,6 +194,7 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
                                 "Unexpected version of an artifact with groupId 'org.apache.camel.quarkus': " + dep.getVersion()
                                         + "; expected ${camel-quarkus.version} or ${camel-quarkus-community.version}");
                     }
+
                 });
 
         /*
@@ -203,18 +233,79 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
                     }
                 });
 
+        final Set<Ga> allTransitiveGas = toGas(collector.allTransitives);
+        final Set<Ga> prodTransitiveGas = toGas(collector.prodTransitives);
+        bomModel.getDependencyManagement().getDependencies().stream()
+                .filter(dep -> !"import".equals(dep.getScope()))
+                .forEach(dep -> {
+                    final Ga depGa = new Ga(dep.getGroupId(), dep.getArtifactId());
+                    additionalDependenciesMap.entrySet().stream()
+                            .filter(en -> en.getValue().contains(dep.getGroupId(), dep.getArtifactId(), dep.getVersion()))
+                            .map(Entry::getKey) // artifactId
+                            .findFirst()
+                            .ifPresent(artifactId -> {
+                                final Ga extensionGa = new Ga("org.apache.camel.quarkus", artifactId);
+                                if (prodTransitiveGas.contains(extensionGa)) {
+                                    prodTransitiveGas.add(depGa);
+                                    allTransitiveGas.add(depGa);
+                                } else if (allTransitiveGas.contains(extensionGa)) {
+                                    allTransitiveGas.add(depGa);
+                                }
+                            });
+                });
+
         final Map<Ga, Set<ComparableVersion>> multiversionedProdArtifacts = findMultiversionedArtifacts(
                 collector.prodTransitives);
         if (!multiversionedProdArtifacts.isEmpty()) {
             getLog().warn("Found dependencies of productized artifacts with multiple versions:");
             multiversionedProdArtifacts.entrySet().forEach(en -> {
-                System.out.println("- " + en.getKey() + ": " + en.getValue());
+                getLog().warn("- " + en.getKey() + ": " + en.getValue());
             });
         }
 
-        final Set<Ga> allTransitiveGas = toGas(collector.allTransitives);
+        /* Ensure that all camel deps are managed */
+        final Set<Ga> nonManagedCamelArtifacts = allTransitiveGas.stream()
+                .filter(ga -> "org.apache.camel".equals(ga.getGroupId()))
+                .filter(ga -> !ownManagedGas.contains(ga))
+                .collect(Collectors.toCollection(TreeSet::new));
+        final StringBuilder sb = new StringBuilder(
+                "Found non-managed Camel artifacts; consider adding the following to camel-quarkus-bom:");
+        if (!nonManagedCamelArtifacts.isEmpty()) {
+            nonManagedCamelArtifacts.forEach(ga -> sb.append("\n            <dependency>\n                <groupId>")
+                    .append(ga.getGroupId())
+                    .append("</groupId>\n                <artifactId>")
+                    .append(ga.getArtifactId())
+                    .append("</artifactId>\n                <version>")
+                    .append(prodTransitiveGas.contains(ga) ? "${camel.version}" : "${camel-community.version}")
+                    .append("</version>\n            </dependency>"));
+            getLog().warn(sb.toString());
+        }
+
+        /*
+         * For the sake of consistency in end user apps, we manage some artifacts that are not actually used in our
+         * extensions. We need to classify these as prod/non-prod too so that PME does not change the versions were we
+         * do not want
+         */
+        bomModel.getDependencyManagement().getDependencies().stream()
+                .filter(dep -> !"import".equals(dep.getScope()))
+                .filter(dep -> !allTransitiveGas.contains(new Ga(dep.getGroupId(), dep.getArtifactId())))
+                .forEach(dep -> {
+                    final Ga depGa = new Ga(dep.getGroupId(), dep.getArtifactId());
+                    final Set<Ga> gaSet = bomGroups.get(dep.getVersion());
+                    if (prodTransitiveGas.stream().anyMatch(gaSet::contains)) {
+                        prodTransitiveGas.add(depGa);
+                        getLog().debug("   - BOM entry mappable to an otherwise productized group: " + depGa);
+                    } else if (allTransitiveGas.stream().anyMatch(gaSet::contains)) {
+                        /* Still mappable */
+                        getLog().debug("   - BOM entry mappable to an otherwise non-productized group: " + depGa);
+                    } else {
+                        getLog().warn(" - BOM entry not mappable to any group: " + depGa
+                                + " - is it perhaps supperfluous and should be removed from the BOM? Or needs to get assigne to an extension via <additionalExtensionDependencies>?");
+                    }
+                    allTransitiveGas.add(depGa);
+                });
+
         write(allTransitiveGas, allDependenciesFile.toPath());
-        final Set<Ga> prodTransitiveGas = toGas(collector.prodTransitives);
         write(prodTransitiveGas, productizedDependenciesFile.toPath());
         final Set<Ga> nonProdTransitives = allTransitiveGas.stream()
                 .filter(dep -> !prodTransitiveGas.contains(dep))
