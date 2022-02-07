@@ -55,6 +55,7 @@ public class ProdExcludesCheckMojoTest {
         mojo.jenkinsfile = basePath.resolve("Jenkinsfile.redhat").toFile();
         mojo.localRepository = basePath.resolve("target/local-maven-repo").toString();
         mojo.camelVersion = "3.11.1-fuse1";
+        mojo.version = "2.3.4";
         mojo.onCheckFailure = OnFailure.FAIL;
         return mojo;
     }

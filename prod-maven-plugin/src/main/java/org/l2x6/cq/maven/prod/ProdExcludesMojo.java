@@ -274,8 +274,16 @@ public class ProdExcludesMojo extends AbstractMojo {
     /**
      * @since 2.6.0
      */
-    @Parameter(defaultValue = "${camel.version}", readonly = true)
+    @Parameter(defaultValue = "${camel.version}")
     String camelVersion;
+
+    /**
+     * The current project's version
+     *
+     * @since 2.19.0
+     */
+    @Parameter(defaultValue = "${project.version}", readonly = true)
+    String version;
 
     /**
      * What should happen when the checks performed by this plugin fail. Possible values: {@code WARN}, {@code FAIL},
@@ -316,7 +324,12 @@ public class ProdExcludesMojo extends AbstractMojo {
         }
         final Path jenkinsfileName = jenkinsfile.toPath().getFileName();
 
-        additionalFiles = path -> jenkinsfileName.equals(path.getFileName());
+        final Path extensionYamlRelPath = Paths.get("src/main/resources/META-INF/quarkus-extension.yaml");
+        additionalFiles = path -> jenkinsfileName.equals(path.getFileName())
+                || path.endsWith(extensionYamlRelPath);
+        final String majorVersion = version.split("\\.")[0];
+        final String prodGuideUrlTemplate;
+        final String communityGuideUrlTemplate = "https://camel.apache.org/camel-quarkus/latest/reference/extensions/${artifactIdBase}.html";
 
         /* Collect the list of productize artifacts based on data from camel-quarkus-product-source.json */
         final Path absProdJson = basedir.toPath().resolve(productJson.toPath());
@@ -352,6 +365,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                     includes.add(new Ga("org.apache.camel.quarkus", artifactId));
                 }
             }
+            prodGuideUrlTemplate = (String) json.get("guideUrlTemplate");
         } catch (IOException e) {
             throw new RuntimeException("Could not read " + absProdJson, e);
         }
@@ -389,30 +403,31 @@ public class ProdExcludesMojo extends AbstractMojo {
         final MavenSourceTree fullTree = initialTree.relinkModules(charset, simpleElementWhitespace, MODULE_COMMENT);
 
         /* Add the modules required by the includes */
-        Set<Ga> expandedIncludes = fullTree.findRequiredModules(includes, profiles);
+        final Set<Ga> expandedIncludesWithoutTests = Collections
+                .unmodifiableSet(fullTree.findRequiredModules(includes, profiles));
 
         updateVersions(fullTree, profiles);
 
         /* Tests */
         final Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions = new TreeMap<>();
-        final Map<Ga, TestCategory> tests = analyzeTests(fullTree, expandedIncludes, profiles, uncoveredExtensions,
+        final Map<Ga, TestCategory> tests = analyzeTests(fullTree, expandedIncludesWithoutTests, profiles, uncoveredExtensions,
                 allowedMixedTests);
 
         /* Add the found product tests to the includes */
+        final Set<Ga> tempExpandedIncludesWithTests = new TreeSet<>(expandedIncludesWithoutTests);
         tests.entrySet().stream()
                 .filter(en -> !en.getValue().mixed)
                 .map(Entry::getKey)
-                .forEach(expandedIncludes::add);
+                .forEach(tempExpandedIncludesWithTests::add);
         /* The tests may require some additional modules */
-        final Set<Ga> newIncludes = fullTree.findRequiredModules(expandedIncludes, profiles);
-        expandedIncludes.addAll(newIncludes);
+        final Set<Ga> expandedIncludesWithProdTests = fullTree.findRequiredModules(tempExpandedIncludesWithTests, profiles);
 
-        final Set<Ga> requiredCamelArtifacts = findRequiredCamelArtifacts(fullTree, expandedIncludes,
+        final Set<Ga> requiredCamelArtifacts = findRequiredCamelArtifacts(fullTree, expandedIncludesWithProdTests,
                 fullTree.getExpressionEvaluator(profiles));
-        writeProdReports(fullTree, expandedIncludes, profiles, requiredCamelArtifacts);
+        writeProdReports(fullTree, expandedIncludesWithProdTests, profiles, requiredCamelArtifacts);
 
         /* Comment all non-productized modules in the tree */
-        minimizeTree(workRoot, expandedIncludes, tests, profiles);
+        minimizeTree(workRoot, expandedIncludesWithProdTests, tests, profiles);
 
         /* Fix the virtual deps in the Catalog */
         final Set<Gavtcs> allVirtualExtensions = requiredExtensions.stream()
@@ -422,10 +437,11 @@ public class ProdExcludesMojo extends AbstractMojo {
         CqCommonUtils.updateVirtualDependencies(charset, simpleElementWhitespace, allVirtualExtensions, catalogPomPath);
 
         /* Enable the mixed tests in special modules */
-        final TreeSet<Ga> includesPlusTests = updateMixedTests(fullTree, expandedIncludes, tests);
+        final TreeSet<Ga> expandedIncludesWithAllTests = updateMixedTests(fullTree, expandedIncludesWithProdTests, tests);
 
         /* BOMs */
-        final Set<Ga> missingCamelArtifacts = updateBoms(fullTree, includesPlusTests, profiles, requiredCamelArtifacts);
+        final Set<Ga> missingCamelArtifacts = updateBoms(fullTree, expandedIncludesWithAllTests, profiles,
+                requiredCamelArtifacts);
 
         updateSuperApp(workRoot, requiredExtensions, fullTree.getRootModule().getGav().getVersion().asConstant());
 
@@ -433,6 +449,10 @@ public class ProdExcludesMojo extends AbstractMojo {
         new PomTransformer(workRoot.resolve("pom.xml"), charset, simpleElementWhitespace)
                 .transform(
                         Transformation.uncommentModules(MODULE_COMMENT, m -> m.equals("product")));
+
+        /* Product guide links */
+        updateProductGuideLinks(workRoot, expandedIncludesWithoutTests, fullTree, extensionYamlRelPath, prodGuideUrlTemplate,
+                communityGuideUrlTemplate, majorVersion);
 
         if (isChecking()) {
             final MavenSourceTree finalTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
@@ -483,6 +503,45 @@ public class ProdExcludesMojo extends AbstractMojo {
             throw new MojoFailureException(sb.toString());
         }
 
+    }
+
+    void updateProductGuideLinks(
+            Path workRoot,
+            Set<Ga> expandedIncludesWithoutTests,
+            MavenSourceTree fullTree,
+            Path extensionYamlRelPath,
+            String prodGuideUrlTemplate,
+            String communityGuideUrlTemplate,
+            String majorVersion) {
+        final Pattern guidePattern = Pattern.compile("guide: \"([^\"]*)\"");
+        for (Entry<Ga, Module> en : fullTree.getModulesByGa().entrySet()) {
+            final Ga ga = en.getKey();
+            final Module module = en.getValue();
+            final Path moduleDir = workRoot.resolve(module.getPomPath()).getParent();
+            final Path extensionYaml = moduleDir.resolve(extensionYamlRelPath);
+            if (Files.isRegularFile(extensionYaml)) {
+                try {
+                    final String src = new String(Files.readAllBytes(extensionYaml), charset);
+                    final Matcher m = guidePattern.matcher(src);
+                    if (m.find()) {
+                        final String oldUrl = m.group(1);
+                        final String guideUrlTemplate = expandedIncludesWithoutTests.contains(ga) ? prodGuideUrlTemplate
+                                : communityGuideUrlTemplate;
+                        final String newUrl = guideUrlTemplate
+                                .replace("${cqMajorVersion}", majorVersion)
+                                .replace("${artifactIdBase}", ga.getArtifactId().replace("camel-quarkus-", ""));
+                        if (!newUrl.equals(oldUrl)) {
+                            final StringBuilder sb = new StringBuilder(src.length());
+                            m.appendReplacement(sb, "guide: \"" + newUrl + "\"");
+                            m.appendTail(sb);
+                            Files.write(extensionYaml, sb.toString().getBytes(charset));
+                        }
+                    }
+                } catch (IOException e) {
+                    throw new RuntimeException("Could not read " + extensionYaml, e);
+                }
+            }
+        }
     }
 
     void updateSuperApp(Path workRoot, Set<Ga> requiredExtensions, String version) {

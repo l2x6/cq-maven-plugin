@@ -52,6 +52,7 @@ public class ProdExcludesMojoTest {
                 .resolve(ProdExcludesMojo.DEFAULT_PRODUCTIZED_CAMEL_QUARKUS_ARTIFACTS_TXT).toFile();
         mojo.jenkinsfile = basePath.resolve("Jenkinsfile.redhat").toFile();
         mojo.camelVersion = "3.11.1-fuse1";
+        mojo.version = "2.3.4";
         return mojo;
     }
 

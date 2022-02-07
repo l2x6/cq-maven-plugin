@@ -360,7 +360,7 @@ public class CqCommonUtils {
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
                         throws IOException {
                     final String dirName = dir.getFileName().toString();
-                    if ((dirName.equals("target") || dirName.equals("src"))
+                    if ((dirName.equals("target"))
                             && Files.isRegularFile(dir.getParent().resolve("pom.xml"))) {
                         return FileVisitResult.SKIP_SUBTREE;
                     } else {
