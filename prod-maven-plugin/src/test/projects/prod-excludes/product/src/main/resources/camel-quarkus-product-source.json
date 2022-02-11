@@ -5,6 +5,9 @@
             "nativeSupportedSince": "2.1.0"
         }
     },
+    "excludeTests": [
+        "camel-quarkus-integration-test-js-dsl"
+    ],
     "additionalProductizedArtifacts": [
         "camel-quarkus-catalog"
     ]

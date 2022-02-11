@@ -40,6 +40,7 @@
         <!-- extensions a..z; do not remove this comment, it is important when sorting via  mvn process-resources -Pformat -->
         <module>avro</module>
         <module>direct</module>
+        <module>js-dsl</module>
     </modules>
 
 </project>

@@ -18,29 +18,21 @@
 
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-
-    <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.apache.camel.quarkus</groupId>
-        <artifactId>camel-quarkus-build-parent-it</artifactId>
+        <artifactId>camel-quarkus-integration-tests</artifactId>
         <version>2.2.0-SNAPSHOT</version>
-        <relativePath>../poms/build-parent-it/pom.xml</relativePath>
     </parent>
+    <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>camel-quarkus-integration-tests</artifactId>
-    <packaging>pom</packaging>
-
-    <name>Camel Quarkus :: Integration Tests</name>
+    <artifactId>camel-quarkus-integration-test-js-dsl</artifactId>
+    <name>Camel Quarkus :: Integration Tests ::JavaScript DSL :: Tests</name>
+    <description>The camel integration tests</description>
 
     <properties>
-        <quarkus.banner.enabled>false</quarkus.banner.enabled>
+        <skipTests>true</skipTests><!-- TODO: https://issues.redhat.com/browse/ENTESB-15794 -->
+        <!-- Takes too long or spends too much memory on GH actions -->
+        <ci.native.tests.skip>true</ci.native.tests.skip>
     </properties>
-
-    <modules>
-        <!-- extensions a..z; do not remove this comment, it is important when sorting via  mvn process-resources -Pformat -->
-        <module>avro</module>
-        <module>direct</module>
-        <module>js-dsl</module>
-    </modules>
 
 </project>
