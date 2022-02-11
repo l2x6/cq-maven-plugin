@@ -154,6 +154,7 @@
         <module>maven-plugin</module>
         <module>prod-maven-plugin</module>
         <module>camel-prod-maven-plugin</module>
+        <module>camel-spring-boot-prod-maven-plugin</module>
     </modules>
 
     <dependencyManagement>

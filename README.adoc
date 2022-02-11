@@ -1,3 +1,174 @@
 = `cq-maven-plugin`
 
-A Maven plugin to perform various tasks related to https://github.com/apache/camel-quarkus[Camel Quarkus].
+A collection of maven plugins related to https://github.com/apache/camel-quarkus[Camel Quarkus].
+
+== *cq-maven-plugin* : A Maven plugin to perform various tasks related to Camel Quarkus
+
+=== Goals Overview
+
+* await-release : Checks artifacts with a specific group:version that are in the local repository to see if they are in the remote repository, and retries until available.
+* bom-overlaps : Compares two BOMs and prints G:A pairs managed in both BOMs.
+* create : Scaffolds a new camel-quarkus extension.
+* new-test : Scaffolds a new test.
+* examples-check-platform : Checks whether the Quarkus platform BOM and Camel Quarkus BOM suit each other.
+* examples-set-platform : Sets either the just released Quarkus platform on all examples under the current directory or the Camel Quarkus BOM.
+* format : Formats the pom.xml files in the source tree.
+* promote : Promotes an extension  from JVM-only to JVM+native state.
+* set-versions : A faster and more advanced alternative to mvn versions:set.
+* sync-example-properties : set-Synchronizes the properties in an example project with the properties in Camel Quarkus.
+* sync-versions : Synchronizes version properties tagged with @sync.
+* update-examples-json : Stores example metadata into an examples.json file.
+* update-quarkus-metadata : URI prefix to use when looking up FreeMarker templates when generating quarkus-extension.yaml files.
+* whatsnew : Prepares a report upon releasing a new Camel Quarkus version.
+
+=== Usage
+
+=== Examples
+
+== *camel-prod-maven-plugin* : A Maven plugin to perform various tasks related to productized Camel
+
+=== Goals Overview
+
+* camel-prod-excludes-check : Check whether the modules that should not be productized are properly unlinked from Camel source tree based on product/src/main/resources/required-productized-camel-artifacts.txt.
+* camel-prod-excludes : Unlink modules that should not be productized from Camel source tree based on product/src/main/resources/required-productized-camel-artifacts.txt.
+
+=== Usage
+
+*check-excludes* added to the camel pom.xml :
+
+[source,maven]
+----
+            <plugin>
+                <groupId>org.l2x6.cq</groupId>
+                <artifactId>cq-camel-prod-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>check-excludes</id>
+                        <phase>validate</phase>
+                        <inherited>false</inherited>
+                        <goals>
+                            <goal>camel-prod-excludes-check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+----
+
+
+To invoke :
+
+....
+mvn org.l2x6.cq:cq-camel-prod-maven-plugin:check-excludes
+....
+
+From CAMEL_HOME, camel-prod-excludes is used to comment out modules that should not be productized.
+
+*cq-camel-prod-maven-plugin* configured in the camel pom.xml :
+
+[source,maven]
+----
+                <plugin>
+                    <groupId>org.l2x6.cq</groupId>
+                    <artifactId>cq-camel-prod-maven-plugin</artifactId>
+                    <version>${cq-plugin.version}</version>
+                    <configuration>
+                        <requiredProductizedCamelArtifacts>${maven.multiModuleProjectDirectory}/product/src/main/resources/required-productized-camel-artifacts.txt</requiredProductizedCamelArtifacts>
+                        <simpleElementWhitespace>SPACE</simpleElementWhitespace>
+                        <additionalProductizedArtifactIds>
+                            <additionalProductizedArtifactId>camel</additionalProductizedArtifactId>
+                            <additionalProductizedArtifactId>camel-bom</additionalProductizedArtifactId>
+                            <additionalProductizedArtifactId>camel-core</additionalProductizedArtifactId>
+                            <additionalProductizedArtifactId>camel-dependencies</additionalProductizedArtifactId>
+                            <additionalProductizedArtifactId>camel-parent</additionalProductizedArtifactId>
+                        </additionalProductizedArtifactIds>
+                    </configuration>
+                    <dependencies>
+                        <dependency>
+                            <groupId>org.apache.camel</groupId>
+                            <artifactId>camel-package-maven-plugin</artifactId>
+                            <version>${camel-community.version}</version>
+                        </dependency>
+                    </dependencies>
+                </plugin>
+----
+
+To invoke :
+
+....
+mvn org.l2x6.cq:cq-camel-prod-maven-plugin:camel-prod-excludes -N
+....
+
+=== Examples
+
+
+== *camel-spring-bot-prod-maven-plugin* : A Maven plugin to perform various tasks related to productized Camel Spring Boot
+
+=== Goals Overview
+
+* camel-spring-boot-prod-excludes-check : Check whether the modules that should not be productized are properly unlinked from Camel source tree based on product/src/main/resources/required-productized-camel-spring-boot-artifacts.txt.
+* camel-spring-boot-prod-excludes : Unlink modules that should not be productized from Camel source tree based on product/src/main/resources/required-productized-camel-spring-boot-artifacts.txt.
+
+=== Usage
+
+*check-excludes* added to the camel pom.xml :
+
+[source,maven]
+----
+            <plugin>
+                <groupId>org.l2x6.cq</groupId>
+                <artifactId>cq-camel-spring-boot-prod-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>check-excludes</id>
+                        <phase>validate</phase>
+                        <inherited>false</inherited>
+                        <goals>
+                            <goal>camel-spring-boot-prod-excludes-check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+----
+
+A version property `<camel-community.version>3.14.1</camel-community.version>` needs to be added to the pom.xml for the maven plugin to execute successfully.
+
+From CAMEL_SPRING_BOOT_HOME, camel-spring-boot-prod-excludes is used to comment out modules that should not be productized.
+
+A version property `<camel-community.version>3.14.1</camel-community.version>` needs to be added to the pom.xml for the maven plugin to execute successfully.
+
+To invoke :
+
+....
+mvn -e org.l2x6.cq:cq-camel-spring-boot-prod-maven-plugin:camel-spring-boot-prod-excludes -N
+....
+
+Configured in the pom.xml :
+
+[source,maven]
+----
+            <plugin>
+                <groupId>org.l2x6.cq</groupId>
+                <artifactId>cq-camel-spring-boot-prod-maven-plugin</artifactId>
+                <version>${cq-plugin.version}</version>
+                <configuration>
+                    <requiredProductizedCamelArtifacts>${maven.multiModuleProjectDirectory}/product/src/main/resources/required-productized-camel-artifacts.txt</requiredProductizedCamelArtifacts>
+                    <simpleElementWhitespace>SPACE</simpleElementWhitespace>
+                    <additionalProductizedArtifactIds>
+                        <additionalProductizedArtifactId>archetypes</additionalProductizedArtifactId>
+                        <additionalProductizedArtifactId>bom-generator</additionalProductizedArtifactId>
+                        <additionalProductizedArtifactId>catalog</additionalProductizedArtifactId>
+                        <additionalProductizedArtifactId>spring-boot-parent</additionalProductizedArtifactId>
+                        <additionalProductizedArtifactId>tooling</additionalProductizedArtifactId>
+                    </additionalProductizedArtifactIds>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.apache.camel</groupId>
+                        <artifactId>camel-package-maven-plugin</artifactId>
+                        <version>${camel-community.version}</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
+----
+
+=== Examples
