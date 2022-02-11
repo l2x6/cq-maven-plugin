@@ -12,6 +12,9 @@
             ]
         }
     },
+    "excludeTests": [
+        "camel-quarkus-integration-test-js-dsl"
+    ],
     "additionalProductizedArtifacts": [
         "camel-quarkus-catalog"
     ]

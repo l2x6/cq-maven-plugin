@@ -335,6 +335,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         final Path absProdJson = basedir.toPath().resolve(productJson.toPath());
         final Set<Ga> includes = new TreeSet<Ga>();
         final Set<Ga> requiredExtensions = new TreeSet<Ga>();
+        final Set<Ga> excludeTests = new TreeSet<Ga>();
         final Map<Ga, Set<Ga>> allowedMixedTests = new TreeMap<>();
         try (Reader r = Files.newBufferedReader(absProdJson, charset)) {
             @SuppressWarnings("unchecked")
@@ -363,6 +364,12 @@ public class ProdExcludesMojo extends AbstractMojo {
             if (additionalProductizedArtifacts != null) {
                 for (String artifactId : additionalProductizedArtifacts) {
                     includes.add(new Ga("org.apache.camel.quarkus", artifactId));
+                }
+            }
+            final List<String> excludeTestsList = (List<String>) json.get("excludeTests");
+            if (excludeTestsList != null) {
+                for (String artifactId : excludeTestsList) {
+                    excludeTests.add(new Ga("org.apache.camel.quarkus", artifactId));
                 }
             }
             prodGuideUrlTemplate = (String) json.get("guideUrlTemplate");
@@ -411,7 +418,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         /* Tests */
         final Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions = new TreeMap<>();
         final Map<Ga, TestCategory> tests = analyzeTests(fullTree, expandedIncludesWithoutTests, profiles, uncoveredExtensions,
-                allowedMixedTests);
+                allowedMixedTests, excludeTests);
 
         /* Add the found product tests to the includes */
         final Set<Ga> tempExpandedIncludesWithTests = new TreeSet<>(expandedIncludesWithoutTests);
@@ -453,6 +460,10 @@ public class ProdExcludesMojo extends AbstractMojo {
         /* Product guide links */
         updateProductGuideLinks(workRoot, expandedIncludesWithoutTests, fullTree, extensionYamlRelPath, prodGuideUrlTemplate,
                 communityGuideUrlTemplate, majorVersion);
+
+        /* Make sure all excludeTests are excluded from the config in tooling/test-list/pom.xml */
+        excludeTestsFromTestList(workRoot, fullTree, workRoot.resolve("tooling/test-list/pom.xml"),
+                workRoot.resolve("integration-tests"), excludeTests);
 
         if (isChecking()) {
             final MavenSourceTree finalTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
@@ -503,6 +514,34 @@ public class ProdExcludesMojo extends AbstractMojo {
             throw new MojoFailureException(sb.toString());
         }
 
+    }
+
+    void excludeTestsFromTestList(Path workRoot, MavenSourceTree fullTree, Path testListPomPath, Path integrationTestsDir,
+            Set<Ga> excludeTests) {
+        new PomTransformer(testListPomPath, charset, simpleElementWhitespace).transform(
+                (Document document, TransformationContext context) -> {
+                    final NodeGavtcs rpkgtestsPluginElement = context.getContainerElement("project", "build", "plugins").get()
+                            .childElementsStream()
+                            .map(ContainerElement::asGavtcs)
+                            .filter(gav -> "org.l2x6.rpkgtests".equals(gav.getGroupId())
+                                    && "rpkgtests-maven-plugin".equals(gav.getArtifactId()))
+                            .findFirst()
+                            .orElseThrow(() -> new IllegalStateException(
+                                    "Could not find org.l2x6.rpkgtests:rpkgtests-maven-plugin in " + testListPomPath));
+                    final Set<String> excludesToAdd = excludeTests.stream()
+                            .map(ga -> workRoot.resolve(fullTree.getModulesByGa().get(ga).getPomPath()))
+                            .map(pomPath -> integrationTestsDir.relativize(pomPath).toString().replace(File.separatorChar, '/'))
+                            .collect(Collectors.toCollection(TreeSet::new));
+                    final ContainerElement excludesElement = rpkgtestsPluginElement.getNode()
+                            .getChildContainerElement("configuration", "fileSets", "fileSet", "excludes").get();
+                    excludesElement
+                            .childElementsStream()
+                            .map(child -> child.getNode().getTextContent())
+                            .forEach(excludesToAdd::remove);
+                    if (!excludesToAdd.isEmpty()) {
+                        excludesToAdd.forEach(path -> excludesElement.addChildTextElement("exclude", path));
+                    }
+                });
     }
 
     void updateProductGuideLinks(
@@ -850,13 +889,13 @@ public class ProdExcludesMojo extends AbstractMojo {
      * @return                     a {@link Map} covering all integration tests, from {@link Ga} to {@link TestCategory}
      */
     Map<Ga, TestCategory> analyzeTests(final MavenSourceTree tree, final Set<Ga> productizedGas, Predicate<Profile> profiles,
-            Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions, Map<Ga, Set<Ga>> allowedMixedTests) {
+            Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions, Map<Ga, Set<Ga>> allowedMixedTests, Set<Ga> excludeTests) {
         getLog().debug("Included extensions before considering tests:");
         final Set<Ga> expandedExtensions = CqCommonUtils.filterExtensions(productizedGas.stream())
                 .peek(ga -> getLog().debug(" - " + ga.getArtifactId()))
                 .collect(Collectors.toCollection(TreeSet::new));
 
-        final Map<Ga, Set<Ga>> testModules = collectIntegrationTests(tree, profiles);
+        final Map<Ga, Set<Ga>> testModules = collectIntegrationTests(tree, profiles, excludeTests);
 
         final Map<Ga, TestCategory> tests = new TreeMap<>();
         testModules.keySet().stream().forEach(ga -> tests.put(ga, findInitialTestCategory(tree, ga)));
@@ -924,7 +963,8 @@ public class ProdExcludesMojo extends AbstractMojo {
         throw new IllegalStateException("Could not assign a category to test " + pomPath);
     }
 
-    public Map<Ga, Set<Ga>> collectIntegrationTests(final MavenSourceTree tree, Predicate<Profile> profiles) {
+    public Map<Ga, Set<Ga>> collectIntegrationTests(final MavenSourceTree tree, Predicate<Profile> profiles,
+            Set<Ga> excludeTests) {
         final ExpressionEvaluator evaluator = tree.getExpressionEvaluator(profiles);
         final Map<Ga, Set<Ga>> testModules = new TreeMap<>();
         for (DirectoryScanner scanner : integrationTests) {
@@ -938,16 +978,18 @@ public class ProdExcludesMojo extends AbstractMojo {
                     throw new IllegalStateException("Could not find module for path " + pomXmlRelPath);
                 }
                 final Ga moduleGa = evaluator.evaluateGa(testModule.getGav());
-                final Set<Ga> deps = tree.collectTransitiveDependencies(moduleGa, profiles).stream()
-                        .map(evaluator::evaluateGa)
-                        /* keep only local extension dependencies */
-                        .filter(dep -> tree.getModulesByGa().keySet()
-                                .contains(new Ga(dep.getGroupId(), dep.getArtifactId() + "-deployment")))
-                        .collect(Collectors.toSet());
-                testModules.merge(moduleGa, deps, (oldSet, newSet) -> {
-                    oldSet.addAll(newSet);
-                    return oldSet;
-                });
+                if (!excludeTests.contains(moduleGa)) {
+                    final Set<Ga> deps = tree.collectTransitiveDependencies(moduleGa, profiles).stream()
+                            .map(evaluator::evaluateGa)
+                            /* keep only local extension dependencies */
+                            .filter(dep -> tree.getModulesByGa().keySet()
+                                    .contains(new Ga(dep.getGroupId(), dep.getArtifactId() + "-deployment")))
+                            .collect(Collectors.toSet());
+                    testModules.merge(moduleGa, deps, (oldSet, newSet) -> {
+                        oldSet.addAll(newSet);
+                        return oldSet;
+                    });
+                }
             }
         }
         getLog().debug("Found tests:");
