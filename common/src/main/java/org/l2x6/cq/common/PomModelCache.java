@@ -33,17 +33,22 @@ public class PomModelCache {
     private final List<RemoteRepository> remoteRepositories;
     private final RepositorySystem repoSystem;
     private final RepositorySystemSession repoSession;
+    private Model self;
 
     public PomModelCache(Path localRepositoryPath, List<RemoteRepository> remoteRepositories, RepositorySystem repoSystem,
-            RepositorySystemSession repoSession) {
+            RepositorySystemSession repoSession, Model self) {
         this.localRepositoryPath = localRepositoryPath;
         this.remoteRepositories = remoteRepositories;
         this.repoSystem = repoSystem;
         this.repoSession = repoSession;
+        this.self = self;
     }
 
     public Model get(String groupId, String artifactId, String version) {
         final String key = groupId + ":" + artifactId + ":" + version;
+        if (key == "::") {
+            return self;
+        }
         return items.computeIfAbsent(key, k -> {
             final Path cqPomPath = CqCommonUtils.resolveArtifact(localRepositoryPath, groupId, artifactId, version,
                     "pom", remoteRepositories, repoSystem, repoSession);

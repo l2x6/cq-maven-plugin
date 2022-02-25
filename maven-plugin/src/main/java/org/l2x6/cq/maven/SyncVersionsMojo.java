@@ -16,13 +16,26 @@
  */
 package org.l2x6.cq.maven;
 
+import com.google.gson.Gson;
+import freemarker.template.Configuration;
+import freemarker.template.Template;
+import freemarker.template.TemplateException;
+import freemarker.template.TemplateExceptionHandler;
 import java.io.File;
+import java.io.IOException;
+import java.io.Reader;
+import java.io.StringReader;
+import java.io.StringWriter;
 import java.nio.charset.Charset;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.maven.execution.MavenSession;
@@ -64,7 +77,7 @@ public class SyncVersionsMojo extends AbstractMojo {
 
     private static final Pattern SYNC_INSTRUCTION_PATTERN = Pattern
             .compile(
-                    "\\s*@sync (?<groupId>[^:]+):(?<artifactId>[^:]+):(?<version>[^:]+) (?<method>[^:]+):(?<element>[^ ]+)\\s*");
+                    "\\s*@sync (?<groupId>[^:]*):(?<artifactId>[^:]*):(?<version>[^:]*) (?<method>[^:]+):(?<element>[^ ]+)\\s*");
 
     /**
      * Directory where the changes should be performed. Default is the current directory of the current Java process.
@@ -129,12 +142,30 @@ public class SyncVersionsMojo extends AbstractMojo {
 
             new PomTransformer(pomXml, charset, simpleElementWhitespace)
                     .transform(new UpdateVersionsTransformation(
-                            new PomModelCache(localRepositoryPath, repositories, repoSystem, repoSession), evaluator,
-                            getLog()));
+                            new PomModelCache(localRepositoryPath, repositories, repoSystem, repoSession, project.getModel()),
+                            evaluator,
+                            getLog(),
+                            versionTransformations()));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
 
+    }
+
+    private Map<String, String> versionTransformations() {
+        final Path prodJson = basePath.resolve("product/src/main/resources/camel-quarkus-product-source.json");
+        if (Files.isRegularFile(prodJson)) {
+            try (Reader r = Files.newBufferedReader(prodJson, charset)) {
+                @SuppressWarnings("unchecked")
+                final Map<String, Object> json = new Gson().fromJson(r, Map.class);
+                @SuppressWarnings("unchecked")
+                final Map<String, String> versionTransformations = new TreeMap<String, String>();
+                return (Map<String, String>) json.get("versionTransformations");
+            } catch (IOException e) {
+                throw new RuntimeException("Could not read " + prodJson, e);
+            }
+        }
+        return Collections.<String, String> emptyMap();
     }
 
     static class UpdateVersionsTransformation implements Transformation {
@@ -142,11 +173,14 @@ public class SyncVersionsMojo extends AbstractMojo {
         private final PomModelCache pomModels;
         private final PluginParameterExpressionEvaluator evaluator;
         private final Log log;
+        private final Map<String, String> versionTransformations;
 
-        public UpdateVersionsTransformation(PomModelCache pomModels, PluginParameterExpressionEvaluator evaluator, Log log) {
+        public UpdateVersionsTransformation(PomModelCache pomModels, PluginParameterExpressionEvaluator evaluator, Log log,
+                Map<String, String> versionTransformations) {
             this.pomModels = pomModels;
             this.evaluator = evaluator;
             this.log = log;
+            this.versionTransformations = versionTransformations;
         }
 
         @Override
@@ -184,14 +218,38 @@ public class SyncVersionsMojo extends AbstractMojo {
                                             "Unexpected method " + method + "; expected property or dependency");
                                 }
 
+                                final StringWriter out = new StringWriter();
+                                final String transformedValue;
+                                final String versionTransformation = versionTransformations.get(prop.getNode().getLocalName());
+                                if (versionTransformation != null) {
+                                    final Configuration templateCfg = new Configuration(Configuration.VERSION_2_3_28);
+                                    templateCfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
+
+                                    try {
+                                        final Template t = new Template(
+                                                versionTransformation,
+                                                new StringReader(versionTransformation),
+                                                templateCfg);
+                                        final Map<String, Object> model = Collections.singletonMap("version", newValue);
+                                        t.process(model, out);
+                                        transformedValue = out.toString();
+                                    } catch (IOException e) {
+                                        throw new RuntimeException("Could not parse " + versionTransformation, e);
+                                    } catch (TemplateException e) {
+                                        throw new RuntimeException("Could not process " + versionTransformation, e);
+                                    }
+                                } else {
+                                    transformedValue = newValue;
+                                }
+
                                 final Element propNode = prop.getNode();
                                 final String key = propNode.getNodeName();
                                 final String oldValue = propNode.getTextContent();
-                                if (oldValue.equals(newValue)) {
+                                if (oldValue.equals(transformedValue)) {
                                     log.info(" - Property " + key + " up to date");
                                 } else {
-                                    log.info(" - Property " + key + " updated: " + oldValue + " -> " + newValue);
-                                    propNode.setTextContent(newValue);
+                                    log.info(" - Property " + key + " updated: " + oldValue + " -> " + transformedValue);
+                                    propNode.setTextContent(transformedValue);
                                 }
                             } catch (ExpressionEvaluationException e) {
                                 throw new RuntimeException("Could not resolve " + rawVersion, e);
