@@ -49,6 +49,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.apache.maven.execution.MavenSession;
+import org.apache.maven.lifecycle.internal.MojoDescriptorCreator;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -56,6 +58,7 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
+import org.apache.maven.project.MavenProject;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.apache.maven.shared.utils.io.IOUtil;
 import org.eclipse.aether.RepositorySystem;
@@ -270,6 +273,7 @@ public class ProdExcludesMojo extends AbstractMojo {
      */
     @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
     String localRepository;
+    Path localRepositoryPath;
 
     /**
      * @since 2.6.0
@@ -300,6 +304,13 @@ public class ProdExcludesMojo extends AbstractMojo {
     @Parameter(defaultValue = "${repositorySystemSession}", readonly = true, required = true)
     private RepositorySystemSession repoSession;
 
+    @Component
+    private MojoDescriptorCreator mojoDescriptorCreator;
+
+    @Parameter(defaultValue = "${project}", readonly = true)
+    MavenProject project;
+    @Parameter(defaultValue = "${session}", readonly = true, required = true)
+    protected MavenSession session;
     private Predicate<Path> additionalFiles;
 
     /**
@@ -319,6 +330,7 @@ public class ProdExcludesMojo extends AbstractMojo {
             return;
         }
         charset = Charset.forName(encoding);
+        localRepositoryPath = Paths.get(localRepository);
         if (integrationTests == null) {
             integrationTests = Collections.emptyList();
         }
@@ -337,6 +349,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         final Set<Ga> requiredExtensions = new TreeSet<Ga>();
         final Set<Ga> excludeTests = new TreeSet<Ga>();
         final Map<Ga, Set<Ga>> allowedMixedTests = new TreeMap<>();
+        final Map<String, String> versionTransformations;
         try (Reader r = Files.newBufferedReader(absProdJson, charset)) {
             @SuppressWarnings("unchecked")
             final Map<String, Object> json = new Gson().fromJson(r, Map.class);
@@ -366,6 +379,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                     includes.add(new Ga("org.apache.camel.quarkus", artifactId));
                 }
             }
+            @SuppressWarnings("unchecked")
             final List<String> excludeTestsList = (List<String>) json.get("excludeTests");
             if (excludeTestsList != null) {
                 for (String artifactId : excludeTestsList) {
@@ -373,6 +387,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                 }
             }
             prodGuideUrlTemplate = (String) json.get("guideUrlTemplate");
+            versionTransformations = (Map<String, String>) json.getOrDefault("versionTransformations", Collections.emptyMap());
         } catch (IOException e) {
             throw new RuntimeException("Could not read " + absProdJson, e);
         }
@@ -413,7 +428,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         final Set<Ga> expandedIncludesWithoutTests = Collections
                 .unmodifiableSet(fullTree.findRequiredModules(includes, profiles));
 
-        updateVersions(fullTree, profiles);
+        updateVersions(fullTree, profiles, versionTransformations);
 
         /* Tests */
         final Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions = new TreeMap<>();
@@ -606,7 +621,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                         });
     }
 
-    void updateVersions(MavenSourceTree fullTree, Predicate<Profile> profiles) {
+    void updateVersions(MavenSourceTree fullTree, Predicate<Profile> profiles, Map<String, String> versionTransformations) {
         /* Check that all modules have the same version - another version may have slipped in when backporting */
         final ExpressionEvaluator evaluator = fullTree.getExpressionEvaluator(profiles);
         final Module rootModule = fullTree.getRootModule();
@@ -654,10 +669,17 @@ public class ProdExcludesMojo extends AbstractMojo {
                                 .ifPresent(parent -> parent.addOrSetChildTextElement("version", camelVersion));
                     });
         }
+        final Path rootPomPath = fullTree.getRootDirectory().resolve(rootModule.getPomPath());
         if (!transformations.isEmpty()) {
-            final Path rootPomPath = fullTree.getRootDirectory().resolve(rootModule.getPomPath());
             new PomTransformer(rootPomPath, charset, simpleElementWhitespace)
                     .transform(transformations);
+        }
+
+        if (mojoDescriptorCreator != null) {
+            /* Do not test this */
+            CqCommonUtils.syncVersions(rootPomPath, mojoDescriptorCreator, session, project, charset, simpleElementWhitespace,
+                    localRepositoryPath,
+                    getLog(), versionTransformations, repositories, repoSession, repoSystem);
         }
 
     }
@@ -819,7 +841,7 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     Set<Ga> getProductizedCamelArtifacts(Module cqRootModule, ExpressionEvaluator evaluator) {
 
-        final Path camelBomPath = CqCommonUtils.resolveArtifact(Paths.get(localRepository), "org.apache.camel", "camel-bom",
+        final Path camelBomPath = CqCommonUtils.resolveArtifact(localRepositoryPath, "org.apache.camel", "camel-bom",
                 camelVersion, "pom", repositories, repoSystem, repoSession);
         final Model camelBomModel = CqCommonUtils.readPom(camelBomPath, charset);
         return camelBomModel.getDependencyManagement().getDependencies().stream()
