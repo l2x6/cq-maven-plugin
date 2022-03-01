@@ -96,6 +96,9 @@ public class ProdExcludesCheckMojoTest {
             mojo.execute();
             Assertions.fail("Expected a RuntimeException");
         } catch (RuntimeException e) {
+            if (e.getMessage() == null) {
+                throw e;
+            }
             Assertions.assertThat(e.getMessage()).contains(
                     "is not in sync with product/src/main/resources/camel-quarkus-product-source.json");
         }
