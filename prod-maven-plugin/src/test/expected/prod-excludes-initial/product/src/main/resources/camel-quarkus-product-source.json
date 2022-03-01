@@ -1,8 +1,8 @@
 {
     "extensions": {
         "camel-quarkus-avro": {
-            "jvmSupportedSince": "2.1.0",
-            "nativeSupportedSince": "2.1.0"
+            "jvm": "supported",
+            "native": "techPreview"
         }
     },
     "excludeTests": [
@@ -10,5 +10,6 @@
     ],
     "additionalProductizedArtifacts": [
         "camel-quarkus-catalog"
-    ]
+    ],
+    "guideUrlTemplate": "https://access.redhat.com/documentation/en-us/red_hat_integration/${cqMajorVersion}.latest/html/camel_extensions_for_quarkus_reference/extensions-${artifactIdBase}"
 }
