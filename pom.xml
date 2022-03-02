@@ -82,6 +82,7 @@
         <maven-project.version>3.0-alpha-2</maven-project.version>
         <maven.plugin-tools.version>3.5</maven.plugin-tools.version>
         <maven.shared.file-management>3.0.0</maven.shared.file-management>
+        <maven.shared.invoker>3.0.1</maven.shared.invoker>
         <pom-tuner.version>1.16.1</pom-tuner.version>
         <junit.version>5.6.0</junit.version>
         <google-client.version>1.23.0</google-client.version>
@@ -249,6 +250,11 @@
                 <groupId>org.apache.maven.shared</groupId>
                 <artifactId>file-management</artifactId>
                 <version>${maven.shared.file-management}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.maven.shared</groupId>
+                <artifactId>maven-invoker</artifactId>
+                <version>${maven.shared.invoker}</version>
             </dependency>
 
             <dependency>
