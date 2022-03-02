@@ -47,9 +47,15 @@ import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.graph.DependencyVisitor;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.CqCommonUtils;
+import org.l2x6.cq.maven.prod.ProdExcludesMojo.CamelEdition;
+import org.l2x6.pom.tuner.PomTransformer;
+import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
+import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gav;
 import org.l2x6.pom.tuner.model.GavSet;
+import org.w3c.dom.Document;
 
 /**
  * List the transitive dependencies of all, of supported extensions and the rest that neither needs to get productized
@@ -138,6 +144,14 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
      */
     @Parameter(property = "cq.additionalExtensionDependencies")
     Map<String, String> additionalExtensionDependencies;
+
+    /**
+     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
+     *
+     * @since 2.23.0
+     */
+    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "SPACE")
+    SimpleElementWhitespace simpleElementWhitespace;
 
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     List<RemoteRepository> repositories;
@@ -311,6 +325,30 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
                 .filter(dep -> !prodTransitiveGas.contains(dep))
                 .collect(Collectors.toCollection(TreeSet::new));
         write(nonProdTransitives, nonProductizedDependenciesFile.toPath());
+
+        updateCamelQuarkusBom(prodTransitiveGas);
+    }
+
+    void updateCamelQuarkusBom(Set<Ga> prodTransitiveGas) {
+
+        final Path bomPath = basedir.toPath().resolve("poms/bom/pom.xml");
+        new PomTransformer(bomPath, charset, simpleElementWhitespace)
+                .transform((Document document, TransformationContext context) -> {
+
+                    context.getContainerElement("project", "dependencyManagement", "dependencies").get()
+                            .childElementsStream()
+                            .map(ContainerElement::asGavtcs)
+                            .filter(gavtcs -> gavtcs.getGroupId().equals("org.apache.camel"))
+                            .forEach(gavtcs -> {
+                                final Ga ga = new Ga(gavtcs.getGroupId(), gavtcs.getArtifactId());
+                                final String expectedVersion = prodTransitiveGas.contains(ga)
+                                        ? CamelEdition.PRODUCT.getVersionExpression()
+                                        : CamelEdition.COMMUNITY.getVersionExpression();
+                                if (!expectedVersion.equals(gavtcs.getVersion())) {
+                                    gavtcs.getNode().setVersion(expectedVersion);
+                                }
+                            });
+                });
     }
 
     static Set<Ga> toGas(Set<Gav> gavs) {

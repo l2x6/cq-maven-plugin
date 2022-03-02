@@ -55,10 +55,17 @@ import org.apache.maven.model.Model;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugin.descriptor.PluginDescriptor;
 import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
+import org.apache.maven.shared.invoker.DefaultInvocationRequest;
+import org.apache.maven.shared.invoker.InvocationRequest;
+import org.apache.maven.shared.invoker.InvocationRequest.ReactorFailureBehavior;
+import org.apache.maven.shared.invoker.InvocationResult;
+import org.apache.maven.shared.invoker.Invoker;
+import org.apache.maven.shared.invoker.MavenInvocationException;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.apache.maven.shared.utils.io.IOUtil;
 import org.eclipse.aether.RepositorySystem;
@@ -106,7 +113,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         private final String preferredVersionExpression;
     }
 
-    enum CamelEdition {
+    public enum CamelEdition {
         PRODUCT("${camel.version}"),
         COMMUNITY("${camel-community.version}");
 
@@ -115,6 +122,10 @@ public class ProdExcludesMojo extends AbstractMojo {
         }
 
         private final String versionExpression;
+
+        public String getVersionExpression() {
+            return versionExpression;
+        }
     }
 
     enum TestCategory {
@@ -328,6 +339,9 @@ public class ProdExcludesMojo extends AbstractMojo {
     @Parameter(property = "cq.onCheckFailure", defaultValue = "FAIL")
     OnFailure onCheckFailure;
 
+    @Parameter(defaultValue = "${plugin}", readonly = true)
+    private PluginDescriptor pluginDescriptor;
+
     @Component
     private RepositorySystem repoSystem;
 
@@ -336,6 +350,8 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     @Component
     private MojoDescriptorCreator mojoDescriptorCreator;
+    @Component
+    private Invoker invoker;
 
     @Parameter(defaultValue = "${project}", readonly = true)
     MavenProject project;
@@ -518,6 +534,9 @@ public class ProdExcludesMojo extends AbstractMojo {
         /* Make sure all excludeTests are excluded from the config in tooling/test-list/pom.xml */
         excludeTestsFromTestList(workRoot, fullTree, workRoot.resolve("tooling/test-list/pom.xml"),
                 workRoot.resolve("integration-tests"), excludeTests);
+
+        /* Invoke transitive-deps mojo */
+        invokeTransitiveDependenciesMojo(workRoot);
 
         if (isChecking()) {
             final MavenSourceTree finalTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
@@ -866,9 +885,8 @@ public class ProdExcludesMojo extends AbstractMojo {
                                 }
                             } else if (depGa.getGroupId().equals("org.apache.camel")) {
                                 final String rawExpression = managedDep.getVersion().getRawExpression();
-                                final CamelEdition edition = productizedCamelArtifacts.contains(depGa)
-                                        ? CamelEdition.PRODUCT
-                                        : CamelEdition.COMMUNITY;
+                                /* Set all to community at this stage and correct it later via transitive-deps mojo */
+                                final CamelEdition edition = CamelEdition.COMMUNITY;
                                 if (!rawExpression.equals(edition.versionExpression)) {
                                     gasByNewVersion.get(edition.versionExpression).add(depGa);
                                 }
@@ -1116,15 +1134,70 @@ public class ProdExcludesMojo extends AbstractMojo {
         }
     }
 
+    /**
+     * Invoke the transitive-deps mojo in a forked Maven process, because we may have edited the current tree.
+     *
+     * @param workRoot
+     */
+    void invokeTransitiveDependenciesMojo(Path workRoot) {
+        if (invoker == null) {
+            /* Do not test this */
+            return;
+        }
+
+        final InvocationRequest request = new DefaultInvocationRequest();
+        request.setPomFile(workRoot.resolve("pom.xml").toFile());
+        request.setGoals(Collections
+                .singletonList("org.l2x6.cq:cq-prod-maven-plugin:transitive-deps"));
+        request.setShowErrors(session.getRequest().isShowErrors());
+        request.setShellEnvironmentInherited(true);
+        request.setBatchMode(true);
+        request.setLocalRepositoryDirectory(session.getRequest().getLocalRepositoryPath());
+        request.setRecursive(false); // -N
+
+        final File globalSettings = session.getRequest().getGlobalSettingsFile();
+        if (globalSettings != null && globalSettings.exists()) {
+            request.setGlobalSettingsFile(globalSettings);
+        }
+
+        final File userSettings = session.getRequest().getUserSettingsFile();
+        if (userSettings != null && userSettings.exists()) {
+            request.setUserSettingsFile(userSettings);
+        }
+
+        final String reactorFailureBehavior = session.getReactorFailureBehavior();
+        if (reactorFailureBehavior != null) {
+            request.setReactorFailureBehavior(
+                    ReactorFailureBehavior.valueOfByLongOption(reactorFailureBehavior.toLowerCase().replace('_', '-')));
+        }
+
+        request.setProfiles(session.getRequest().getActiveProfiles());
+        request.setProperties(session.getRequest().getUserProperties());
+
+        final InvocationResult result;
+        try {
+            result = invoker.execute(request);
+        } catch (MavenInvocationException e) {
+            throw new RuntimeException("Failed to build the platform project", e);
+        }
+        if (result.getExitCode() != 0) {
+            if (result.getExecutionException() != null) {
+                throw new RuntimeException("Failed to build the platform project", result.getExecutionException());
+            }
+            throw new RuntimeException("Failed to build the platform project, please consult the errors logged above.");
+        }
+    }
+
     public Set<Ga> findRequiredCamelArtifacts(MavenSourceTree tree, Set<Ga> expandedIncludes,
             final ExpressionEvaluator evaluator) {
-        return expandedIncludes.stream()
+        final Set<Ga> set = expandedIncludes.stream()
                 .map(ga -> tree.getModulesByGa().get(ga))
                 .flatMap(module -> module.getProfiles().stream())
                 .flatMap(profile -> profile.getDependencies().stream())
                 .map(evaluator::evaluateGa)
                 .filter(depGa -> "org.apache.camel".equals(depGa.getGroupId()))
                 .collect(Collectors.toCollection(TreeSet::new));
+        return Collections.unmodifiableSet(set);
     }
 
     static void initializeMixedTestsPom(Path destinationPath, String parentArtifactId, String version, String parentPath,
