@@ -1146,7 +1146,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         }
 
         final InvocationRequest request = new DefaultInvocationRequest();
-        request.setPomFile(workRoot.resolve("pom.xml").toFile());
+        request.setBaseDirectory(workRoot.toFile());
         request.setGoals(Collections
                 .singletonList("org.l2x6.cq:cq-prod-maven-plugin:transitive-deps"));
         request.setShowErrors(session.getRequest().isShowErrors());

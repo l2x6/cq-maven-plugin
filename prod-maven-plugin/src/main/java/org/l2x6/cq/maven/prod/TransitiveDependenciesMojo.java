@@ -332,6 +332,7 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
     void updateCamelQuarkusBom(Set<Ga> prodTransitiveGas) {
 
         final Path bomPath = basedir.toPath().resolve("poms/bom/pom.xml");
+        getLog().info("Updating Camel versions in " + bomPath);
         new PomTransformer(bomPath, charset, simpleElementWhitespace)
                 .transform((Document document, TransformationContext context) -> {
 
