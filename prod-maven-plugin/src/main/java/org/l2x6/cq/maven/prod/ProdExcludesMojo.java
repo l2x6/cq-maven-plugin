@@ -41,7 +41,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -61,12 +60,7 @@ import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
-import org.apache.maven.shared.invoker.DefaultInvocationRequest;
-import org.apache.maven.shared.invoker.InvocationRequest;
-import org.apache.maven.shared.invoker.InvocationRequest.ReactorFailureBehavior;
-import org.apache.maven.shared.invoker.InvocationResult;
 import org.apache.maven.shared.invoker.Invoker;
-import org.apache.maven.shared.invoker.MavenInvocationException;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.apache.maven.shared.utils.io.IOUtil;
 import org.eclipse.aether.RepositorySystem;
@@ -363,6 +357,55 @@ public class ProdExcludesMojo extends AbstractMojo {
     private Predicate<Path> additionalFiles;
 
     /**
+     * The Camel Quarkus community version
+     *
+     * @since 2.17.0
+     */
+    @Parameter(property = "camel-quarkus-community.version")
+    String camelQuarkusCommunityVersion;
+
+    /**
+     * Where to write a list of runtime dependencies of all Camel Quarkus productized extensions.
+     * It is a text file one artifactId per line.
+     *
+     * @since 2.17.0
+     */
+    @Parameter(property = "cq.productizedDependenciesFile", defaultValue = "${basedir}/product/src/main/generated/transitive-dependencies-productized.txt")
+    File productizedDependenciesFile;
+    Path productizedDependenciesPath;
+
+    /**
+     * Where to write a list of runtime dependencies of all Camel Quarkus productized extensions.
+     * It is a text file one artifactId per line.
+     *
+     * @since 2.17.0
+     */
+    @Parameter(property = "cq.allTransitivesFile", defaultValue = "${basedir}/product/src/main/generated/transitive-dependencies-all.txt")
+    File allDependenciesFile;
+    Path allDependenciesPath;
+
+    /**
+     * Where to write a list of runtime dependencies of all Camel Quarkus productized extensions.
+     * It is a text file one artifactId per line.
+     *
+     * @since 2.17.0
+     */
+    @Parameter(property = "cq.nonProductizedDependenciesFile", defaultValue = "${basedir}/product/src/main/generated/transitive-dependencies-non-productized.txt")
+    File nonProductizedDependenciesFile;
+    Path nonProductizedDependenciesPath;
+
+    /**
+     * A map from Camel Quarkus artifactIds to comma separated list of {@code groupId:artifactId} patterns.
+     * Used for assigning shaded dependencies to a Camel Quarkus artifact when deciding whether the given transitive
+     * needs
+     * to get productized.
+     *
+     * @since 2.18.0
+     */
+    @Parameter(property = "cq.additionalExtensionDependencies")
+    Map<String, String> additionalExtensionDependencies;
+
+    /**
      * Overridden by {@link ProdExcludesCheckMojo}.
      *
      * @return {@code always false}
@@ -384,10 +427,17 @@ public class ProdExcludesMojo extends AbstractMojo {
             integrationTests = Collections.emptyList();
         }
         final Path jenkinsfileName = jenkinsfile.toPath().getFileName();
+        final Path basePath = basedir.toPath();
+        productizedDependenciesPath = basePath.relativize(productizedDependenciesFile.toPath());
+        nonProductizedDependenciesPath = basePath.relativize(nonProductizedDependenciesFile.toPath());
+        allDependenciesPath = basePath.relativize(allDependenciesFile.toPath());
 
         final Path extensionYamlRelPath = Paths.get("src/main/resources/META-INF/quarkus-extension.yaml");
         additionalFiles = path -> jenkinsfileName.equals(path.getFileName())
-                || path.endsWith(extensionYamlRelPath);
+                || path.endsWith(extensionYamlRelPath)
+                || path.endsWith(allDependenciesPath)
+                || path.endsWith(nonProductizedDependenciesPath)
+                || path.endsWith(productizedDependenciesPath);
         final String majorVersion = version.split("\\.")[0];
         final String communityGuideUrlTemplate = "https://camel.apache.org/camel-quarkus/latest/reference/extensions/${artifactIdBase}.html";
         final String defaultCommunityGuide = "https://camel.apache.org/camel-quarkus/latest/user-guide/index.html";
@@ -886,7 +936,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                                 if (!edition.versionExpressions.contains(rawExpression)) {
                                     gasByNewVersion.get(edition.preferredVersionExpression).add(depGa);
                                 }
-                            } else if (!isChecking() && depGa.getGroupId().equals("org.apache.camel")) {
+                            } else if (depGa.getGroupId().equals("org.apache.camel")) {
                                 final String rawExpression = managedDep.getVersion().getRawExpression();
                                 /* Set all to community at this stage and correct it later via transitive-deps mojo */
                                 final CamelEdition edition = CamelEdition.COMMUNITY;
@@ -1147,70 +1197,31 @@ public class ProdExcludesMojo extends AbstractMojo {
             /* Do not test this */
             return;
         }
-        if (isChecking()) {
-            /* this cannot work in check mode because clean install would not work in the reduced copy of the source tree */
-            return;
-        }
 
-        final InvocationRequest request = new DefaultInvocationRequest();
-        request.setBaseDirectory(workRoot.toFile());
-        request.setGoals(Arrays.asList("clean", "install"));
-        request.setShowErrors(session.getRequest().isShowErrors());
-        request.setShellEnvironmentInherited(true);
-        request.setBatchMode(true);
-        request.setLocalRepositoryDirectory(session.getRequest().getLocalRepositoryPath());
+        /* Install the poms so that Maven resolver can find them */
+        final Path rootPomPath = workRoot.resolve("pom.xml");
+        final MavenSourceTree finalTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
+        finalTree.getModulesByGa().entrySet().stream().forEach(en -> {
+            final Ga ga = en.getKey();
+            final String relPath = en.getValue().getPomPath();
+            final Path absPath = workRoot.resolve(relPath);
+            CqCommonUtils.installArtifact(absPath, localRepositoryPath, ga.getGroupId(), ga.getArtifactId(), version, "pom");
+        });
 
-        final File globalSettings = session.getRequest().getGlobalSettingsFile();
-        if (globalSettings != null && globalSettings.exists()) {
-            request.setGlobalSettingsFile(globalSettings);
-        }
-
-        final File userSettings = session.getRequest().getUserSettingsFile();
-        if (userSettings != null && userSettings.exists()) {
-            request.setUserSettingsFile(userSettings);
-        }
-
-        final String reactorFailureBehavior = session.getReactorFailureBehavior();
-        if (reactorFailureBehavior != null) {
-            request.setReactorFailureBehavior(
-                    ReactorFailureBehavior.valueOfByLongOption(reactorFailureBehavior.toLowerCase().replace('_', '-')));
-        }
-
-        request.setProfiles(session.getRequest().getActiveProfiles());
-        final Properties props = new Properties(session.getRequest().getUserProperties());
-        props.setProperty(CQ_PROD_ARTIFACTS_SKIP, "true");
-        props.setProperty("quickly", "true");
-        request.setProperties(props);
-
-        final InvocationResult result1;
-        try {
-            result1 = invoker.execute(request);
-        } catch (MavenInvocationException e) {
-            throw new RuntimeException(e);
-        }
-        if (result1.getExitCode() != 0) {
-            if (result1.getExecutionException() != null) {
-                throw new RuntimeException(result1.getExecutionException());
-            }
-            throw new RuntimeException("Failed to build the project, please consult the errors logged above.");
-        }
-
-        request.setGoals(Arrays.asList("org.l2x6.cq:cq-prod-maven-plugin:transitive-deps"));
-        request.setProperties(session.getRequest().getUserProperties());
-        request.setRecursive(false); // -N
-        final InvocationResult result2;
-        try {
-            result2 = invoker.execute(request);
-        } catch (MavenInvocationException e) {
-            throw new RuntimeException(e);
-        }
-        if (result2.getExitCode() != 0) {
-            if (result2.getExecutionException() != null) {
-                throw new RuntimeException(result2.getExecutionException());
-            }
-            throw new RuntimeException("Failed to build the project, please consult the errors logged above.");
-        }
-
+        new TransitiveDependenciesMojo(
+                version,
+                camelQuarkusCommunityVersion,
+                workRoot,
+                charset,
+                workRoot.resolve(productizedDependenciesPath),
+                workRoot.resolve(allDependenciesPath),
+                workRoot.resolve(nonProductizedDependenciesPath),
+                additionalExtensionDependencies,
+                simpleElementWhitespace,
+                repositories,
+                repoSystem,
+                repoSession,
+                getLog()).execute();
     }
 
     public Set<Ga> findRequiredCamelArtifacts(MavenSourceTree tree, Set<Ga> expandedIncludes,
