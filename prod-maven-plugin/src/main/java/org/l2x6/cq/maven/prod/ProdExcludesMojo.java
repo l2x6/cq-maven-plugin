@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -98,6 +99,8 @@ import org.w3c.dom.Element;
  */
 @Mojo(name = "prod-excludes", threadSafe = true, requiresProject = false, inheritByDefault = false)
 public class ProdExcludesMojo extends AbstractMojo {
+    private static final String CQ_PROD_ARTIFACTS_SKIP = "cq.prod-artifacts.skip";
+
     enum CqEdition {
         PRODUCT(new HashSet<>(
                 Arrays.asList("${camel-quarkus.version}", "${project.version}")), "${camel-quarkus.version}"),
@@ -240,7 +243,7 @@ public class ProdExcludesMojo extends AbstractMojo {
      *
      * @since 0.40.0
      */
-    @Parameter(property = "cq.prod-artifacts.skip", defaultValue = "false")
+    @Parameter(property = CQ_PROD_ARTIFACTS_SKIP, defaultValue = "false")
     boolean skip;
 
     /**
@@ -883,7 +886,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                                 if (!edition.versionExpressions.contains(rawExpression)) {
                                     gasByNewVersion.get(edition.preferredVersionExpression).add(depGa);
                                 }
-                            } else if (depGa.getGroupId().equals("org.apache.camel")) {
+                            } else if (!isChecking() && depGa.getGroupId().equals("org.apache.camel")) {
                                 final String rawExpression = managedDep.getVersion().getRawExpression();
                                 /* Set all to community at this stage and correct it later via transitive-deps mojo */
                                 final CamelEdition edition = CamelEdition.COMMUNITY;
@@ -1144,16 +1147,18 @@ public class ProdExcludesMojo extends AbstractMojo {
             /* Do not test this */
             return;
         }
+        if (isChecking()) {
+            /* this cannot work in check mode because clean install would not work in the reduced copy of the source tree */
+            return;
+        }
 
         final InvocationRequest request = new DefaultInvocationRequest();
         request.setBaseDirectory(workRoot.toFile());
-        request.setGoals(Collections
-                .singletonList("org.l2x6.cq:cq-prod-maven-plugin:transitive-deps"));
+        request.setGoals(Arrays.asList("clean", "install"));
         request.setShowErrors(session.getRequest().isShowErrors());
         request.setShellEnvironmentInherited(true);
         request.setBatchMode(true);
         request.setLocalRepositoryDirectory(session.getRequest().getLocalRepositoryPath());
-        request.setRecursive(false); // -N
 
         final File globalSettings = session.getRequest().getGlobalSettingsFile();
         if (globalSettings != null && globalSettings.exists()) {
@@ -1172,20 +1177,40 @@ public class ProdExcludesMojo extends AbstractMojo {
         }
 
         request.setProfiles(session.getRequest().getActiveProfiles());
-        request.setProperties(session.getRequest().getUserProperties());
+        final Properties props = new Properties(session.getRequest().getUserProperties());
+        props.setProperty(CQ_PROD_ARTIFACTS_SKIP, "true");
+        props.setProperty("quickly", "true");
+        request.setProperties(props);
 
-        final InvocationResult result;
+        final InvocationResult result1;
         try {
-            result = invoker.execute(request);
+            result1 = invoker.execute(request);
         } catch (MavenInvocationException e) {
-            throw new RuntimeException("Failed to build the platform project", e);
+            throw new RuntimeException(e);
         }
-        if (result.getExitCode() != 0) {
-            if (result.getExecutionException() != null) {
-                throw new RuntimeException("Failed to build the platform project", result.getExecutionException());
+        if (result1.getExitCode() != 0) {
+            if (result1.getExecutionException() != null) {
+                throw new RuntimeException(result1.getExecutionException());
             }
-            throw new RuntimeException("Failed to build the platform project, please consult the errors logged above.");
+            throw new RuntimeException("Failed to build the project, please consult the errors logged above.");
         }
+
+        request.setGoals(Arrays.asList("org.l2x6.cq:cq-prod-maven-plugin:transitive-deps"));
+        request.setProperties(session.getRequest().getUserProperties());
+        request.setRecursive(false); // -N
+        final InvocationResult result2;
+        try {
+            result2 = invoker.execute(request);
+        } catch (MavenInvocationException e) {
+            throw new RuntimeException(e);
+        }
+        if (result2.getExitCode() != 0) {
+            if (result2.getExecutionException() != null) {
+                throw new RuntimeException(result2.getExecutionException());
+            }
+            throw new RuntimeException("Failed to build the project, please consult the errors logged above.");
+        }
+
     }
 
     public Set<Ga> findRequiredCamelArtifacts(MavenSourceTree tree, Set<Ga> expandedIncludes,
