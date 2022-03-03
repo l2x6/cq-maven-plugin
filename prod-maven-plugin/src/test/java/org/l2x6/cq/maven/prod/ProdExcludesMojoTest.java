@@ -53,6 +53,11 @@ public class ProdExcludesMojoTest {
         mojo.jenkinsfile = basePath.resolve("Jenkinsfile.redhat").toFile();
         mojo.camelVersion = "3.11.1-fuse1";
         mojo.version = "2.3.4";
+        mojo.productizedDependenciesFile = basePath
+                .resolve("product/src/main/generated/transitive-dependencies-productized.txt").toFile();
+        mojo.nonProductizedDependenciesFile = basePath
+                .resolve("product/src/main/generated/transitive-dependencies-non-productized.txt").toFile();
+        mojo.allDependenciesFile = basePath.resolve("product/src/main/generated/transitive-dependencies-all.txt").toFile();
         return mojo;
     }
 

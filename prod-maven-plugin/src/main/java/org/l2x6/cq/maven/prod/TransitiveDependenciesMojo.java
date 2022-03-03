@@ -16,7 +16,6 @@
  */
 package org.l2x6.cq.maven.prod;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
@@ -31,12 +30,7 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.apache.maven.model.Model;
-import org.apache.maven.plugin.AbstractMojo;
-import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugin.MojoFailureException;
-import org.apache.maven.plugins.annotations.Component;
-import org.apache.maven.plugins.annotations.Mojo;
-import org.apache.maven.plugins.annotations.Parameter;
+import org.apache.maven.plugin.logging.Log;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
@@ -63,49 +57,35 @@ import org.w3c.dom.Document;
  *
  * @since 2.17.0
  */
-@Mojo(name = "transitive-deps", threadSafe = true, requiresProject = true, inheritByDefault = false)
-public class TransitiveDependenciesMojo extends AbstractMojo {
+public class TransitiveDependenciesMojo {
 
     /**
      * The version of the current source tree
      *
      * @since 2.17.0
      */
-    @Parameter(property = "cq.version", defaultValue = "${project.version}")
-    String version;
+    private final String version;
 
     /**
      * The Camel Quarkus community version
      *
      * @since 2.17.0
      */
-    @Parameter(property = "camel-quarkus-community.version")
-    String camelQuarkusCommunityVersion;
+    private final String camelQuarkusCommunityVersion;
 
     /**
      * The basedir
      *
      * @since 2.17.0
      */
-    @Parameter(property = "cq.basedir", defaultValue = "${project.basedir}")
-    File basedir;
+    private final Path basedir;
 
     /**
      * Encoding to read and write files in the current source tree
      *
      * @since 2.17.0
      */
-    @Parameter(defaultValue = "utf-8", required = true, property = "cq.encoding")
-    String encoding;
-    Charset charset;
-
-    /**
-     * Skip the execution of this mojo.
-     *
-     * @since 2.17.0
-     */
-    @Parameter(property = "cq.transitive-deps.skip", defaultValue = "false")
-    boolean skip;
+    private final Charset charset;
 
     /**
      * Where to write a list of runtime dependencies of all Camel Quarkus productized extensions.
@@ -113,8 +93,7 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
      *
      * @since 2.17.0
      */
-    @Parameter(property = "cq.productizedDependenciesFile", defaultValue = "${basedir}/product/src/main/generated/transitive-dependencies-productized.txt")
-    File productizedDependenciesFile;
+    private final Path productizedDependenciesFile;
 
     /**
      * Where to write a list of runtime dependencies of all Camel Quarkus productized extensions.
@@ -122,8 +101,7 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
      *
      * @since 2.17.0
      */
-    @Parameter(property = "cq.allTransitivesFile", defaultValue = "${basedir}/product/src/main/generated/transitive-dependencies-all.txt")
-    File allDependenciesFile;
+    private final Path allDependenciesFile;
 
     /**
      * Where to write a list of runtime dependencies of all Camel Quarkus productized extensions.
@@ -131,8 +109,7 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
      *
      * @since 2.17.0
      */
-    @Parameter(property = "cq.nonProductizedDependenciesFile", defaultValue = "${basedir}/product/src/main/generated/transitive-dependencies-non-productized.txt")
-    File nonProductizedDependenciesFile;
+    private final Path nonProductizedDependenciesFile;
 
     /**
      * A map from Camel Quarkus artifactIds to comma separated list of {@code groupId:artifactId} patterns.
@@ -142,37 +119,45 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
      *
      * @since 2.18.0
      */
-    @Parameter(property = "cq.additionalExtensionDependencies")
-    Map<String, String> additionalExtensionDependencies;
+    private final Map<String, String> additionalExtensionDependencies;
 
     /**
      * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
      *
      * @since 2.23.0
      */
-    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "SPACE")
-    SimpleElementWhitespace simpleElementWhitespace;
+    private final SimpleElementWhitespace simpleElementWhitespace;
 
-    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
-    List<RemoteRepository> repositories;
+    private final List<RemoteRepository> repositories;
 
-    @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
-    String localRepository;
+    private final RepositorySystem repoSystem;
 
-    @Component
-    private RepositorySystem repoSystem;
+    private final RepositorySystemSession repoSession;
 
-    @Parameter(defaultValue = "${repositorySystemSession}", readonly = true, required = true)
-    private RepositorySystemSession repoSession;
+    private final Log log;
 
-    /** {@inheritDoc} */
-    @Override
-    public void execute() throws MojoExecutionException, MojoFailureException {
-        if (skip) {
-            getLog().info("Skipping as requested by the user");
-            return;
-        }
-        charset = Charset.forName(encoding);
+    public TransitiveDependenciesMojo(String version, String camelQuarkusCommunityVersion, Path basedir, Charset charset,
+            Path productizedDependenciesFile, Path allDependenciesFile, Path nonProductizedDependenciesFile,
+            Map<String, String> additionalExtensionDependencies, SimpleElementWhitespace simpleElementWhitespace,
+            List<RemoteRepository> repositories, RepositorySystem repoSystem,
+            RepositorySystemSession repoSession,
+            Log log) {
+        this.version = version;
+        this.camelQuarkusCommunityVersion = camelQuarkusCommunityVersion;
+        this.basedir = basedir;
+        this.charset = charset;
+        this.productizedDependenciesFile = basedir.resolve(productizedDependenciesFile);
+        this.allDependenciesFile = basedir.resolve(allDependenciesFile);
+        this.nonProductizedDependenciesFile = basedir.resolve(nonProductizedDependenciesFile);
+        this.additionalExtensionDependencies = additionalExtensionDependencies;
+        this.simpleElementWhitespace = simpleElementWhitespace;
+        this.repositories = repositories;
+        this.repoSystem = repoSystem;
+        this.repoSession = repoSession;
+        this.log = log;
+    }
+
+    public void execute() {
         final TreeMap<String, GavSet> additionalDependenciesMap = new TreeMap<>();
         if (additionalExtensionDependencies != null) {
             for (Entry<String, String> en : additionalExtensionDependencies.entrySet()) {
@@ -180,7 +165,7 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
             }
         }
 
-        final Model bomModel = CqCommonUtils.readPom(basedir.toPath().resolve("poms/bom/pom.xml"), charset);
+        final Model bomModel = CqCommonUtils.readPom(basedir.resolve("poms/bom/pom.xml"), charset);
 
         final Set<Ga> ownManagedGas = new TreeSet<>();
         final Map<String, Set<Ga>> bomGroups = new TreeMap<>();
@@ -271,9 +256,9 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
         final Map<Ga, Set<ComparableVersion>> multiversionedProdArtifacts = findMultiversionedArtifacts(
                 collector.prodTransitives);
         if (!multiversionedProdArtifacts.isEmpty()) {
-            getLog().warn("Found dependencies of productized artifacts with multiple versions:");
+            log.warn("Found dependencies of productized artifacts with multiple versions:");
             multiversionedProdArtifacts.entrySet().forEach(en -> {
-                getLog().warn("- " + en.getKey() + ": " + en.getValue());
+                log.warn("- " + en.getKey() + ": " + en.getValue());
             });
         }
 
@@ -308,31 +293,31 @@ public class TransitiveDependenciesMojo extends AbstractMojo {
                     final Set<Ga> gaSet = bomGroups.get(dep.getVersion());
                     if (prodTransitiveGas.stream().anyMatch(gaSet::contains)) {
                         prodTransitiveGas.add(depGa);
-                        getLog().debug("   - BOM entry mappable to an otherwise productized group: " + depGa);
+                        log.debug("   - BOM entry mappable to an otherwise productized group: " + depGa);
                     } else if (allTransitiveGas.stream().anyMatch(gaSet::contains)) {
                         /* Still mappable */
-                        getLog().debug("   - BOM entry mappable to an otherwise non-productized group: " + depGa);
+                        log.debug("   - BOM entry mappable to an otherwise non-productized group: " + depGa);
                     } else {
-                        getLog().warn(" - BOM entry not mappable to any group: " + depGa
+                        log.warn(" - BOM entry not mappable to any group: " + depGa
                                 + " - is it perhaps supperfluous and should be removed from the BOM? Or needs to get assigne to an extension via <additionalExtensionDependencies>?");
                     }
                     allTransitiveGas.add(depGa);
                 });
 
-        write(allTransitiveGas, allDependenciesFile.toPath());
-        write(prodTransitiveGas, productizedDependenciesFile.toPath());
+        write(allTransitiveGas, allDependenciesFile);
+        write(prodTransitiveGas, productizedDependenciesFile);
         final Set<Ga> nonProdTransitives = allTransitiveGas.stream()
                 .filter(dep -> !prodTransitiveGas.contains(dep))
                 .collect(Collectors.toCollection(TreeSet::new));
-        write(nonProdTransitives, nonProductizedDependenciesFile.toPath());
+        write(nonProdTransitives, nonProductizedDependenciesFile);
 
         updateCamelQuarkusBom(prodTransitiveGas);
     }
 
     void updateCamelQuarkusBom(Set<Ga> prodTransitiveGas) {
 
-        final Path bomPath = basedir.toPath().resolve("poms/bom/pom.xml");
-        getLog().info("Updating Camel versions in " + bomPath);
+        final Path bomPath = basedir.resolve("poms/bom/pom.xml");
+        log.info("Updating Camel versions in " + bomPath);
         new PomTransformer(bomPath, charset, simpleElementWhitespace)
                 .transform((Document document, TransformationContext context) -> {
 

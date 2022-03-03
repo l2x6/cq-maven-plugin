@@ -134,6 +134,20 @@ public class CqCommonUtils {
 
     }
 
+    public static Path installArtifact(Path source, Path localRepository, String groupId, String artifactId, String version,
+            String type) {
+        final String relativeJarPath = groupId.replace('.', '/') + "/" + artifactId + "/" + version + "/" + artifactId + "-"
+                + version + "." + type;
+        final Path localPath = localRepository.resolve(relativeJarPath);
+        try {
+            Files.createDirectories(localPath.getParent());
+            Files.copy(source, localPath, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new RuntimeException("Could not copy " + source + " to " + localPath, e);
+        }
+        return localPath;
+    }
+
     public static Path copyArtifact(Path localRepository, String groupId, String artifactId, String version, String type,
             List<String> remoteRepositories) {
         final String relativeJarPath = groupId.replace('.', '/') + "/" + artifactId + "/" + version + "/" + artifactId + "-"
@@ -434,7 +448,8 @@ public class CqCommonUtils {
                 src,
                 file -> {
                     final Path relPomPath = src.relativize(file);
-                    if (activeRelativePomPaths.contains(PomTunerUtils.toUnixPath(relPomPath.toString()))) {
+                    final String unixPath = PomTunerUtils.toUnixPath(relPomPath.toString());
+                    if (!unixPath.endsWith("/pom.xml") || activeRelativePomPaths.contains(unixPath)) {
                         final Path destPath = dest.resolve(relPomPath);
 
                         List<Delta<String>> diffs = CqCommonUtils.compareFiles(file, destPath, charset);
