@@ -110,32 +110,32 @@
             <dependency>
                 <groupId>org.apache.camel</groupId>
                 <artifactId>camel-direct</artifactId>
-                <version>${camel-community.version}</version>
+                <version>${camel.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.camel</groupId>
                 <artifactId>camel-avro</artifactId>
-                <version>${camel-community.version}</version>
+                <version>${camel.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.camel</groupId>
                 <artifactId>camel-asn1</artifactId>
-                <version>${camel-community.version}</version>
+                <version>${camel.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.camel</groupId>
                 <artifactId>camel-catalog</artifactId>
-                <version>${camel-community.version}</version>
+                <version>${camel.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.camel</groupId>
                 <artifactId>camel-cloud</artifactId>
-                <version>${camel-community.version}</version>
+                <version>${camel.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.camel</groupId>
                 <artifactId>camel-log</artifactId>
-                <version>${camel-community.version}</version>
+                <version>${camel.version}</version>
             </dependency>
 
             <!--$ org.apache.camel.quarkus $-->
