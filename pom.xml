@@ -78,12 +78,14 @@
 
         <!-- Dependency versions in alphabectic order -->
         <camel-community.version>3.11.1</camel-community.version>
-        <maven.version>3.3.9</maven.version>
+        <maven.version>3.8.4</maven.version>
+        <maven-aether-provider.version>3.3.9</maven-aether-provider.version>
         <maven-project.version>3.0-alpha-2</maven-project.version>
         <maven.plugin-tools.version>3.5</maven.plugin-tools.version>
         <maven.shared.file-management>3.0.0</maven.shared.file-management>
         <maven.shared.invoker>3.0.1</maven.shared.invoker>
-        <pom-tuner.version>1.16.1</pom-tuner.version>
+        <pom-tuner.version>2.0.0</pom-tuner.version>
+        <jdom2.version>2.0.6.1</jdom2.version>
         <junit.version>5.6.0</junit.version>
         <google-client.version>1.23.0</google-client.version>
         <google-api-services-sheets.version>v4-rev493-1.23.0</google-api-services-sheets.version>
@@ -226,7 +228,7 @@
             <dependency>
                 <groupId>org.apache.maven</groupId>
                 <artifactId>maven-aether-provider</artifactId>
-                <version>${maven.version}</version>
+                <version>${maven-aether-provider.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.maven</groupId>
@@ -255,6 +257,12 @@
                 <groupId>org.apache.maven.shared</groupId>
                 <artifactId>maven-invoker</artifactId>
                 <version>${maven.shared.invoker}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.jdom</groupId>
+                <artifactId>jdom2</artifactId>
+                <version>${jdom2.version}</version>
             </dependency>
 
             <dependency>
