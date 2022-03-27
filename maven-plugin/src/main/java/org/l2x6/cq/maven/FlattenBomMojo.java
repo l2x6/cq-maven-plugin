@@ -175,6 +175,9 @@ public class FlattenBomMojo extends AbstractMojo {
     String[] originExcludes;
 
     /**
+     * A list of GAV patterns to select a set of entries from the original non-flattened BOM. These initial artifacts
+     * will be resolved, and their transitive dependencies will serve as a filter for keeping entries from the full
+     * flattened BOM.
      *
      * @since 2.24.0
      */
@@ -182,6 +185,8 @@ public class FlattenBomMojo extends AbstractMojo {
     String[] resolutionEntryPointIncludes;
 
     /**
+     * A list of GAV patterns whose matching entries will be removed from the initial GAV set selected by
+     * {@link #resolutionEntryPointIncludes}.
      *
      * @since 2.24.0
      */
@@ -225,17 +230,6 @@ public class FlattenBomMojo extends AbstractMojo {
     File flattenedReducedVerbosePomFile;
 
     /**
-     * If {@code true}, {@link #flattenedFullPomFile} and {@link #flattenedReducedPomFile} will be written,
-     * but the reduced flattened BOM will not get effective in the current Maven build. I.e. when invoking
-     * {@code mvn install -Dcq.flatten-bom.dryRun} the original non-flattened BOM will be installed.
-     * This might be useful for testing and debugging purposes.
-     *
-     * @since 2.24.0
-     */
-    @Parameter(defaultValue = "false", property = "cq.flatten-bom.dryRun")
-    boolean dryRun;
-
-    /**
      * What should happen when the checks performed by this plugin fail. Possible values: {@code WARN}, {@code FAIL},
      * {@code IGNORE}.
      *
@@ -252,6 +246,34 @@ public class FlattenBomMojo extends AbstractMojo {
      */
     @Parameter(property = "cq.onCheckFailure", defaultValue = "FAIL")
     List<AddExclusion> addExclusions;
+
+    /**
+     * If {@code true}, assume there are no relevant changes in the source tree and just install the selected flattened
+     * POM file flavor; otherwise recompute all the BOM filtering and install the potentially changed file.
+     *
+     * @since 2.25.0
+     */
+    @Parameter(defaultValue = "false", property = "quickly")
+    boolean quickly;
+
+    public static enum InstallFlavor {
+        FULL, REDUCED, REDUCED_VERBOSE, ORIGINAL
+    }
+
+    /**
+     * Which flavor of flattened BOM should be installed, useful for testing and debugging purposes. Possible values:
+     * <ul>
+     * <li>{@code FULL} - see {@link #flattenedFullPomFile}
+     * <li>{@code REDUCED} (default) - see {@link #flattenedReducedPomFile}
+     * <li>{@code REDUCED_VERBOSE} - see {@link #flattenedReducedVerbosePomFile}
+     * <li>{@code ORIGINAL} - the original non-flattened BOM gets installed; {@link #flattenedFullPomFile},
+     * {@link #flattenedReducedPomFile} and {@link #flattenedReducedVerbosePomFile} are still written but none of them
+     * is installed,
+     *
+     * @since 2.25.0
+     */
+    @Parameter(defaultValue = "REDUCED", property = "cq.flatten-bom.installFlavor")
+    InstallFlavor installFlavor;
 
     @Component
     RepositorySystem repoSystem;
@@ -278,69 +300,85 @@ public class FlattenBomMojo extends AbstractMojo {
         }
         charset = Charset.forName(encoding);
         rootModuleDirectory = multiModuleProjectDirectory.toPath().toAbsolutePath().normalize();
+        final Path fullPomPath = basedir.toPath().resolve(flattenedFullPomFile.toPath());
+        final Path reducedVerbosePamPath = basedir.toPath().resolve(flattenedReducedVerbosePomFile.toPath());
+        final Path reducedPomPath = basedir.toPath().resolve(flattenedReducedPomFile.toPath());
 
-        final GavSet excludedByOrigin = GavSet.builder().includes(originExcludes == null ? new String[0] : originExcludes)
-                .build();
-        final GavSet resolveSet = GavSet.builder()
-                .includes(resolutionEntryPointIncludes == null ? new String[0] : resolutionEntryPointIncludes)
-                .excludes(resolutionEntryPointExcludes == null ? new String[0] : resolutionEntryPointExcludes)
-                .build();
+        if (!quickly) {
+            final GavSet excludedByOrigin = GavSet.builder().includes(originExcludes == null ? new String[0] : originExcludes)
+                    .build();
+            final GavSet resolveSet = GavSet.builder()
+                    .includes(resolutionEntryPointIncludes == null ? new String[0] : resolutionEntryPointIncludes)
+                    .excludes(resolutionEntryPointExcludes == null ? new String[0] : resolutionEntryPointExcludes)
+                    .build();
 
-        /* Get the effective pom */
-        final Model effectivePomModel = project.getModel();
-        final DependencyManagement effectiveDependencyManagement = effectivePomModel.getDependencyManagement();
-        final List<Dependency> originalConstrains;
-        if (effectiveDependencyManagement == null) {
-            originalConstrains = Collections.emptyList();
-        } else {
-            final List<Dependency> deps = effectiveDependencyManagement.getDependencies();
-            originalConstrains = deps == null
-                    ? Collections.emptyList()
-                    : Collections.unmodifiableList(deps.stream()
-                            .map(Dependency::clone)
-                            .peek(dep -> {
-                                if (addExclusions != null && !addExclusions.isEmpty()) {
-                                    addExclusions.stream()
-                                            .filter(exclItem -> exclItem.getGavPattern().matches(dep.getGroupId(),
-                                                    dep.getArtifactId(), dep.getVersion()))
-                                            .flatMap(exclItem -> Stream.of(exclItem.getExclusions().split("[,\\s]+")))
-                                            .map(exclusion -> {
-                                                final String[] parts = exclusion.split(":");
-                                                final Exclusion excl = new Exclusion();
-                                                excl.setGroupId(parts[0]);
-                                                excl.setArtifactId(parts[1]);
-                                                //getLog().warn("Adding exclusion " + excl + " to " + dep);
-                                                return excl;
-                                            })
-                                            .forEach(excl -> dep.getExclusions().add(excl));
-                                }
-                            })
-                            .collect(Collectors.toList()));
+            /* Get the effective pom */
+            final Model effectivePomModel = project.getModel();
+            final DependencyManagement effectiveDependencyManagement = effectivePomModel.getDependencyManagement();
+            final List<Dependency> originalConstrains;
+            if (effectiveDependencyManagement == null) {
+                originalConstrains = Collections.emptyList();
+            } else {
+                final List<Dependency> deps = effectiveDependencyManagement.getDependencies();
+                originalConstrains = deps == null
+                        ? Collections.emptyList()
+                        : Collections.unmodifiableList(deps.stream()
+                                .map(Dependency::clone)
+                                .peek(dep -> {
+                                    if (addExclusions != null && !addExclusions.isEmpty()) {
+                                        addExclusions.stream()
+                                                .filter(exclItem -> exclItem.getGavPattern().matches(dep.getGroupId(),
+                                                        dep.getArtifactId(), dep.getVersion()))
+                                                .flatMap(exclItem -> Stream.of(exclItem.getExclusions().split("[,\\s]+")))
+                                                .map(exclusion -> {
+                                                    final String[] parts = exclusion.split(":");
+                                                    final Exclusion excl = new Exclusion();
+                                                    excl.setGroupId(parts[0]);
+                                                    excl.setArtifactId(parts[1]);
+                                                    // getLog().warn("Adding exclusion " + excl + " to " + dep);
+                                                    return excl;
+                                                })
+                                                .forEach(excl -> dep.getExclusions().add(excl));
+                                    }
+                                })
+                                .collect(Collectors.toList()));
+            }
+
+            /* Collect the GAs required by our extensions */
+            final Set<Ga> requiredGas = collectRequiredGas(originalConstrains, resolveSet);
+
+            /* Filter out constraints managed in io.quarkus:quarkus-bom */
+            final List<Dependency> filteredConstraints = Collections.unmodifiableList(originalConstrains.stream()
+                    /* Filter by origin */
+                    .filter(dep -> {
+                        final Gav locationGav = Gav.of(dep.getLocation("artifactId").getSource().getModelId());
+                        return !excludedByOrigin.contains(locationGav.getGroupId(), locationGav.getArtifactId(),
+                                locationGav.getVersion());
+                    })
+                    /* Exclude non-required constraints */
+                    .filter(dep -> requiredGas.contains(new Ga(dep.getGroupId(), dep.getArtifactId())))
+                    .collect(Collectors.toList()));
+
+            write(originalConstrains, fullPomPath, project, charset, true);
+            write(filteredConstraints, reducedVerbosePamPath, project, charset, true);
+            write(filteredConstraints, reducedPomPath, project, charset, false);
         }
 
-        /* Collect the GAs required by our extensions */
-        final Set<Ga> requiredGas = collectRequiredGas(originalConstrains, resolveSet);
-
-        /* Filter out constraints managed in io.quarkus:quarkus-bom */
-        final List<Dependency> filteredConstraints = Collections.unmodifiableList(originalConstrains.stream()
-                /* Filter by origin */
-                .filter(dep -> {
-                    final Gav locationGav = Gav.of(dep.getLocation("artifactId").getSource().getModelId());
-                    return !excludedByOrigin.contains(locationGav.getGroupId(), locationGav.getArtifactId(),
-                            locationGav.getVersion());
-                })
-                /* Exclude non-required constraints */
-                .filter(dep -> requiredGas.contains(new Ga(dep.getGroupId(), dep.getArtifactId())))
-                .collect(Collectors.toList()));
-
-        write(originalConstrains, basedir.toPath().resolve(flattenedFullPomFile.toPath()), project, charset, true);
-        write(filteredConstraints, basedir.toPath().resolve(flattenedReducedVerbosePomFile.toPath()), project, charset, true);
-
-        final Path reducedPomPath = basedir.toPath().resolve(flattenedReducedPomFile.toPath());
-        write(filteredConstraints, reducedPomPath, project, charset, false);
-
-        if (!dryRun) {
+        switch (installFlavor) {
+        case FULL:
+            project.setPomFile(fullPomPath.toFile());
+            break;
+        case REDUCED:
             project.setPomFile(reducedPomPath.toFile());
+            break;
+        case REDUCED_VERBOSE:
+            project.setPomFile(reducedVerbosePamPath.toFile());
+            break;
+        case ORIGINAL:
+            /* nothing to do */
+        default:
+            throw new IllegalStateException(
+                    "Unexpected " + InstallFlavor.class.getSimpleName() + ": " + installFlavor);
         }
     }
 
@@ -369,8 +407,10 @@ public class FlattenBomMojo extends AbstractMojo {
         } catch (IOException e) {
             throw new RuntimeException("Could not create " + flattenedPomPath.getParent(), e);
         }
-        try (Writer out = Files.newBufferedWriter(flattenedPomPath, charset)) {
-            final StringWriter sw = new StringWriter();
+
+        final String newContent;
+        final StringWriter sw = new StringWriter();
+        try {
             if (verbose) {
                 MavenXpp3WriterEx xpp3Writer = new MavenXpp3WriterEx();
                 xpp3Writer.setStringFormatter(new InputLocationStringFormatter());
@@ -378,9 +418,28 @@ public class FlattenBomMojo extends AbstractMojo {
             } else {
                 new MavenXpp3Writer().write(sw, model);
             }
-            out.write(reformat(sw.toString(), charset));
-        } catch (IOException e) {
-            throw new RuntimeException("Could not write " + flattenedPomPath, e);
+        } catch (IOException e1) {
+            throw new RuntimeException("Could not serialize pom.xml model: \n\n" + model);
+        }
+        newContent = reformat(sw.toString(), charset);
+
+        final String originalContent;
+        if (Files.exists(flattenedPomPath)) {
+            try {
+                originalContent = new String(Files.readAllBytes(flattenedPomPath), charset);
+            } catch (IOException e) {
+                throw new RuntimeException("Could not read " + flattenedPomPath, e);
+            }
+        } else {
+            originalContent = "";
+        }
+
+        if (!newContent.equals(originalContent)) {
+            try (Writer out = Files.newBufferedWriter(flattenedPomPath, charset)) {
+                out.write(newContent);
+            } catch (IOException e) {
+                throw new RuntimeException("Could not write " + flattenedPomPath, e);
+            }
         }
     }
 
@@ -487,7 +546,6 @@ public class FlattenBomMojo extends AbstractMojo {
 
         final XPath xPath = XPathFactory.newInstance().newXPath();
         final String expr = "/" + PomTunerUtils.anyNs("bannedDependencies", "excludes", "exclude");
-        getLog().warn("banned patterns " + expr);
         final List<GavPattern> bannedPatterns = new ArrayList<>();
         try {
             final NodeList nodes = (NodeList) xPath.evaluate(expr, document, XPathConstants.NODESET);
@@ -500,7 +558,7 @@ public class FlattenBomMojo extends AbstractMojo {
             throw new RuntimeException("Could not evaluate " + expr + " on " + path, e);
         }
 
-        getLog().warn("banned patterns " + bannedPatterns);
+        getLog().debug("Banned patterns " + bannedPatterns);
 
         final StringBuilder msg = new StringBuilder();
 
