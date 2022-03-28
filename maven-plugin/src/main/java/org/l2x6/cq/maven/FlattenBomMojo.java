@@ -681,10 +681,23 @@ public class FlattenBomMojo extends AbstractMojo {
         final Set<String> wantedScopes = new HashSet<>(Arrays.asList("compile", "provided"));
         originalConstrains.stream()
                 .filter(dep -> entryPoints.contains(dep.getGroupId(), dep.getArtifactId(), dep.getVersion()))
-                .map(dep -> new Ga(dep.getGroupId(), dep.getArtifactId()))
-                .forEach(ga -> {
+                .forEach(mvnDep -> {
+                    final Ga ga = new Ga(mvnDep.getGroupId(), mvnDep.getArtifactId());
                     final Module module = modulesByGa.get(ga);
-                    if (module != null) {
+                    if (module == null) {
+                        /*
+                         * External artifact - if it was selected by resolutionEntryPointIncludes, then we
+                         * want to have it in the entry points set
+                         */
+                        result.add(new Gavtcs(
+                                mvnDep.getGroupId(),
+                                mvnDep.getArtifactId(),
+                                mvnDep.getVersion(),
+                                mvnDep.getType(),
+                                mvnDep.getClassifier(),
+                                null));
+                    } else {
+                        /* Our own module */
                         t.collectOwnDependencies(ga, profiles).stream()
                                 .filter(dep -> wantedScopes.contains(dep.getScope()))
                                 .map(dep -> {
