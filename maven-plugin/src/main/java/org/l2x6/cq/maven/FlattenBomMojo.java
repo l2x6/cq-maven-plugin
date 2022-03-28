@@ -376,6 +376,7 @@ public class FlattenBomMojo extends AbstractMojo {
             break;
         case ORIGINAL:
             /* nothing to do */
+            break;
         default:
             throw new IllegalStateException(
                     "Unexpected " + InstallFlavor.class.getSimpleName() + ": " + installFlavor);
