@@ -91,6 +91,11 @@ import org.l2x6.cq.common.OnFailure;
 import org.l2x6.pom.tuner.ExpressionEvaluator;
 import org.l2x6.pom.tuner.MavenSourceTree;
 import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
+import org.l2x6.pom.tuner.PomTransformer;
+import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
+import org.l2x6.pom.tuner.PomTransformer.NodeGavtcs;
+import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.PomTunerUtils;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gav;
@@ -274,6 +279,23 @@ public class FlattenBomMojo extends AbstractMojo {
      */
     @Parameter(defaultValue = "REDUCED", property = "cq.flatten-bom.installFlavor")
     InstallFlavor installFlavor;
+
+    /**
+     * If {@code true} performs any possible edits to fix issues found by consistency checks. The mojo will still fail
+     * if any fix is performed.
+     *
+     * @since 2.25.0
+     */
+    @Parameter(property = "cq.flatten-bom.format", defaultValue = "false")
+    boolean format;
+
+    /**
+     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
+     *
+     * @since 2.25.0
+     */
+    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "EMPTY")
+    SimpleElementWhitespace simpleElementWhitespace;
 
     @Component
     RepositorySystem repoSystem;
@@ -561,24 +583,72 @@ public class FlattenBomMojo extends AbstractMojo {
 
         getLog().debug("Banned patterns " + bannedPatterns);
 
-        final StringBuilder msg = new StringBuilder();
-
+        final Map<Gavtcs, Set<Ga>> missingBannedDeps = new LinkedHashMap<>();
         for (Entry<Gavtcs, Set<Ga>> entry : transitivesByBomEntry.entrySet()) {
             final Set<Ga> transitives = entry.getValue();
-            final String bannedEntryPoints = transitives.stream()
+            final Set<Ga> bannedEntryPoints = transitives.stream()
                     .flatMap(ga -> bannedPatterns.stream().filter(pat -> pat.matches(ga.getGroupId(), ga.getArtifactId())))
-                    .map(GavPattern::toString)
-                    .collect(Collectors.joining(", "));
+                    .map(gavPattern -> Ga.of(gavPattern.toString()))
+                    .collect(Collectors.toCollection(TreeSet::new));
             if (!bannedEntryPoints.isEmpty()) {
-                final Gavtcs gavtcs = entry.getKey();
-                msg.append("\n    ").append(gavtcs).append(" pulls banned dependencies ").append(bannedEntryPoints);
+                missingBannedDeps.put(entry.getKey(), bannedEntryPoints);
             }
         }
 
-        if (msg.length() > 0) {
-            throw new RuntimeException("Missing exclusions in " + project.getArtifactId() + ":\n" + msg.toString());
+        if (!missingBannedDeps.isEmpty()) {
+            if (format) {
+                new PomTransformer(basedir.toPath().resolve("pom.xml"), charset, simpleElementWhitespace)
+                        .transform((org.w3c.dom.Document doc, TransformationContext context) -> {
+                            final Set<NodeGavtcs> deps = context.getManagedDependencies();
+                            missingBannedDeps.forEach((gavtcs, missingExclusions) -> {
+                                deps.stream()
+                                        .filter(dep -> dep.toGa().equals(gavtcs.toGa()))
+                                        .forEach(dep -> {
+                                            final ContainerElement exclusionsNode = dep.getNode()
+                                                    .getOrAddChildContainerElement("exclusions");
+                                            missingExclusions.forEach(
+                                                    missingExclusion -> addExclusion(exclusionsNode, missingExclusion));
+                                        });
+                            });
+                        });
+            }
+
+            final StringBuilder msg = new StringBuilder("Missing exclusions in ")
+                    .append(project.getArtifactId())
+                    .append(":\n");
+            missingBannedDeps
+                    .forEach((gavtcs, bannedEntryPoints) -> msg
+                            .append("\n    ")
+                            .append(gavtcs)
+                            .append(" pulls banned dependencies ")
+                            .append(bannedEntryPoints));
+            throw new RuntimeException(msg.append(
+                    "\n\nYou may want to consider running\n\n    mvn process-resources -Dcq.flatten-bom.format\n\nto fix the named issues in this BOM")
+                    .toString());
         }
 
+    }
+
+    static void addExclusion(ContainerElement exclusions, Ga newExclusion) {
+        Node refNode = null;
+        for (ContainerElement dep : exclusions.childElements()) {
+            final Ga depGavtcs = dep.asGavtcs().toGa();
+            int comparison = newExclusion.compareTo(depGavtcs);
+            if (comparison == 0) {
+                /* the given exclusion is available, no need to add it */
+                return;
+            }
+            if (refNode == null && comparison < 0) {
+                refNode = dep.previousSiblingInsertionRefNode();
+            }
+        }
+
+        if (refNode == null) {
+            refNode = exclusions.getOrAddLastIndent();
+        }
+        final ContainerElement dep = exclusions.addChildContainerElement("exclusion", refNode, false, false);
+        dep.addChildTextElement("groupId", newExclusion.getGroupId());
+        dep.addChildTextElement("artifactId", newExclusion.getArtifactId());
     }
 
     void checkManagedCamelQuarkusArtifacts(MavenSourceTree t, List<Dependency> originalConstrains) {
