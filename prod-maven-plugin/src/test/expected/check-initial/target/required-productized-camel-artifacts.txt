@@ -1,2 +1,3 @@
 camel-avro
 camel-catalog
+camel-dependencies

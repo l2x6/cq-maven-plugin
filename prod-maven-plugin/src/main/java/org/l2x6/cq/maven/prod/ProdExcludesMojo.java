@@ -49,6 +49,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.lifecycle.internal.MojoDescriptorCreator;
 import org.apache.maven.model.Model;
@@ -909,7 +910,7 @@ public class ProdExcludesMojo extends AbstractMojo {
 
         final Set<Ga> productizedCamelArtifacts = getProductizedCamelArtifacts(tree.getRootModule(), evaluator);
         final Set<Ga> missingCamelArtifacts = requiredCamelArtifacts.stream()
-                .filter(ga -> !productizedCamelArtifacts.contains(ga))
+                .filter(ga -> !productizedCamelArtifacts.contains(ga) && !ga.getArtifactId().startsWith("camel-dependencies"))
                 .collect(Collectors.toCollection(TreeSet::new));
 
         for (Entry<Ga, Module> moduleEntry : tree.getModulesByGa().entrySet()) {
@@ -1233,6 +1234,13 @@ public class ProdExcludesMojo extends AbstractMojo {
                 .map(evaluator::evaluateGa)
                 .filter(depGa -> "org.apache.camel".equals(depGa.getGroupId()))
                 .collect(Collectors.toCollection(TreeSet::new));
+        final ComparableVersion comparableCamelVersion = new ComparableVersion(camelVersion);
+        final ComparableVersion camel3_14_0 = new ComparableVersion("3.14.0");
+        set.add(new Ga(
+                "org.apache.camel",
+                camel3_14_0.compareTo(comparableCamelVersion) > 0
+                        ? "camel-dependencies"
+                        : "camel-dependencies-generator"));
         return Collections.unmodifiableSet(set);
     }
 
