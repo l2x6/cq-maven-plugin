@@ -244,12 +244,21 @@ public class FlattenBomMojo extends AbstractMojo {
     OnFailure onCheckFailure;
 
     /**
-     * What should happen when the checks performed by this plugin fail. Possible values: {@code WARN}, {@code FAIL},
-     * {@code IGNORE}.
+     * Add exclusions to the specified artifacts coming from thrird party imported BOMs in the flattened BOM.
+     * An example:
+     * 
+     * <pre>
+     * {@code
+     * <addExclusion>
+     *     <gavPattern>org.apache.kafka:connect-runtime</gavPattern>
+     *     <exclusions>javax.activation:activation,javax.servlet:javax.servlet-api,log4j:log4j</exclusions>
+     * </addExclusion>
+     * }
+     * </pre>
      *
      * @since 2.24.0
      */
-    @Parameter(property = "cq.onCheckFailure", defaultValue = "FAIL")
+    @Parameter
     List<AddExclusion> addExclusions;
 
     /**
