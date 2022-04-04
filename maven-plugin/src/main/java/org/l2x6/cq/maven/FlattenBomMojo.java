@@ -246,7 +246,7 @@ public class FlattenBomMojo extends AbstractMojo {
     /**
      * Add exclusions to the specified artifacts coming from thrird party imported BOMs in the flattened BOM.
      * An example:
-     * 
+     *
      * <pre>
      * {@code
      * <addExclusion>
@@ -665,17 +665,19 @@ public class FlattenBomMojo extends AbstractMojo {
         final Set<Ga> managedCqGas = new TreeSet<Ga>();
 
         /* Check whether all org.apache.camel.quarkus:* entries managed in the BOM exist in the source tree */
+        final String version = project.getVersion();
         final String staleCqArtifacts = originalConstrains.stream()
                 .filter(dep -> dep.getGroupId().equals("org.apache.camel.quarkus"))
+                .peek(dep -> managedCqGas.add(new Ga(dep.getGroupId(), dep.getArtifactId())))
+                .filter(dep -> version.equals(dep.getVersion()))
                 .map(dep -> new Ga(dep.getGroupId(), dep.getArtifactId()))
-                .peek(managedCqGas::add)
                 .filter(ga -> !cqGas.contains(ga))
                 .map(Ga::toString)
                 .distinct()
                 .sorted()
                 .collect(Collectors.joining("\n    "));
         if (!staleCqArtifacts.isEmpty()) {
-            String msg = "Please remove these non-existent org.apache.camel:* entries managed in camel-quarkus-bom:\n\n    "
+            String msg = "Please remove these non-existent org.apache.camel.quarkus:* entries managed in camel-quarkus-bom:\n\n    "
                     + staleCqArtifacts
                     + "\n\n";
             reportFailure(msg);
