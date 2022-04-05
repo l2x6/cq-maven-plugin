@@ -87,6 +87,7 @@ import org.l2x6.pom.tuner.model.Module;
 import org.l2x6.pom.tuner.model.Profile;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 
 /**
  * Unlink modules that should not be productized from Camel Quarkus source tree based on
@@ -116,6 +117,21 @@ public class ProdExcludesMojo extends AbstractMojo {
         COMMUNITY("${camel-community.version}");
 
         CamelEdition(String versionExpression) {
+            this.versionExpression = versionExpression;
+        }
+
+        private final String versionExpression;
+
+        public String getVersionExpression() {
+            return versionExpression;
+        }
+    }
+
+    public enum QuarkusEdition {
+        PRODUCT("${quarkus.version}"),
+        COMMUNITY("${quarkus-community.version}");
+
+        QuarkusEdition(String versionExpression) {
             this.versionExpression = versionExpression;
         }
 
@@ -213,6 +229,8 @@ public class ProdExcludesMojo extends AbstractMojo {
     static final Pattern JENKINSFILE_PATTERN = Pattern
             .compile("(\\Q// %generated-stages-start%\n\\E)(.*)(\\Q// %generated-stages-end%\\E)", Pattern.DOTALL);
 
+    static final Ga IO_QUARKUS_QUARKUS_BOM = new Ga("io.quarkus", "quarkus-bom");
+    static final Ga IO_QUARKUS_QUARKUS_BOM_TEST = new Ga("io.quarkus", "quarkus-bom-test");
     /**
      * The basedir
      *
@@ -927,6 +945,8 @@ public class ProdExcludesMojo extends AbstractMojo {
                                 .forEach(edition -> gasByNewVersion.put(edition.preferredVersionExpression, new ArrayList<>()));
                         Stream.of(CamelEdition.values())
                                 .forEach(edition -> gasByNewVersion.put(edition.versionExpression, new ArrayList<>()));
+                        Stream.of(QuarkusEdition.values())
+                                .forEach(edition -> gasByNewVersion.put(edition.versionExpression, new ArrayList<>()));
                         for (Dependency managedDep : profile.getDependencyManagement()) {
                             final Ga depGa = evaluator.evaluateGa(managedDep);
                             if (depGa.getGroupId().equals("org.apache.camel.quarkus")) {
@@ -943,6 +963,44 @@ public class ProdExcludesMojo extends AbstractMojo {
                                 final CamelEdition edition = CamelEdition.COMMUNITY;
                                 if (!rawExpression.equals(edition.versionExpression)) {
                                     gasByNewVersion.get(edition.versionExpression).add(depGa);
+                                }
+                            } else if (depGa.equals(IO_QUARKUS_QUARKUS_BOM_TEST)) {
+                                /*
+                                 * Handle io.quarkus:quarkus-bom-test as a special case.
+                                 * If there turns out to be more cases like this, we may implement some auto-detection
+                                 * whether the given Quarkus artifact is productized.
+                                 * Note that the current hardcoding is much faster than probing an existence of a
+                                 * resource over HTTP
+                                 */
+                                final String rawExpression = managedDep.getVersion().getRawExpression();
+                                final QuarkusEdition edition = QuarkusEdition.COMMUNITY;
+                                if (!rawExpression.equals(edition.versionExpression)) {
+                                    gasByNewVersion.get(edition.versionExpression).add(depGa);
+
+                                    if (!profile.getDependencyManagement().stream()
+                                            .map(evaluator::evaluateGa)
+                                            .anyMatch(IO_QUARKUS_QUARKUS_BOM::equals)) {
+                                        /*
+                                         * Add quarkus-bom productized version before quarkus-bom-test community
+                                         * if not already there
+                                         */
+                                        transformations.add((Document document, TransformationContext context) -> {
+                                            final ContainerElement dependencyManagementDeps = context.getOrAddContainerElements(
+                                                    "dependencyManagement",
+                                                    "dependencies");
+                                            final Node refNode = dependencyManagementDeps.childElementsStream()
+                                                    .map(ContainerElement::asGavtcs)
+                                                    .filter(gavtcs -> gavtcs.toGa().equals(IO_QUARKUS_QUARKUS_BOM_TEST))
+                                                    .findFirst()
+                                                    .get()
+                                                    .getNode()
+                                                    .previousSiblingInsertionRefNode();
+                                            dependencyManagementDeps.addGavtcs(
+                                                    new Gavtcs("io.quarkus", "quarkus-bom", "${quarkus.version}", "pom", null,
+                                                            "import"),
+                                                    refNode);
+                                        });
+                                    }
                                 }
                             }
                         }
