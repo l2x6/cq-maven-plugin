@@ -43,6 +43,7 @@ import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.pom.tuner.MavenSourceTree;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
+import org.l2x6.pom.tuner.PomTransformer.NodeGavtcs;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.Transformation;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
@@ -289,11 +290,11 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
             if (optionalProfile.isPresent()) {
                 final ContainerElement virtualDepsElement = optionalProfile.get()
                         .getOrAddChildContainerElement("dependencies");
-                virtualDepsElement.childElementsStream()
+                final List<NodeGavtcs> removeVirtualDeps = virtualDepsElement.childElementsStream()
                         .map(ContainerElement::asGavtcs)
                         .filter(dep -> !newMappedDeps.contains(dep))
-                        .forEach(dep -> dep.getNode().remove(true, true));
-
+                        .collect(Collectors.toList());
+                removeVirtualDeps.forEach(dep -> dep.getNode().remove(true, true));
             }
         };
     }
