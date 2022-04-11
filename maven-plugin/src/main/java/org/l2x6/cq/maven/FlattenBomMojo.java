@@ -58,6 +58,7 @@ import org.apache.maven.model.Dependency;
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Exclusion;
 import org.apache.maven.model.InputLocation;
+import org.apache.maven.model.InputLocation.StringFormatter;
 import org.apache.maven.model.InputSource;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
@@ -116,6 +117,8 @@ import static java.util.stream.Collectors.joining;
  */
 @Mojo(name = "flatten-bom", threadSafe = true, requiresProject = true)
 public class FlattenBomMojo extends AbstractMojo {
+
+    private static final String ORG_APACHE_CAMEL_QUARKUS_GROUP_ID = "org.apache.camel.quarkus";
 
     /**
      * The Maven project.
@@ -318,7 +321,8 @@ public class FlattenBomMojo extends AbstractMojo {
     @Parameter(defaultValue = "${session}", readonly = true, required = true)
     MavenSession session;
 
-    private static final GavSet toResolveDependencies = GavSet.builder().excludes("org.apache.camel.quarkus", "io.quarkus")
+    private static final GavSet toResolveDependencies = GavSet.builder()
+            .excludes(ORG_APACHE_CAMEL_QUARKUS_GROUP_ID, "io.quarkus")
             .build();
 
     private static final Pattern LOCATION_COMMENT_PATTERN = Pattern.compile("\\s*\\Q<!--#}\\E");
@@ -390,9 +394,10 @@ public class FlattenBomMojo extends AbstractMojo {
                     .filter(dep -> requiredGas.contains(new Ga(dep.getGroupId(), dep.getArtifactId())))
                     .collect(Collectors.toList()));
 
-            write(originalConstrains, fullPomPath, project, charset, true);
-            write(filteredConstraints, reducedVerbosePamPath, project, charset, true);
-            write(filteredConstraints, reducedPomPath, project, charset, false);
+            StringFormatter formatter = new InputLocationStringFormatter(project.getVersion());
+            write(originalConstrains, fullPomPath, project, charset, true, formatter);
+            write(filteredConstraints, reducedVerbosePamPath, project, charset, true, formatter);
+            write(filteredConstraints, reducedPomPath, project, charset, false, formatter);
         }
 
         switch (installFlavor) {
@@ -415,7 +420,7 @@ public class FlattenBomMojo extends AbstractMojo {
     }
 
     static void write(List<Dependency> finalConstraints, Path flattenedPomPath, MavenProject project, Charset charset,
-            boolean verbose) {
+            boolean verbose, StringFormatter formatter) {
         final Model model = new Model();
         model.setModelVersion(project.getModelVersion());
         model.setGroupId(project.getGroupId());
@@ -445,7 +450,7 @@ public class FlattenBomMojo extends AbstractMojo {
         try {
             if (verbose) {
                 MavenXpp3WriterEx xpp3Writer = new MavenXpp3WriterEx();
-                xpp3Writer.setStringFormatter(new InputLocationStringFormatter());
+                xpp3Writer.setStringFormatter(formatter);
                 xpp3Writer.write(sw, model);
             } else {
                 new MavenXpp3Writer().write(sw, model);
@@ -667,7 +672,7 @@ public class FlattenBomMojo extends AbstractMojo {
         /* Check whether all org.apache.camel.quarkus:* entries managed in the BOM exist in the source tree */
         final String version = project.getVersion();
         final String staleCqArtifacts = originalConstrains.stream()
-                .filter(dep -> dep.getGroupId().equals("org.apache.camel.quarkus"))
+                .filter(dep -> dep.getGroupId().equals(ORG_APACHE_CAMEL_QUARKUS_GROUP_ID))
                 .peek(dep -> managedCqGas.add(new Ga(dep.getGroupId(), dep.getArtifactId())))
                 .filter(dep -> version.equals(dep.getVersion()))
                 .map(dep -> new Ga(dep.getGroupId(), dep.getArtifactId()))
@@ -850,6 +855,14 @@ public class FlattenBomMojo extends AbstractMojo {
     private static class InputLocationStringFormatter
             extends InputLocation.StringFormatter {
 
+        private final String versionSuffix;
+
+        public InputLocationStringFormatter(String version) {
+            this.versionSuffix = ":" + version;
+        }
+
+        private static final String GAV_PREFIX = ORG_APACHE_CAMEL_QUARKUS_GROUP_ID + ":";
+
         public String toString(InputLocation location) {
             InputSource source = location.getSource();
 
@@ -858,6 +871,10 @@ public class FlattenBomMojo extends AbstractMojo {
             if (StringUtils.isBlank(s) || s.contains("[unknown-version]")) {
                 // unless it is blank or does not provide version information
                 s = source.toString();
+            }
+
+            if (s.startsWith(GAV_PREFIX)) {
+                s = s.replace(versionSuffix, ":${project.version}");
             }
 
             return "#} " + s + " ";
