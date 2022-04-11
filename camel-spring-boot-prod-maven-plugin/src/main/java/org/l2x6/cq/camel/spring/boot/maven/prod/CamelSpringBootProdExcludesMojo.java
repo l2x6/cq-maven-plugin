@@ -132,7 +132,7 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
      *
      * @since 2.19.1
      */
-    @Parameter(property = "cq.basedir", defaultValue = "${project.basedir}")
+    @Parameter(property = "csb.basedir", defaultValue = "${project.basedir}")
     File basedir;
 
     /**
@@ -149,7 +149,7 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
      *
      * @since 2.19.1
      */
-    @Parameter(property = "cq.camel-spring-boot-prod-excludes.skip", defaultValue = "false")
+    @Parameter(property = "csb.camel-spring-boot-prod-excludes.skip", defaultValue = "false")
     boolean skip;
 
     /**
@@ -158,7 +158,7 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
      *
      * @since 2.19.1
      */
-    @Parameter(property = "cq.onCheckFailure", defaultValue = "FAIL")
+    @Parameter(property = "csb.onCheckFailure", defaultValue = "FAIL")
     OnFailure onCheckFailure;
 
     /**
@@ -166,7 +166,7 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
      *
      * @since 2.19.1
      */
-    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "SPACE")
+    @Parameter(property = "csb.simpleElementWhitespace", defaultValue = "SPACE")
     SimpleElementWhitespace simpleElementWhitespace;
 
     /**
@@ -175,7 +175,7 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
      *
      * @since 2.19.1
      */
-    @Parameter(property = "cq.additionalProductizedArtifactIds", defaultValue = "")
+    @Parameter(property = "csb.additionalProductizedArtifactIds", defaultValue = "")
     List<String> additionalProductizedArtifactIds;
 
     /**
@@ -184,7 +184,7 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
      *
      * @since 2.19.1
      */
-    @Parameter(property = "cq.requiredProductizedCamelArtifacts", defaultValue = "${project.basedir}/"
+    @Parameter(property = "csb.requiredProductizedCamelArtifacts", defaultValue = "${project.basedir}/"
             + DEFAULT_REQUIRED_PRODUCTIZED_CAMEL_ARTIFACTS_TXT)
     File requiredProductizedCamelArtifacts;
 
@@ -197,7 +197,7 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
     /**
      * @since 2.19.1
      */
-    @Parameter(property = "cq.camelSpringBootCommunityVersion", defaultValue = "${camel-spring-boot-community.version}")
+    @Parameter(property = "csb.camelSpringBootCommunityVersion", defaultValue = "${camel-spring-boot-community.version}")
     String camelCommunityVersion;
 
     Map<String, VersionStyle> versionStylesByPath;
