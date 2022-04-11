@@ -860,7 +860,7 @@ public class FlattenBomMojo extends AbstractMojo {
                 s = source.toString();
             }
 
-            return "#} " + s + ((location.getLineNumber() >= 0) ? ", line " + location.getLineNumber() : "") + " ";
+            return "#} " + s + " ";
         }
 
     }
