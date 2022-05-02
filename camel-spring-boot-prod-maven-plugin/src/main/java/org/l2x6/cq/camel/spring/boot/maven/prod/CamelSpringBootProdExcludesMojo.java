@@ -383,7 +383,8 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
                     basedir.toPath(),
                     requiredProductizedCamelArtifacts.toPath(),
                     onCheckFailure,
-                    getLog()::warn);
+                    getLog()::warn,
+                    "org.l2x6.cq:cq-camel-spring-boot-prod-maven-plugin:camel-spring-boot-prod-excludes");
         }
 
     }

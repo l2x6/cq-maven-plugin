@@ -621,7 +621,8 @@ public class ProdExcludesMojo extends AbstractMojo {
                     basedir.toPath(),
                     productJson.toPath(),
                     onCheckFailure,
-                    getLog()::warn);
+                    getLog()::warn,
+                    "org.l2x6.cq:cq-prod-maven-plugin:prod-excludes");
         }
 
         if (!missingCamelArtifacts.isEmpty()) {

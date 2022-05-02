@@ -443,7 +443,8 @@ public class CqCommonUtils {
     }
 
     public static void assertPomsMatch(Path src, Path dest, Set<String> activeRelativePomPaths, Predicate<Path> additionalFiles,
-            Charset charset, Path basedir, Path referenceFile, OnFailure onCheckFailure, Consumer<String> warn) {
+            Charset charset, Path basedir, Path referenceFile, OnFailure onCheckFailure, Consumer<String> warn,
+            String fqFixMojo) {
         visitPoms(
                 src,
                 file -> {
@@ -458,7 +459,7 @@ public class CqCommonUtils {
                                     + "] is not in sync with "
                                     + PomTunerUtils.toUnixPath(basedir.relativize(referenceFile).toString()) + ":\n\n    "
                                     + diffs.stream().map(Delta::toString).collect(joining("\n    "))
-                                    + "\n\n Consider running mvn org.l2x6.cq:cq-camel-prod-maven-plugin:camel-prod-excludes -N\n\n";
+                                    + "\n\n Consider running mvn " + fqFixMojo + " -N\n\n";
                             switch (onCheckFailure) {
                             case FAIL:
                                 throw new RuntimeException(msg);
