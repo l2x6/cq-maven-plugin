@@ -1248,8 +1248,6 @@ public class ProdExcludesMojo extends AbstractMojo {
     }
 
     /**
-     * Invoke the transitive-deps mojo in a forked Maven process, because we may have edited the current tree.
-     *
      * @param workRoot
      */
     void invokeTransitiveDependenciesMojo(Path workRoot) {
