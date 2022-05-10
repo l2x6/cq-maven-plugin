@@ -242,7 +242,7 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
             additionalProductizedArtifactIds = Collections.emptyList();
         }
         if (camelCommunityVersion == null || camelCommunityVersion.trim().isEmpty()) {
-            camelCommunityVersion = "3.14.1";
+            camelCommunityVersion = "3.14.2";
         }
         additionalFiles = path -> false;
 
@@ -251,7 +251,7 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
         final Path basePath = basedir.toPath();
         try {
             includes = Files.lines(basePath.resolve(requiredProductizedCamelArtifacts.toPath()), charset)
-                    .map(line -> new Ga("org.apache.camel.springboot", line))
+                    .map(line -> new Ga("org.apache.camel.springboot", line.strip()))
                     .collect(Collectors.toCollection(TreeSet::new));
         } catch (IOException e) {
             throw new RuntimeException(e);

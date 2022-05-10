@@ -255,7 +255,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
         final Path basePath = basedir.toPath();
         try {
             includes = Files.lines(basePath.resolve(requiredProductizedCamelArtifacts.toPath()), charset)
-                    .map(line -> new Ga("org.apache.camel", line))
+                    .map(line -> new Ga("org.apache.camel", line.strip()))
                     .collect(Collectors.toCollection(TreeSet::new));
         } catch (IOException e) {
             throw new RuntimeException(e);
