@@ -247,7 +247,7 @@ public class FlattenBomMojo extends AbstractMojo {
     OnFailure onCheckFailure;
 
     /**
-     * Add exclusions to the specified artifacts coming from thrird party imported BOMs in the flattened BOM.
+     * Add exclusions to the specified artifacts coming from third party imported BOMs in the flattened BOM.
      * An example:
      *
      * <pre>
@@ -259,10 +259,37 @@ public class FlattenBomMojo extends AbstractMojo {
      * }
      * </pre>
      *
-     * @since 2.24.0
+     * @since      2.24.0
+     * @deprecated use the more general {@link #bomEntryTransformations}
      */
     @Parameter
-    List<AddExclusion> addExclusions;
+    List<BomEntryTransformation> addExclusions;
+
+    /**
+     * Add exclusions to the specified artifacts coming from third party imported BOMs in the flattened BOM,
+     * or perform some version transformations.
+     *
+     * An example:
+     *
+     * <pre>
+     * {@code
+     * <bomEntryTransformations>
+     * <bomEntryTransformation>
+     *     <gavPattern>org.apache.kafka:connect-runtime</gavPattern>
+     *     <addExclusions>javax.activation:activation,javax.servlet:javax.servlet-api,log4j:log4j</addExclusions>
+     * </bomEntryTransformation>
+     * <bomEntryTransformation>
+     *     <gavPattern>org.apache.kafka:connect-runtime</gavPattern>
+     *     <versionReplacement>(1.2).3/$1.4</versionReplacement>
+     * </bomEntryTransformation>
+     * </bomEntryTransformations>
+     * }
+     * </pre>
+     *
+     * @since 2.28.0
+     */
+    @Parameter
+    List<BomEntryTransformation> bomEntryTransformations;
 
     /**
      * If {@code true}, assume there are no relevant changes in the source tree and just install the selected flattened
@@ -338,6 +365,12 @@ public class FlattenBomMojo extends AbstractMojo {
         final Path fullPomPath = basedir.toPath().resolve(flattenedFullPomFile.toPath());
         final Path reducedVerbosePamPath = basedir.toPath().resolve(flattenedReducedVerbosePomFile.toPath());
         final Path reducedPomPath = basedir.toPath().resolve(flattenedReducedPomFile.toPath());
+        if (bomEntryTransformations == null) {
+            bomEntryTransformations = new ArrayList<>();
+        }
+        if (addExclusions != null) {
+            bomEntryTransformations.addAll(addExclusions);
+        }
 
         if (!quickly) {
             final GavSet excludedByOrigin = GavSet.builder().includes(originExcludes == null ? new String[0] : originExcludes)
@@ -360,20 +393,15 @@ public class FlattenBomMojo extends AbstractMojo {
                         : Collections.unmodifiableList(deps.stream()
                                 .map(Dependency::clone)
                                 .peek(dep -> {
-                                    if (addExclusions != null && !addExclusions.isEmpty()) {
-                                        addExclusions.stream()
-                                                .filter(exclItem -> exclItem.getGavPattern().matches(dep.getGroupId(),
+                                    if (!bomEntryTransformations.isEmpty()) {
+                                        bomEntryTransformations.stream()
+                                                .filter(transformation -> transformation.getGavPattern().matches(
+                                                        dep.getGroupId(),
                                                         dep.getArtifactId(), dep.getVersion()))
-                                                .flatMap(exclItem -> Stream.of(exclItem.getExclusions().split("[,\\s]+")))
-                                                .map(exclusion -> {
-                                                    final String[] parts = exclusion.split(":");
-                                                    final Exclusion excl = new Exclusion();
-                                                    excl.setGroupId(parts[0]);
-                                                    excl.setArtifactId(parts[1]);
-                                                    // getLog().warn("Adding exclusion " + excl + " to " + dep);
-                                                    return excl;
-                                                })
-                                                .forEach(excl -> dep.getExclusions().add(excl));
+                                                .peek(transformation -> dep
+                                                        .setVersion(transformation.replaceVersion(dep.getVersion())))
+                                                .forEach(transformation -> dep.getExclusions()
+                                                        .addAll(transformation.getAddExclusions()));
                                     }
                                 })
                                 .collect(Collectors.toList()));
@@ -907,16 +935,34 @@ public class FlattenBomMojo extends AbstractMojo {
 
     }
 
-    public static class AddExclusion {
+    public static class BomEntryTransformation {
         private GavPattern gavPattern;
-        private String exclusions;
+        private List<Exclusion> addExclusions = new ArrayList<>();
+        private Pattern versionPattern;
+        private String versionReplace;
 
-        public String getExclusions() {
-            return exclusions;
+        public List<Exclusion> getAddExclusions() {
+            return addExclusions;
         }
 
+        public void setAddExclusions(String exclusions) {
+            for (String rawExcl : exclusions.split("[,\\s]+")) {
+                final String[] parts = rawExcl.split(":");
+                final Exclusion excl = new Exclusion();
+                excl.setGroupId(parts[0]);
+                excl.setArtifactId(parts[1]);
+                this.addExclusions.add(excl);
+            }
+        }
+
+        /**
+         * An alias for {@link #setAddExclusions(String)}
+         *
+         * @param      exclusions items to exclude
+         * @deprecated            use {@link #setAddExclusions(String)}
+         */
         public void setExclusions(String exclusions) {
-            this.exclusions = exclusions;
+            setAddExclusions(exclusions);
         }
 
         public GavPattern getGavPattern() {
@@ -925,6 +971,20 @@ public class FlattenBomMojo extends AbstractMojo {
 
         public void setGavPattern(String gavPattern) {
             this.gavPattern = GavPattern.of(gavPattern);
+        }
+
+        public String replaceVersion(String version) {
+            return versionPattern == null ? version : versionPattern.matcher(version).replaceAll(versionReplace);
+        }
+
+        public void setVersionReplacement(String versionReplacement) {
+            final int slashPos = versionReplacement.indexOf('/');
+            if (slashPos < 1) {
+                throw new IllegalStateException(
+                        "versionReplacement is expected to contain exactly one slash (/); found " + versionReplacement);
+            }
+            this.versionPattern = Pattern.compile(versionReplacement.substring(0, slashPos));
+            this.versionReplace = versionReplacement.substring(slashPos + 1);
         }
     }
 
