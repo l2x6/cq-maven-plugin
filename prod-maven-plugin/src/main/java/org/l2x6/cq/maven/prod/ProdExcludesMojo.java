@@ -61,7 +61,10 @@ import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
+import org.apache.maven.shared.invoker.DefaultInvocationRequest;
+import org.apache.maven.shared.invoker.InvocationRequest;
 import org.apache.maven.shared.invoker.Invoker;
+import org.apache.maven.shared.invoker.MavenInvocationException;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.apache.maven.shared.utils.io.IOUtil;
 import org.eclipse.aether.RepositorySystem;
@@ -518,8 +521,8 @@ public class ProdExcludesMojo extends AbstractMojo {
         }
 
         /*
-         * Let's edit the pom.xml files out of the real source tree if we are just checking or pom editing is not
-         * desired
+         * Let's edit the copies of pom.xml files outside of the real source tree, if we are just checking or pom
+         * editing is not desired
          */
         final Path workRoot = isChecking()
                 ? CqCommonUtils.copyPoms(
@@ -537,7 +540,8 @@ public class ProdExcludesMojo extends AbstractMojo {
         final Path catalogPomPath = workRoot.resolve("catalog/pom.xml");
         /* Remove all virtual deps from the Catalog */
         new PomTransformer(catalogPomPath, charset, simpleElementWhitespace)
-                .transform(Transformation.removeDependency(
+                .transform(Transformation.removeDependencies(
+                        null,
                         false,
                         true,
                         gavtcs -> gavtcs.isVirtual()));
@@ -608,7 +612,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                 workRoot.resolve("integration-tests"), excludeTests);
 
         /* Invoke transitive-deps mojo */
-        invokeTransitiveDependenciesMojo(workRoot);
+        invokeTransitiveDependenciesMojo(basedir.toPath(), workRoot);
 
         if (isChecking()) {
             final MavenSourceTree finalTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
@@ -1248,9 +1252,10 @@ public class ProdExcludesMojo extends AbstractMojo {
     }
 
     /**
-     * @param workRoot
+     * @param realRoot the real root of the source tree
+     * @param workRoot the work root, possibly under realRoot/target where we perform non-permanent changes
      */
-    void invokeTransitiveDependenciesMojo(Path workRoot) {
+    void invokeTransitiveDependenciesMojo(Path realRoot, Path workRoot) {
         if (invoker == null) {
             /* Do not test this */
             return;
@@ -1259,12 +1264,34 @@ public class ProdExcludesMojo extends AbstractMojo {
         /* Install the poms so that Maven resolver can find them */
         final Path rootPomPath = workRoot.resolve("pom.xml");
         final MavenSourceTree finalTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
+        final Ga bomGa = new Ga("org.apache.camel.quarkus", "camel-quarkus-bom");
         finalTree.getModulesByGa().entrySet().stream().forEach(en -> {
             final Ga ga = en.getKey();
-            final String relPath = en.getValue().getPomPath();
-            final Path absPath = workRoot.resolve(relPath);
-            CqCommonUtils.installArtifact(absPath, localRepositoryPath, ga.getGroupId(), ga.getArtifactId(), version, "pom");
+            if (!ga.equals(bomGa)) {
+                /* The BOM needs a special handling - see below */
+                final String relPath = en.getValue().getPomPath();
+                final Path absPath = workRoot.resolve(relPath);
+                CqCommonUtils.installArtifact(absPath, localRepositoryPath, ga.getGroupId(), ga.getArtifactId(), version,
+                        "pom");
+            }
         });
+        /* Install the BOM */
+        getLog().info("Installing preliminary camel-quarkus-bom with community-only Camel constraints");
+        final InvocationRequest request = new DefaultInvocationRequest();
+        {
+            final Module m = finalTree.getModulesByGa().get(bomGa);
+            final String relPath = m.getPomPath();
+            final Path absPath = workRoot.resolve(relPath).getParent();
+            getLog().info("Invoking in " + absPath);
+            request.setBaseDirectory(absPath.toFile());
+            request.setGoals(Collections.singletonList("install"));
+            request.setProfiles(session.getProjectBuildingRequest().getActiveProfileIds());
+            try {
+                invoker.execute(request);
+            } catch (MavenInvocationException e) {
+                throw new RuntimeException("Could not install " + bomGa, e);
+            }
+        }
 
         new TransitiveDependenciesMojo(
                 version,
@@ -1279,7 +1306,15 @@ public class ProdExcludesMojo extends AbstractMojo {
                 repositories,
                 repoSystem,
                 repoSession,
-                getLog()).execute();
+                getLog(),
+                () -> {
+                    /* Install the BOM once again with corrected camel versions */
+                    try {
+                        invoker.execute(request);
+                    } catch (MavenInvocationException e) {
+                        throw new RuntimeException("Could not install " + bomGa, e);
+                    }
+                }).execute();
     }
 
     public Set<Ga> findRequiredCamelArtifacts(MavenSourceTree tree, Set<Ga> expandedIncludes,

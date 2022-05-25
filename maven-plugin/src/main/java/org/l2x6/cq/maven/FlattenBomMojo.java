@@ -203,8 +203,7 @@ public class FlattenBomMojo extends AbstractMojo {
 
     /**
      * As list of GAV patterns whose origin will be logged. Useful when searching on which BOM entry some specific
-     * exclusion
-     * needs to be placed.
+     * exclusion needs to be placed.
      *
      * @since 2.24.0
      */
