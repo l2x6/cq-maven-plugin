@@ -18,8 +18,12 @@ package org.l2x6.cq.maven.prod;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.Deque;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +34,7 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.apache.maven.model.Model;
+import org.apache.maven.model.ModelBase;
 import org.apache.maven.plugin.logging.Log;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
@@ -37,6 +42,7 @@ import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.CollectRequest;
 import org.eclipse.aether.collection.DependencyCollectionException;
+import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.graph.DependencyVisitor;
 import org.eclipse.aether.repository.RemoteRepository;
@@ -67,7 +73,7 @@ public class TransitiveDependenciesMojo {
     private final String version;
 
     /**
-     * The Camel Quarkus community version
+     * Camel Quarkus community version
      *
      * @since 2.17.0
      */
@@ -136,12 +142,17 @@ public class TransitiveDependenciesMojo {
 
     private final Log log;
 
-    public TransitiveDependenciesMojo(String version, String camelQuarkusCommunityVersion, Path basedir, Charset charset,
+    private final Runnable bomInstaller;
+
+    public TransitiveDependenciesMojo(
+            String version, String camelQuarkusCommunityVersion,
+            Path basedir, Charset charset,
             Path productizedDependenciesFile, Path allDependenciesFile, Path nonProductizedDependenciesFile,
             Map<String, String> additionalExtensionDependencies, SimpleElementWhitespace simpleElementWhitespace,
             List<RemoteRepository> repositories, RepositorySystem repoSystem,
             RepositorySystemSession repoSession,
-            Log log) {
+            Log log,
+            Runnable bomInstaller) {
         this.version = version;
         this.camelQuarkusCommunityVersion = camelQuarkusCommunityVersion;
         this.basedir = basedir;
@@ -155,6 +166,7 @@ public class TransitiveDependenciesMojo {
         this.repoSystem = repoSystem;
         this.repoSession = repoSession;
         this.log = log;
+        this.bomInstaller = bomInstaller;
     }
 
     public void execute() {
@@ -169,68 +181,20 @@ public class TransitiveDependenciesMojo {
 
         final Set<Ga> ownManagedGas = new TreeSet<>();
         final Map<String, Set<Ga>> bomGroups = new TreeMap<>();
-
-        final Map<String, Boolean> cqArtifactIds = new TreeMap<>();
-        bomModel.getDependencyManagement().getDependencies().stream()
-                .peek(dep -> {
-                    if (!"import".equals(dep.getScope())) {
-                        final Ga ga = new Ga(dep.getGroupId(), dep.getArtifactId());
-                        ownManagedGas.add(ga);
-                        bomGroups.computeIfAbsent(dep.getVersion(), k -> new TreeSet<>()).add(ga);
-                    }
-                })
-                .filter(dep -> dep.getGroupId().equals("org.apache.camel.quarkus"))
-                .forEach(dep -> {
-                    switch (dep.getVersion()) {
-                    case "${camel-quarkus.version}":
-                        cqArtifactIds.put(dep.getArtifactId(), true);
-                        break;
-                    case "${camel-quarkus-community.version}":
-                        cqArtifactIds.put(dep.getArtifactId(), false);
-                        break;
-                    default:
-                        throw new IllegalStateException(
-                                "Unexpected version of an artifact with groupId 'org.apache.camel.quarkus': " + dep.getVersion()
-                                        + "; expected ${camel-quarkus.version} or ${camel-quarkus-community.version}");
-                    }
-
-                });
+        final Map<String, Boolean> cqArtifactIds = collectArtifactIds(bomModel, ownManagedGas, bomGroups);
 
         /*
-         * Remove the runtime artifacts from the set, because their -deployment counterparts will pull the runtime deps
-         * anyway
+         * Set Camel dependency versions and install the BOM so that we get correct transitives via
+         * DependencyCollector
          */
-        for (Iterator<String> it = cqArtifactIds.keySet().iterator(); it.hasNext();) {
-            final String artifactId = it.next();
-            if (!artifactId.endsWith("-deployment") && cqArtifactIds.containsKey(artifactId + "-deployment")) {
-                it.remove();
-            }
-        }
+        final CamelDependencyCollector camelCollector = new CamelDependencyCollector();
+        collect(cqArtifactIds, camelCollector, Collections.emptyList());
+        updateCamelQuarkusBom(camelCollector.camelProdDeps);
+        log.info("Installing camel-quarkus-bom again, now with proper Camel constraints");
+        bomInstaller.run();
 
         final DependencyCollector collector = new DependencyCollector();
-
-        cqArtifactIds.entrySet().stream()
-                .forEach(artifactId -> {
-
-                    final Boolean isProd = artifactId.getValue();
-                    final DefaultArtifact artifact = new DefaultArtifact(
-                            "org.apache.camel.quarkus",
-                            artifactId.getKey(),
-                            null,
-                            "pom",
-                            isProd ? version : camelQuarkusCommunityVersion);
-
-                    final CollectRequest request = new CollectRequest()
-                            .setRepositories(repositories)
-                            .setRoot(new org.eclipse.aether.graph.Dependency(artifact, null));
-                    try {
-                        final DependencyNode rootNode = repoSystem.collectDependencies(repoSession, request).getRoot();
-                        collector.isProd = isProd;
-                        rootNode.accept(collector);
-                    } catch (DependencyCollectionException e) {
-                        throw new RuntimeException("Could not resolve dependencies", e);
-                    }
-                });
+        collect(cqArtifactIds, collector, readConstraints());
 
         final Set<Ga> allTransitiveGas = toGas(collector.allTransitives);
         final Set<Ga> prodTransitiveGas = toGas(collector.prodTransitives);
@@ -311,10 +275,105 @@ public class TransitiveDependenciesMojo {
                 .collect(Collectors.toCollection(TreeSet::new));
         write(nonProdTransitives, nonProductizedDependenciesFile);
 
-        updateCamelQuarkusBom(prodTransitiveGas);
     }
 
-    void updateCamelQuarkusBom(Set<Ga> prodTransitiveGas) {
+    private List<Dependency> readConstraints() {
+        final Path path = CqCommonUtils.resolveArtifact(
+                repoSession.getLocalRepository().getBasedir().toPath(),
+                "org.apache.camel.quarkus", "camel-quarkus-bom", version, "pom",
+                repositories, repoSystem, repoSession);
+        final Model bomModel = CqCommonUtils.readPom(path, StandardCharsets.UTF_8);
+
+        return bomModel.getDependencyManagement().getDependencies().stream()
+                .map(dep -> {
+                    return new Dependency(
+                            new DefaultArtifact(
+                                    dep.getGroupId(),
+                                    dep.getArtifactId(),
+                                    dep.getType(),
+                                    dep.getVersion()),
+                            null,
+                            false,
+                            dep.getExclusions() == null
+                                    ? Collections.emptyList()
+                                    : dep.getExclusions().stream()
+                                            .map(e -> new org.eclipse.aether.graph.Exclusion(e.getGroupId(),
+                                                    e.getArtifactId(),
+                                                    null, null))
+                                            .collect(Collectors.toList()));
+                })
+                .collect(Collectors.toList());
+    }
+
+    static Map<String, Boolean> collectArtifactIds(ModelBase bomModel, Set<Ga> ownManagedGas, Map<String, Set<Ga>> bomGroups) {
+        TreeMap<String, Boolean> cqArtifactIds = new TreeMap<>();
+        bomModel.getDependencyManagement().getDependencies().stream()
+                .peek(dep -> {
+                    if (!"import".equals(dep.getScope())) {
+                        final Ga ga = new Ga(dep.getGroupId(), dep.getArtifactId());
+                        ownManagedGas.add(ga);
+                        bomGroups.computeIfAbsent(dep.getVersion(), k -> new TreeSet<>()).add(ga);
+                    }
+                })
+                .filter(dep -> dep.getGroupId().equals("org.apache.camel.quarkus"))
+                .forEach(dep -> {
+                    switch (dep.getVersion()) {
+                    case "${camel-quarkus.version}":
+                        cqArtifactIds.put(dep.getArtifactId(), true);
+                        break;
+                    case "${camel-quarkus-community.version}":
+                        cqArtifactIds.put(dep.getArtifactId(), false);
+                        break;
+                    default:
+                        throw new IllegalStateException(
+                                "Unexpected version of an artifact with groupId 'org.apache.camel.quarkus': " + dep.getVersion()
+                                        + "; expected ${camel-quarkus.version} or ${camel-quarkus-community.version}");
+                    }
+
+                });
+        /*
+         * Remove the runtime artifacts from the set, because their -deployment counterparts will pull the runtime deps
+         * anyway
+         */
+        for (Iterator<String> it = cqArtifactIds.keySet().iterator(); it.hasNext();) {
+            final String artifactId = it.next();
+            if (!artifactId.endsWith("-deployment") && cqArtifactIds.containsKey(artifactId + "-deployment")) {
+                it.remove();
+            }
+        }
+
+        return Collections.unmodifiableMap(cqArtifactIds);
+    }
+
+    void collect(Map<String, Boolean> cqArtifactIds, ProdDependencyCollector collector, List<Dependency> constraints) {
+        cqArtifactIds.entrySet().stream()
+                .forEach(artifactId -> {
+
+                    final Boolean isProd = artifactId.getValue();
+                    final DefaultArtifact artifact = new DefaultArtifact(
+                            "org.apache.camel.quarkus",
+                            artifactId.getKey(),
+                            null,
+                            "pom",
+                            isProd ? version : camelQuarkusCommunityVersion);
+                    final CollectRequest request = new CollectRequest()
+                            .setRepositories(repositories)
+                            .setRoot(new org.eclipse.aether.graph.Dependency(artifact, null))
+                            .setManagedDependencies(constraints);
+                    try {
+                        final DependencyNode rootNode = repoSystem
+                                .collectDependencies(repoSession, request)
+                                .getRoot();
+                        collector.isProd = isProd;
+                        rootNode.accept(collector);
+                    } catch (DependencyCollectionException e) {
+                        throw new RuntimeException("Could not resolve dependencies", e);
+                    }
+                });
+
+    }
+
+    void updateCamelQuarkusBom(Set<Ga> prodCamelGas) {
 
         final Path bomPath = basedir.resolve("poms/bom/pom.xml");
         log.info("Updating Camel versions in " + bomPath);
@@ -327,7 +386,7 @@ public class TransitiveDependenciesMojo {
                             .filter(gavtcs -> gavtcs.getGroupId().equals("org.apache.camel"))
                             .forEach(gavtcs -> {
                                 final Ga ga = new Ga(gavtcs.getGroupId(), gavtcs.getArtifactId());
-                                final String expectedVersion = prodTransitiveGas.contains(ga)
+                                final String expectedVersion = prodCamelGas.contains(ga)
                                         ? CamelEdition.PRODUCT.getVersionExpression()
                                         : CamelEdition.COMMUNITY.getVersionExpression();
                                 if (!expectedVersion.equals(gavtcs.getVersion())) {
@@ -374,11 +433,13 @@ public class TransitiveDependenciesMojo {
         }
     }
 
-    static class DependencyCollector implements DependencyVisitor {
-        private boolean isProd;
+    static abstract class ProdDependencyCollector implements DependencyVisitor {
+        protected boolean isProd;
+    }
 
-        private final Set<Gav> prodTransitives = new TreeSet<>();
-        private final Set<Gav> allTransitives = new TreeSet<>();
+    static class CamelDependencyCollector extends ProdDependencyCollector {
+
+        private final Set<Ga> camelProdDeps = new TreeSet<>();
 
         @Override
         public boolean visitLeave(DependencyNode node) {
@@ -388,11 +449,39 @@ public class TransitiveDependenciesMojo {
         @Override
         public boolean visitEnter(DependencyNode node) {
             final Artifact a = node.getArtifact();
+            if (isProd && a.getGroupId().equals("org.apache.camel")) {
+                camelProdDeps.add(new Ga(a.getGroupId(), a.getArtifactId()));
+            }
+            return true;
+        }
+
+    }
+
+    static class DependencyCollector extends ProdDependencyCollector {
+        private final Set<Gav> prodTransitives = new TreeSet<>();
+        private final Set<Gav> allTransitives = new TreeSet<>();
+
+        private final Deque<Gav> stack = new ArrayDeque<>();
+
+        @Override
+        public boolean visitLeave(DependencyNode node) {
+            stack.pop();
+            return true;
+        }
+
+        @Override
+        public boolean visitEnter(DependencyNode node) {
+            final Artifact a = node.getArtifact();
             final Gav gav = new Gav(a.getGroupId(), a.getArtifactId(), a.getVersion());
+            stack.push(gav);
             allTransitives.add(gav);
             if (isProd) {
                 prodTransitives.add(gav);
             }
+            //            if (a.getGroupId().equals("io.dropwizard.metrics") && a.getArtifactId().equals("metrics-core")) {
+            //                System.out.println(
+            //                        "======= found " + stack.stream().map(Gav::toString).collect(Collectors.joining("\n      - ")));
+            //            }
             return true;
         }
 
