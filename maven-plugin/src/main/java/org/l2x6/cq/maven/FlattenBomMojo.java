@@ -40,7 +40,6 @@ import java.util.TreeSet;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import javax.xml.XMLConstants;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerConfigurationException;
@@ -67,6 +66,7 @@ import org.apache.maven.model.io.xpp3.MavenXpp3WriterEx;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
@@ -180,7 +180,7 @@ public class FlattenBomMojo extends AbstractMojo {
      * @since 2.24.0
      */
     @Parameter(property = "cq.originExcludes")
-    String[] originExcludes;
+    List<String> originExcludes;
 
     /**
      * A list of GAV patterns to select a set of entries from the original non-flattened BOM. These initial artifacts
@@ -190,7 +190,7 @@ public class FlattenBomMojo extends AbstractMojo {
      * @since 2.24.0
      */
     @Parameter(property = "cq.resolutionEntryPointIncludes")
-    String[] resolutionEntryPointIncludes;
+    List<String> resolutionEntryPointIncludes;
 
     /**
      * A list of GAV patterns whose matching entries will be removed from the initial GAV set selected by
@@ -199,7 +199,7 @@ public class FlattenBomMojo extends AbstractMojo {
      * @since 2.24.0
      */
     @Parameter(property = "cq.resolutionEntryPointExcludes")
-    String[] resolutionEntryPointExcludes;
+    List<String> resolutionEntryPointExcludes;
 
     /**
      * As list of GAV patterns whose origin will be logged. Useful when searching on which BOM entry some specific
@@ -208,7 +208,7 @@ public class FlattenBomMojo extends AbstractMojo {
      * @since 2.24.0
      */
     @Parameter(property = "cq.resolutionSuspects")
-    String[] resolutionSuspects;
+    List<String> resolutionSuspects;
 
     /**
      * Where to store the non-reduced flattened BOM. An absolute path or a path relative to <code>${basedir}</code>.
@@ -372,61 +372,30 @@ public class FlattenBomMojo extends AbstractMojo {
         }
 
         if (!quickly) {
-            final GavSet excludedByOrigin = GavSet.builder().includes(originExcludes == null ? new String[0] : originExcludes)
-                    .build();
-            final GavSet resolveSet = GavSet.builder()
-                    .includes(resolutionEntryPointIncludes == null ? new String[0] : resolutionEntryPointIncludes)
-                    .excludes(resolutionEntryPointExcludes == null ? new String[0] : resolutionEntryPointExcludes)
-                    .build();
-
-            /* Get the effective pom */
-            final Model effectivePomModel = project.getModel();
-            final DependencyManagement effectiveDependencyManagement = effectivePomModel.getDependencyManagement();
-            final List<Dependency> originalConstrains;
-            if (effectiveDependencyManagement == null) {
-                originalConstrains = Collections.emptyList();
-            } else {
-                final List<Dependency> deps = effectiveDependencyManagement.getDependencies();
-                originalConstrains = deps == null
-                        ? Collections.emptyList()
-                        : Collections.unmodifiableList(deps.stream()
-                                .map(Dependency::clone)
-                                .peek(dep -> {
-                                    if (!bomEntryTransformations.isEmpty()) {
-                                        bomEntryTransformations.stream()
-                                                .filter(transformation -> transformation.getGavPattern().matches(
-                                                        dep.getGroupId(),
-                                                        dep.getArtifactId(), dep.getVersion()))
-                                                .peek(transformation -> dep
-                                                        .setVersion(transformation.replaceVersion(dep.getVersion())))
-                                                .forEach(transformation -> dep.getExclusions()
-                                                        .addAll(transformation.getAddExclusions()));
-                                    }
-                                })
-                                .collect(Collectors.toList()));
-            }
-
-            /* Collect the GAs required by our extensions */
-            final Set<Ga> requiredGas = collectRequiredGas(originalConstrains, resolveSet);
-
-            /* Filter out constraints managed in io.quarkus:quarkus-bom */
-            final List<Dependency> filteredConstraints = Collections.unmodifiableList(originalConstrains.stream()
-                    /* Filter by origin */
-                    .filter(dep -> {
-                        final Gav locationGav = Gav.of(dep.getLocation("artifactId").getSource().getModelId());
-                        return !excludedByOrigin.contains(locationGav.getGroupId(), locationGav.getArtifactId(),
-                                locationGav.getVersion());
-                    })
-                    /* Exclude non-required constraints */
-                    .filter(dep -> requiredGas.contains(new Ga(dep.getGroupId(), dep.getArtifactId())))
-                    .collect(Collectors.toList()));
-
-            StringFormatter formatter = new InputLocationStringFormatter(project.getVersion());
-            write(originalConstrains, fullPomPath, project, charset, true, formatter);
-            write(filteredConstraints, reducedVerbosePamPath, project, charset, true, formatter);
-            write(filteredConstraints, reducedPomPath, project, charset, false, formatter);
+            new FlattenBomTask(
+                    resolutionEntryPointIncludes,
+                    resolutionEntryPointExcludes,
+                    resolutionSuspects,
+                    originExcludes,
+                    bomEntryTransformations,
+                    onCheckFailure,
+                    project.getModel(),
+                    project.getVersion(),
+                    project.getBasedir().toPath(),
+                    rootModuleDirectory,
+                    fullPomPath,
+                    reducedVerbosePamPath,
+                    reducedPomPath,
+                    charset,
+                    getLog(),
+                    repositories,
+                    repoSystem,
+                    repoSession,
+                    getProfiles(session),
+                    format,
+                    simpleElementWhitespace)
+                            .execute();
         }
-
         switch (installFlavor) {
         case FULL:
             project.setPomFile(fullPomPath.toFile());
@@ -444,9 +413,10 @@ public class FlattenBomMojo extends AbstractMojo {
             throw new IllegalStateException(
                     "Unexpected " + InstallFlavor.class.getSimpleName() + ": " + installFlavor);
         }
+
     }
 
-    static void write(List<Dependency> finalConstraints, Path flattenedPomPath, MavenProject project, Charset charset,
+    static void write(List<Dependency> finalConstraints, Path flattenedPomPath, Model project, Charset charset,
             boolean verbose, StringFormatter formatter) {
         final Model model = new Model();
         model.setModelVersion(project.getModelVersion());
@@ -507,169 +477,6 @@ public class FlattenBomMojo extends AbstractMojo {
         }
     }
 
-    Set<Ga> collectRequiredGas(List<Dependency> originalConstrains, GavSet resolveSet) {
-
-        final MavenSourceTree t = MavenSourceTree.of(rootModuleDirectory.resolve("pom.xml"), charset);
-        final Set<Gavtcs> depsToResolve = collectDependenciesToResolve(originalConstrains, resolveSet, t);
-
-        /* Assume that the current BOM's parent is both installed already and that it has no dependencies */
-        final Parent parent = project.getModel().getParent();
-        final DefaultArtifact emptyInstalledArtifact = new DefaultArtifact(
-                parent.getGroupId(),
-                parent.getArtifactId(),
-                null,
-                "pom",
-                parent.getVersion());
-        final Set<Ga> ownGas = t.getModulesByGa().keySet();
-        getLog().debug("Constraints");
-        final List<org.eclipse.aether.graph.Dependency> aetherConstraints = originalConstrains.stream()
-                .filter(dep -> !ownGas.contains(new Ga(dep.getGroupId(), dep.getArtifactId())))
-                .map(dep -> new org.eclipse.aether.graph.Dependency(
-                        new DefaultArtifact(
-                                dep.getGroupId(),
-                                dep.getArtifactId(),
-                                dep.getClassifier(),
-                                dep.getType(),
-                                dep.getVersion()),
-                        null,
-                        false,
-                        dep.getExclusions().stream()
-                                .map(e -> new org.eclipse.aether.graph.Exclusion(e.getGroupId(), e.getArtifactId(), "*", "*"))
-                                .collect(Collectors.toList())))
-                .peek(dep -> getLog().debug(" - " + dep + " " + dep.getExclusions()))
-                .collect(Collectors.toList());
-
-        final List<GavPattern> suspects = resolutionSuspects == null
-                ? Collections.emptyList()
-                : Stream.of(resolutionSuspects).map(GavPattern::of).collect(Collectors.toList());
-
-        final GavSet collectorExcludes = GavSet.builder().include(parent.getGroupId() + ":" + parent.getArtifactId()).build();
-        final Set<Ga> allTransitives = new TreeSet<>();
-        final Map<Gavtcs, Set<Ga>> transitivesByBomEntry = new LinkedHashMap<>();
-        for (Gavtcs entryPoint : depsToResolve) {
-
-            final DependencyCollector collector = new DependencyCollector(collectorExcludes);
-            final CollectRequest request = new CollectRequest()
-                    .setRoot(new org.eclipse.aether.graph.Dependency(emptyInstalledArtifact, null))
-                    .setRepositories(repositories)
-                    .setManagedDependencies(aetherConstraints)
-                    .setDependencies(
-                            Collections.singletonList(
-                                    new org.eclipse.aether.graph.Dependency(
-                                            new DefaultArtifact(
-                                                    entryPoint.getGroupId(),
-                                                    entryPoint.getArtifactId(),
-                                                    entryPoint.getType(),
-                                                    entryPoint.getVersion()),
-                                            null)));
-            try {
-                final DependencyNode rootNode = repoSystem.collectDependencies(repoSession, request).getRoot();
-                rootNode.accept(collector);
-            } catch (DependencyCollectionException | IllegalArgumentException e) {
-                throw new RuntimeException("Could not resolve dependencies of " + entryPoint, e);
-            }
-
-            if (!suspects.isEmpty()) {
-                for (Iterator<GavPattern> it = suspects.iterator(); it.hasNext();) {
-                    final GavPattern pat = it.next();
-                    if (collector.allTransitives.stream().anyMatch(ga -> pat.matches(ga.getGroupId(), ga.getArtifactId()))) {
-                        getLog().warn("Suspect " + pat + " pulled via " + entryPoint);
-                    }
-                }
-            }
-            transitivesByBomEntry.put(entryPoint, collector.allTransitives);
-            allTransitives.addAll(collector.allTransitives);
-        }
-
-        checkManagedCamelArtifacts(allTransitives, originalConstrains);
-        checkManagedCamelQuarkusArtifacts(t, originalConstrains);
-        checkBannedDependencies(transitivesByBomEntry);
-
-        allTransitives.addAll(t.getModulesByGa().keySet());
-        return Collections.unmodifiableSet(allTransitives);
-    }
-
-    void checkBannedDependencies(Map<Gavtcs, Set<Ga>> transitivesByBomEntry) {
-
-        final org.w3c.dom.Document document;
-        final Path path = rootModuleDirectory.resolve("pom.xml");
-        try {
-            final Transformer transformer = TransformerFactory.newInstance().newTransformer();
-            final DOMResult result = new DOMResult();
-            try (Reader r = Files.newBufferedReader(path, charset)) {
-                transformer.transform(new StreamSource(r), result);
-                document = (org.w3c.dom.Document) result.getNode();
-            } catch (IOException e) {
-                throw new RuntimeException("Could not read " + path, e);
-            } catch (TransformerException e) {
-                throw new RuntimeException("Could not parse " + path, e);
-            }
-        } catch (TransformerConfigurationException | TransformerFactoryConfigurationError e) {
-            throw new RuntimeException(e);
-        }
-
-        final XPath xPath = XPathFactory.newInstance().newXPath();
-        final String expr = "/" + PomTunerUtils.anyNs("bannedDependencies", "excludes", "exclude");
-        final List<GavPattern> bannedPatterns = new ArrayList<>();
-        try {
-            final NodeList nodes = (NodeList) xPath.evaluate(expr, document, XPathConstants.NODESET);
-            for (int i = 0; i < nodes.getLength(); i++) {
-                final Node n = nodes.item(i);
-                final String bannedPattern = n.getTextContent();
-                bannedPatterns.add(GavPattern.of(bannedPattern));
-            }
-        } catch (XPathExpressionException e) {
-            throw new RuntimeException("Could not evaluate " + expr + " on " + path, e);
-        }
-
-        getLog().debug("Banned patterns " + bannedPatterns);
-
-        final Map<Gavtcs, Set<Ga>> missingBannedDeps = new LinkedHashMap<>();
-        for (Entry<Gavtcs, Set<Ga>> entry : transitivesByBomEntry.entrySet()) {
-            final Set<Ga> transitives = entry.getValue();
-            final Set<Ga> bannedEntryPoints = transitives.stream()
-                    .flatMap(ga -> bannedPatterns.stream().filter(pat -> pat.matches(ga.getGroupId(), ga.getArtifactId())))
-                    .map(gavPattern -> Ga.of(gavPattern.toString()))
-                    .collect(Collectors.toCollection(TreeSet::new));
-            if (!bannedEntryPoints.isEmpty()) {
-                missingBannedDeps.put(entry.getKey(), bannedEntryPoints);
-            }
-        }
-
-        if (!missingBannedDeps.isEmpty()) {
-            if (format) {
-                new PomTransformer(basedir.toPath().resolve("pom.xml"), charset, simpleElementWhitespace)
-                        .transform((org.w3c.dom.Document doc, TransformationContext context) -> {
-                            final Set<NodeGavtcs> deps = context.getManagedDependencies();
-                            missingBannedDeps.forEach((gavtcs, missingExclusions) -> {
-                                deps.stream()
-                                        .filter(dep -> dep.toGa().equals(gavtcs.toGa()))
-                                        .forEach(dep -> {
-                                            final ContainerElement exclusionsNode = dep.getNode()
-                                                    .getOrAddChildContainerElement("exclusions");
-                                            missingExclusions.forEach(
-                                                    missingExclusion -> addExclusion(exclusionsNode, missingExclusion));
-                                        });
-                            });
-                        });
-            }
-
-            final StringBuilder msg = new StringBuilder("Missing exclusions in ")
-                    .append(project.getArtifactId())
-                    .append(":\n");
-            missingBannedDeps
-                    .forEach((gavtcs, bannedEntryPoints) -> msg
-                            .append("\n    ")
-                            .append(gavtcs)
-                            .append(" pulls banned dependencies ")
-                            .append(bannedEntryPoints));
-            throw new RuntimeException(msg.append(
-                    "\n\nYou may want to consider running\n\n    mvn process-resources -Dcq.flatten-bom.format\n\nto fix the named issues in this BOM")
-                    .toString());
-        }
-
-    }
-
     static void addExclusion(ContainerElement exclusions, Ga newExclusion) {
         Node refNode = null;
         for (ContainerElement dep : exclusions.childElements()) {
@@ -692,157 +499,6 @@ public class FlattenBomMojo extends AbstractMojo {
         dep.addChildTextElement("artifactId", newExclusion.getArtifactId());
     }
 
-    void checkManagedCamelQuarkusArtifacts(MavenSourceTree t, List<Dependency> originalConstrains) {
-        final Set<Ga> cqGas = t.getModulesByGa().keySet();
-        final Set<Ga> managedCqGas = new TreeSet<Ga>();
-
-        /* Check whether all org.apache.camel.quarkus:* entries managed in the BOM exist in the source tree */
-        final String version = project.getVersion();
-        final String staleCqArtifacts = originalConstrains.stream()
-                .filter(dep -> dep.getGroupId().equals(ORG_APACHE_CAMEL_QUARKUS_GROUP_ID))
-                .peek(dep -> managedCqGas.add(new Ga(dep.getGroupId(), dep.getArtifactId())))
-                .filter(dep -> version.equals(dep.getVersion()))
-                .map(dep -> new Ga(dep.getGroupId(), dep.getArtifactId()))
-                .filter(ga -> !cqGas.contains(ga))
-                .map(Ga::toString)
-                .distinct()
-                .sorted()
-                .collect(Collectors.joining("\n    "));
-        if (!staleCqArtifacts.isEmpty()) {
-            String msg = "Please remove these non-existent org.apache.camel.quarkus:* entries managed in camel-quarkus-bom:\n\n    "
-                    + staleCqArtifacts
-                    + "\n\n";
-            reportFailure(msg);
-        }
-
-        /* Check whether all extensions have runtime artifacts managed */
-        final String missingRuntimeEntries = managedCqGas.stream()
-                .filter(ga -> ga.getArtifactId().endsWith("-deployment"))
-                .map(ga -> new Ga(ga.getGroupId(), toRuntimeArtifactId(ga.getArtifactId())))
-                .filter(ga -> !managedCqGas.contains(ga))
-                .map(Ga::toString)
-                .collect(Collectors.joining("\n    "));
-        if (!missingRuntimeEntries.isEmpty()) {
-            String msg = "Please add these entries to camel-quarkus-bom:\n\n    "
-                    + missingRuntimeEntries
-                    + "\n\n";
-            reportFailure(msg);
-        }
-
-        /* Check whether all extensions have deployment artifacts managed */
-        final String missingDeploymentEntries = managedCqGas.stream()
-                .filter(ga -> !ga.getArtifactId().endsWith("-deployment"))
-                .map(ga -> new Ga(ga.getGroupId(), ga.getArtifactId() + "-deployment"))
-                .filter(ga -> !managedCqGas.contains(ga) && cqGas.contains(ga))
-                .map(Ga::toString)
-                .collect(Collectors.joining("\n    "));
-        if (!missingDeploymentEntries.isEmpty()) {
-            String msg = "Please add these entries to camel-quarkus-bom:\n\n    "
-                    + missingDeploymentEntries
-                    + "\n\n";
-            reportFailure(msg);
-        }
-
-    }
-
-    static String toRuntimeArtifactId(String deploymentArtifactId) {
-        return deploymentArtifactId.substring(0, deploymentArtifactId.length() - "-deployment".length());
-    }
-
-    void checkManagedCamelArtifacts(Set<Ga> allTransitives, List<Dependency> originalConstrains) {
-        final List<String> requiredCamelArtifacts = allTransitives.stream()
-                .filter(ga -> ga.getGroupId().equals("org.apache.camel"))
-                .map(Ga::toString)
-                .sorted()
-                .collect(Collectors.toList());
-
-        final List<String> managedCamelArtifacts = originalConstrains.stream()
-                .filter(dep -> dep.getGroupId().equals("org.apache.camel"))
-                .map(dep -> dep.getGroupId() + ":" + dep.getArtifactId())
-                .distinct()
-                .sorted()
-                .collect(Collectors.toList());
-
-        final List<Delta<String>> diffs = DiffUtils.diff(requiredCamelArtifacts, managedCamelArtifacts).getDeltas();
-        if (!diffs.isEmpty()) {
-            String msg = "Too little or too much org.apache.camel:* entries in camel-quarkus-bom:\n\n    "
-                    + diffs.stream().map(Delta::toString).collect(joining("\n    "))
-                    + "\n\nConsider adding, removing or excluding them in the BOM\n\n";
-            reportFailure(msg);
-        }
-    }
-
-    public void reportFailure(String msg) {
-        switch (onCheckFailure) {
-        case FAIL:
-            throw new RuntimeException(msg);
-        case WARN:
-            getLog().warn(msg);
-            break;
-        case IGNORE:
-            break;
-        default:
-            throw new IllegalStateException("Unexpected " + OnFailure.class + " value " + onCheckFailure);
-        }
-    }
-
-    Set<Gavtcs> collectDependenciesToResolve(List<Dependency> originalConstrains, GavSet entryPoints, MavenSourceTree t) {
-        final Predicate<Profile> profiles = getProfiles();
-        final ExpressionEvaluator evaluator = t.getExpressionEvaluator(profiles);
-        final Map<Ga, Module> modulesByGa = t.getModulesByGa();
-        final Set<Gavtcs> result = new LinkedHashSet<>();
-        final Set<String> wantedScopes = new HashSet<>(Arrays.asList("compile", "provided"));
-        originalConstrains.stream()
-                .filter(dep -> entryPoints.contains(dep.getGroupId(), dep.getArtifactId(), dep.getVersion()))
-                .forEach(mvnDep -> {
-                    final Ga ga = new Ga(mvnDep.getGroupId(), mvnDep.getArtifactId());
-                    final Module module = modulesByGa.get(ga);
-                    if (module == null) {
-                        /*
-                         * External artifact - if it was selected by resolutionEntryPointIncludes, then we
-                         * want to have it in the entry points set
-                         */
-                        result.add(new Gavtcs(
-                                mvnDep.getGroupId(),
-                                mvnDep.getArtifactId(),
-                                mvnDep.getVersion(),
-                                mvnDep.getType(),
-                                mvnDep.getClassifier(),
-                                null));
-                    } else {
-                        /* Our own module */
-                        t.collectOwnDependencies(ga, profiles).stream()
-                                .filter(dep -> wantedScopes.contains(dep.getScope()))
-                                .map(dep -> {
-
-                                    final String groupId = evaluator.evaluate(dep.getGroupId());
-                                    final String artifactId = evaluator.evaluate(dep.getArtifactId());
-                                    final String type = dep.getType() == null ? "jar" : dep.getType();
-                                    final String classifier = dep.getClassifier() == null ? null
-                                            : evaluator.evaluate(dep.getClassifier());
-                                    final String version = originalConstrains.stream()
-                                            .filter(d -> groupId.equals(d.getGroupId())
-                                                    && artifactId.equals(d.getArtifactId())
-                                                    && compare(type, d.getType(), "jar")
-                                                    && compare(classifier, d.getClassifier(), ""))
-                                            .map(Dependency::getVersion)
-                                            .findFirst()
-                                            .orElseThrow();
-                                    return new Gavtcs(
-                                            groupId,
-                                            artifactId,
-                                            version,
-                                            type,
-                                            classifier, null);
-
-                                })
-                                .filter(dep -> toResolveDependencies.contains(dep.getGroupId(), dep.getArtifactId()))
-                                .forEach(result::add);
-                    }
-                });
-        return result;
-    }
-
     static boolean compare(String pomTunerValue, String mavenValue, String defaultValue) {
         if (mavenValue == null || mavenValue.isEmpty() || defaultValue.equals(mavenValue)) {
             return pomTunerValue == null || pomTunerValue.isEmpty() || defaultValue.equals(pomTunerValue);
@@ -850,7 +506,7 @@ public class FlattenBomMojo extends AbstractMojo {
         return mavenValue.equals(pomTunerValue);
     }
 
-    Predicate<Profile> getProfiles() {
+    public static Predicate<Profile> getProfiles(MavenSession session) {
         final Predicate<Profile> profiles = ActiveProfiles.of(
                 session.getCurrentProject().getActiveProfiles().stream()
                         .map(org.apache.maven.model.Profile::getId)
@@ -877,6 +533,434 @@ public class FlattenBomMojo extends AbstractMojo {
         } catch (JDOMException | IOException e) {
             throw new RuntimeException("Could not reformat ", e);
         }
+    }
+
+    public static class FlattenBomTask {
+        public FlattenBomTask(List<String> resolutionEntryPointIncludes, List<String> resolutionEntryPointExcludes,
+                List<String> resolutionSuspects, List<String> originExcludes,
+                List<BomEntryTransformation> bomEntryTransformations, OnFailure onCheckFailure, Model effectivePomModel,
+                String version, Path basePath, Path rootModuleDirectory, Path fullPomPath, Path reducedVerbosePamPath,
+                Path reducedPomPath, Charset charset, Log log, List<RemoteRepository> repositories, RepositorySystem repoSystem,
+                RepositorySystemSession repoSession, Predicate<Profile> profiles, boolean format,
+                SimpleElementWhitespace simpleElementWhitespace) {
+            this.resolutionEntryPointIncludes = resolutionEntryPointIncludes;
+            this.resolutionEntryPointExcludes = resolutionEntryPointExcludes;
+            this.resolutionSuspects = resolutionSuspects;
+            this.originExcludes = originExcludes;
+            this.bomEntryTransformations = bomEntryTransformations;
+            this.onCheckFailure = onCheckFailure;
+            this.effectivePomModel = effectivePomModel;
+            this.version = version;
+            this.basePath = basePath;
+            this.rootModuleDirectory = rootModuleDirectory;
+            this.fullPomPath = fullPomPath;
+            this.reducedVerbosePamPath = reducedVerbosePamPath;
+            this.reducedPomPath = reducedPomPath;
+            this.charset = charset;
+            this.log = log;
+            this.repositories = repositories;
+            this.repoSystem = repoSystem;
+            this.repoSession = repoSession;
+            this.profiles = profiles;
+            this.format = format;
+            this.simpleElementWhitespace = simpleElementWhitespace;
+        }
+
+        private final List<String> resolutionEntryPointIncludes;
+        private final List<String> resolutionEntryPointExcludes;
+        private final List<String> resolutionSuspects;
+        private final List<String> originExcludes;
+        private final List<BomEntryTransformation> bomEntryTransformations;
+        private final OnFailure onCheckFailure;
+        private final Model effectivePomModel;
+        private final String version;
+        private final Path basePath;
+        private final Path rootModuleDirectory;
+        private final Path fullPomPath;
+        private final Path reducedVerbosePamPath;
+        private final Path reducedPomPath;
+        private final Charset charset;
+        private final Log log;
+        private final List<RemoteRepository> repositories;
+        private final RepositorySystem repoSystem;
+        private final RepositorySystemSession repoSession;
+        private final Predicate<Profile> profiles;
+        private final boolean format;
+        private final SimpleElementWhitespace simpleElementWhitespace;
+
+        public void execute() {
+
+            final GavSet excludedByOrigin = GavSet.builder()
+                    .includes(originExcludes == null ? Collections.emptyList() : originExcludes)
+                    .build();
+            final GavSet resolveSet = GavSet.builder()
+                    .includes(resolutionEntryPointIncludes == null ? Collections.emptyList() : resolutionEntryPointIncludes)
+                    .excludes(resolutionEntryPointExcludes == null ? Collections.emptyList() : resolutionEntryPointExcludes)
+                    .build();
+
+            /* Get the effective pom */
+            final DependencyManagement effectiveDependencyManagement = effectivePomModel.getDependencyManagement();
+            final List<Dependency> originalConstrains;
+            if (effectiveDependencyManagement == null) {
+                originalConstrains = Collections.emptyList();
+            } else {
+                final List<Dependency> deps = effectiveDependencyManagement.getDependencies();
+                originalConstrains = deps == null
+                        ? Collections.emptyList()
+                        : Collections.unmodifiableList(deps.stream()
+                                .map(Dependency::clone)
+                                .peek(dep -> {
+                                    if (!bomEntryTransformations.isEmpty()) {
+                                        bomEntryTransformations.stream()
+                                                .filter(transformation -> transformation.getGavPattern().matches(
+                                                        dep.getGroupId(),
+                                                        dep.getArtifactId(), dep.getVersion()))
+                                                .peek(transformation -> dep
+                                                        .setVersion(transformation.replaceVersion(dep.getVersion())))
+                                                .forEach(transformation -> dep.getExclusions()
+                                                        .addAll(transformation.getAddExclusions()));
+                                    }
+                                })
+                                .collect(Collectors.toList()));
+            }
+
+            /* Collect the GAs required by our extensions */
+            final Set<Ga> requiredGas = collectRequiredGas(originalConstrains, resolveSet);
+
+            /* Filter out constraints managed in io.quarkus:quarkus-bom */
+            final List<Dependency> filteredConstraints = Collections.unmodifiableList(originalConstrains.stream()
+                    /* Filter by origin */
+                    .filter(dep -> {
+                        final Gav locationGav = Gav.of(dep.getLocation("artifactId").getSource().getModelId());
+                        return !excludedByOrigin.contains(locationGav.getGroupId(), locationGav.getArtifactId(),
+                                locationGav.getVersion());
+                    })
+                    /* Exclude non-required constraints */
+                    .filter(dep -> requiredGas.contains(new Ga(dep.getGroupId(), dep.getArtifactId())))
+                    .collect(Collectors.toList()));
+
+            StringFormatter formatter = new InputLocationStringFormatter(version);
+            write(originalConstrains, fullPomPath, effectivePomModel, charset, true, formatter);
+            write(filteredConstraints, reducedVerbosePamPath, effectivePomModel, charset, true, formatter);
+            write(filteredConstraints, reducedPomPath, effectivePomModel, charset, false, formatter);
+
+        }
+
+        Set<Ga> collectRequiredGas(List<Dependency> originalConstrains, GavSet resolveSet) {
+
+            final MavenSourceTree t = MavenSourceTree.of(rootModuleDirectory.resolve("pom.xml"), charset);
+            final Set<Gavtcs> depsToResolve = collectDependenciesToResolve(originalConstrains, resolveSet, t);
+
+            /* Assume that the current BOM's parent is both installed already and that it has no dependencies */
+            final Parent parent = effectivePomModel.getParent();
+            final DefaultArtifact emptyInstalledArtifact = new DefaultArtifact(
+                    parent.getGroupId(),
+                    parent.getArtifactId(),
+                    null,
+                    "pom",
+                    parent.getVersion());
+            final Set<Ga> ownGas = t.getModulesByGa().keySet();
+            log.debug("Constraints");
+            final List<org.eclipse.aether.graph.Dependency> aetherConstraints = originalConstrains.stream()
+                    .filter(dep -> !ownGas.contains(new Ga(dep.getGroupId(), dep.getArtifactId())))
+                    .map(dep -> new org.eclipse.aether.graph.Dependency(
+                            new DefaultArtifact(
+                                    dep.getGroupId(),
+                                    dep.getArtifactId(),
+                                    dep.getClassifier(),
+                                    dep.getType(),
+                                    dep.getVersion()),
+                            null,
+                            false,
+                            dep.getExclusions().stream()
+                                    .map(e -> new org.eclipse.aether.graph.Exclusion(e.getGroupId(), e.getArtifactId(), "*",
+                                            "*"))
+                                    .collect(Collectors.toList())))
+                    .peek(dep -> log.debug(" - " + dep + " " + dep.getExclusions()))
+                    .collect(Collectors.toList());
+
+            final List<GavPattern> suspects = resolutionSuspects == null
+                    ? Collections.emptyList()
+                    : resolutionSuspects.stream().map(GavPattern::of).collect(Collectors.toList());
+
+            final GavSet collectorExcludes = GavSet.builder().include(parent.getGroupId() + ":" + parent.getArtifactId())
+                    .build();
+            final Set<Ga> allTransitives = new TreeSet<>();
+            final Map<Gavtcs, Set<Ga>> transitivesByBomEntry = new LinkedHashMap<>();
+            for (Gavtcs entryPoint : depsToResolve) {
+
+                final DependencyCollector collector = new DependencyCollector(collectorExcludes);
+                final CollectRequest request = new CollectRequest()
+                        .setRoot(new org.eclipse.aether.graph.Dependency(emptyInstalledArtifact, null))
+                        .setRepositories(repositories)
+                        .setManagedDependencies(aetherConstraints)
+                        .setDependencies(
+                                Collections.singletonList(
+                                        new org.eclipse.aether.graph.Dependency(
+                                                new DefaultArtifact(
+                                                        entryPoint.getGroupId(),
+                                                        entryPoint.getArtifactId(),
+                                                        entryPoint.getType(),
+                                                        entryPoint.getVersion()),
+                                                null)));
+                try {
+                    final DependencyNode rootNode = repoSystem.collectDependencies(repoSession, request).getRoot();
+                    rootNode.accept(collector);
+                } catch (DependencyCollectionException | IllegalArgumentException e) {
+                    throw new RuntimeException("Could not resolve dependencies of " + entryPoint, e);
+                }
+
+                if (!suspects.isEmpty()) {
+                    for (Iterator<GavPattern> it = suspects.iterator(); it.hasNext();) {
+                        final GavPattern pat = it.next();
+                        if (collector.allTransitives.stream()
+                                .anyMatch(ga -> pat.matches(ga.getGroupId(), ga.getArtifactId()))) {
+                            log.warn("Suspect " + pat + " pulled via " + entryPoint);
+                        }
+                    }
+                }
+                transitivesByBomEntry.put(entryPoint, collector.allTransitives);
+                allTransitives.addAll(collector.allTransitives);
+            }
+
+            checkManagedCamelArtifacts(allTransitives, originalConstrains);
+            checkManagedCamelQuarkusArtifacts(t, originalConstrains);
+            checkBannedDependencies(transitivesByBomEntry);
+
+            allTransitives.addAll(t.getModulesByGa().keySet());
+            return Collections.unmodifiableSet(allTransitives);
+        }
+
+        Set<Gavtcs> collectDependenciesToResolve(List<Dependency> originalConstrains, GavSet entryPoints, MavenSourceTree t) {
+            final ExpressionEvaluator evaluator = t.getExpressionEvaluator(profiles);
+            final Map<Ga, Module> modulesByGa = t.getModulesByGa();
+            final Set<Gavtcs> result = new LinkedHashSet<>();
+            final Set<String> wantedScopes = new HashSet<>(Arrays.asList("compile", "provided"));
+            originalConstrains.stream()
+                    .filter(dep -> entryPoints.contains(dep.getGroupId(), dep.getArtifactId(), dep.getVersion()))
+                    .forEach(mvnDep -> {
+                        final Ga ga = new Ga(mvnDep.getGroupId(), mvnDep.getArtifactId());
+                        final Module module = modulesByGa.get(ga);
+                        if (module == null) {
+                            /*
+                             * External artifact - if it was selected by resolutionEntryPointIncludes, then we
+                             * want to have it in the entry points set
+                             */
+                            result.add(new Gavtcs(
+                                    mvnDep.getGroupId(),
+                                    mvnDep.getArtifactId(),
+                                    mvnDep.getVersion(),
+                                    mvnDep.getType(),
+                                    mvnDep.getClassifier(),
+                                    null));
+                        } else {
+                            /* Our own module */
+                            t.collectOwnDependencies(ga, profiles).stream()
+                                    .filter(dep -> wantedScopes.contains(dep.getScope()))
+                                    .map(dep -> {
+
+                                        final String groupId = evaluator.evaluate(dep.getGroupId());
+                                        final String artifactId = evaluator.evaluate(dep.getArtifactId());
+                                        final String type = dep.getType() == null ? "jar" : dep.getType();
+                                        final String classifier = dep.getClassifier() == null ? null
+                                                : evaluator.evaluate(dep.getClassifier());
+                                        final String version = originalConstrains.stream()
+                                                .filter(d -> groupId.equals(d.getGroupId())
+                                                        && artifactId.equals(d.getArtifactId())
+                                                        && compare(type, d.getType(), "jar")
+                                                        && compare(classifier, d.getClassifier(), ""))
+                                                .map(Dependency::getVersion)
+                                                .findFirst()
+                                                .orElseThrow();
+                                        return new Gavtcs(
+                                                groupId,
+                                                artifactId,
+                                                version,
+                                                type,
+                                                classifier, null);
+
+                                    })
+                                    .filter(dep -> toResolveDependencies.contains(dep.getGroupId(), dep.getArtifactId()))
+                                    .forEach(result::add);
+                        }
+                    });
+            return result;
+        }
+
+        void checkManagedCamelQuarkusArtifacts(MavenSourceTree t, List<Dependency> originalConstrains) {
+            final Set<Ga> cqGas = t.getModulesByGa().keySet();
+            final Set<Ga> managedCqGas = new TreeSet<Ga>();
+
+            /* Check whether all org.apache.camel.quarkus:* entries managed in the BOM exist in the source tree */
+            final String staleCqArtifacts = originalConstrains.stream()
+                    .filter(dep -> dep.getGroupId().equals(ORG_APACHE_CAMEL_QUARKUS_GROUP_ID))
+                    .peek(dep -> managedCqGas.add(new Ga(dep.getGroupId(), dep.getArtifactId())))
+                    .filter(dep -> version.equals(dep.getVersion()))
+                    .map(dep -> new Ga(dep.getGroupId(), dep.getArtifactId()))
+                    .filter(ga -> !cqGas.contains(ga))
+                    .map(Ga::toString)
+                    .distinct()
+                    .sorted()
+                    .collect(Collectors.joining("\n    "));
+            if (!staleCqArtifacts.isEmpty()) {
+                String msg = "Please remove these non-existent org.apache.camel.quarkus:* entries managed in camel-quarkus-bom:\n\n    "
+                        + staleCqArtifacts
+                        + "\n\n";
+                reportFailure(msg);
+            }
+
+            /* Check whether all extensions have runtime artifacts managed */
+            final String missingRuntimeEntries = managedCqGas.stream()
+                    .filter(ga -> ga.getArtifactId().endsWith("-deployment"))
+                    .map(ga -> new Ga(ga.getGroupId(), toRuntimeArtifactId(ga.getArtifactId())))
+                    .filter(ga -> !managedCqGas.contains(ga))
+                    .map(Ga::toString)
+                    .collect(Collectors.joining("\n    "));
+            if (!missingRuntimeEntries.isEmpty()) {
+                String msg = "Please add these entries to camel-quarkus-bom:\n\n    "
+                        + missingRuntimeEntries
+                        + "\n\n";
+                reportFailure(msg);
+            }
+
+            /* Check whether all extensions have deployment artifacts managed */
+            final String missingDeploymentEntries = managedCqGas.stream()
+                    .filter(ga -> !ga.getArtifactId().endsWith("-deployment"))
+                    .map(ga -> new Ga(ga.getGroupId(), ga.getArtifactId() + "-deployment"))
+                    .filter(ga -> !managedCqGas.contains(ga) && cqGas.contains(ga))
+                    .map(Ga::toString)
+                    .collect(Collectors.joining("\n    "));
+            if (!missingDeploymentEntries.isEmpty()) {
+                String msg = "Please add these entries to camel-quarkus-bom:\n\n    "
+                        + missingDeploymentEntries
+                        + "\n\n";
+                reportFailure(msg);
+            }
+
+        }
+
+        static String toRuntimeArtifactId(String deploymentArtifactId) {
+            return deploymentArtifactId.substring(0, deploymentArtifactId.length() - "-deployment".length());
+        }
+
+        void checkManagedCamelArtifacts(Set<Ga> allTransitives, List<Dependency> originalConstrains) {
+            final List<String> requiredCamelArtifacts = allTransitives.stream()
+                    .filter(ga -> ga.getGroupId().equals("org.apache.camel"))
+                    .map(Ga::toString)
+                    .sorted()
+                    .collect(Collectors.toList());
+
+            final List<String> managedCamelArtifacts = originalConstrains.stream()
+                    .filter(dep -> dep.getGroupId().equals("org.apache.camel"))
+                    .map(dep -> dep.getGroupId() + ":" + dep.getArtifactId())
+                    .distinct()
+                    .sorted()
+                    .collect(Collectors.toList());
+
+            final List<Delta<String>> diffs = DiffUtils.diff(requiredCamelArtifacts, managedCamelArtifacts).getDeltas();
+            if (!diffs.isEmpty()) {
+                String msg = "Too little or too much org.apache.camel:* entries in camel-quarkus-bom:\n\n    "
+                        + diffs.stream().map(Delta::toString).collect(joining("\n    "))
+                        + "\n\nConsider adding, removing or excluding them in the BOM\n\n";
+                reportFailure(msg);
+            }
+        }
+
+        public void reportFailure(String msg) {
+            switch (onCheckFailure) {
+            case FAIL:
+                throw new RuntimeException(msg);
+            case WARN:
+                log.warn(msg);
+                break;
+            case IGNORE:
+                break;
+            default:
+                throw new IllegalStateException("Unexpected " + OnFailure.class + " value " + onCheckFailure);
+            }
+        }
+
+        void checkBannedDependencies(Map<Gavtcs, Set<Ga>> transitivesByBomEntry) {
+
+            final org.w3c.dom.Document document;
+            final Path path = rootModuleDirectory.resolve("pom.xml");
+            try {
+                final Transformer transformer = TransformerFactory.newInstance().newTransformer();
+                final DOMResult result = new DOMResult();
+                try (Reader r = Files.newBufferedReader(path, charset)) {
+                    transformer.transform(new StreamSource(r), result);
+                    document = (org.w3c.dom.Document) result.getNode();
+                } catch (IOException e) {
+                    throw new RuntimeException("Could not read " + path, e);
+                } catch (TransformerException e) {
+                    throw new RuntimeException("Could not parse " + path, e);
+                }
+            } catch (TransformerConfigurationException | TransformerFactoryConfigurationError e) {
+                throw new RuntimeException(e);
+            }
+
+            final XPath xPath = XPathFactory.newInstance().newXPath();
+            final String expr = "/" + PomTunerUtils.anyNs("bannedDependencies", "excludes", "exclude");
+            final List<GavPattern> bannedPatterns = new ArrayList<>();
+            try {
+                final NodeList nodes = (NodeList) xPath.evaluate(expr, document, XPathConstants.NODESET);
+                for (int i = 0; i < nodes.getLength(); i++) {
+                    final Node n = nodes.item(i);
+                    final String bannedPattern = n.getTextContent();
+                    bannedPatterns.add(GavPattern.of(bannedPattern));
+                }
+            } catch (XPathExpressionException e) {
+                throw new RuntimeException("Could not evaluate " + expr + " on " + path, e);
+            }
+
+            log.debug("Banned patterns " + bannedPatterns);
+
+            final Map<Gavtcs, Set<Ga>> missingBannedDeps = new LinkedHashMap<>();
+            for (Entry<Gavtcs, Set<Ga>> entry : transitivesByBomEntry.entrySet()) {
+                final Set<Ga> transitives = entry.getValue();
+                final Set<Ga> bannedEntryPoints = transitives.stream()
+                        .flatMap(ga -> bannedPatterns.stream().filter(pat -> pat.matches(ga.getGroupId(), ga.getArtifactId())))
+                        .map(gavPattern -> Ga.of(gavPattern.toString()))
+                        .collect(Collectors.toCollection(TreeSet::new));
+                if (!bannedEntryPoints.isEmpty()) {
+                    missingBannedDeps.put(entry.getKey(), bannedEntryPoints);
+                }
+            }
+
+            if (!missingBannedDeps.isEmpty()) {
+                if (format) {
+                    new PomTransformer(basePath.resolve("pom.xml"), charset, simpleElementWhitespace)
+                            .transform((org.w3c.dom.Document doc, TransformationContext context) -> {
+                                final Set<NodeGavtcs> deps = context.getManagedDependencies();
+                                missingBannedDeps.forEach((gavtcs, missingExclusions) -> {
+                                    deps.stream()
+                                            .filter(dep -> dep.toGa().equals(gavtcs.toGa()))
+                                            .forEach(dep -> {
+                                                final ContainerElement exclusionsNode = dep.getNode()
+                                                        .getOrAddChildContainerElement("exclusions");
+                                                missingExclusions.forEach(
+                                                        missingExclusion -> addExclusion(exclusionsNode, missingExclusion));
+                                            });
+                                });
+                            });
+                }
+
+                final StringBuilder msg = new StringBuilder("Missing exclusions in ")
+                        .append(effectivePomModel.getArtifactId())
+                        .append(":\n");
+                missingBannedDeps
+                        .forEach((gavtcs, bannedEntryPoints) -> msg
+                                .append("\n    ")
+                                .append(gavtcs)
+                                .append(" pulls banned dependencies ")
+                                .append(bannedEntryPoints));
+                throw new RuntimeException(msg.append(
+                        "\n\nYou may want to consider running\n\n    mvn process-resources -Dcq.flatten-bom.format\n\nto fix the named issues in this BOM")
+                        .toString());
+            }
+
+        }
+
     }
 
     private static class InputLocationStringFormatter
