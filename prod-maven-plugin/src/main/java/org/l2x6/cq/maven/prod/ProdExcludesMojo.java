@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -60,18 +61,24 @@ import org.apache.maven.plugin.descriptor.PluginDescriptor;
 import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
+import org.apache.maven.project.DefaultProjectBuildingRequest;
 import org.apache.maven.project.MavenProject;
-import org.apache.maven.shared.invoker.DefaultInvocationRequest;
-import org.apache.maven.shared.invoker.InvocationRequest;
+import org.apache.maven.project.ProjectBuilder;
+import org.apache.maven.project.ProjectBuildingException;
+import org.apache.maven.project.ProjectBuildingRequest;
+import org.apache.maven.project.ProjectBuildingResult;
 import org.apache.maven.shared.invoker.Invoker;
-import org.apache.maven.shared.invoker.MavenInvocationException;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.apache.maven.shared.utils.io.IOUtil;
+import org.codehaus.plexus.util.xml.Xpp3Dom;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.common.OnFailure;
+import org.l2x6.cq.maven.FlattenBomMojo;
+import org.l2x6.cq.maven.FlattenBomMojo.BomEntryTransformation;
+import org.l2x6.cq.maven.FlattenBomMojo.InstallFlavor;
 import org.l2x6.pom.tuner.ExpressionEvaluator;
 import org.l2x6.pom.tuner.MavenSourceTree;
 import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
@@ -358,6 +365,14 @@ public class ProdExcludesMojo extends AbstractMojo {
     @Parameter(property = "cq.onCheckFailure", defaultValue = "FAIL")
     OnFailure onCheckFailure;
 
+    /**
+     * The root directory of the Camel Quarkus source tree.
+     *
+     * @since 2.30.0
+     */
+    @Parameter(defaultValue = "${maven.multiModuleProjectDirectory}", readonly = true)
+    File multiModuleProjectDirectory;
+
     @Parameter(defaultValue = "${plugin}", readonly = true)
     private PluginDescriptor pluginDescriptor;
 
@@ -371,6 +386,8 @@ public class ProdExcludesMojo extends AbstractMojo {
     private MojoDescriptorCreator mojoDescriptorCreator;
     @Component
     private Invoker invoker;
+    @Component
+    private ProjectBuilder mavenProjectBuilder;
 
     @Parameter(defaultValue = "${project}", readonly = true)
     MavenProject project;
@@ -1277,21 +1294,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         });
         /* Install the BOM */
         getLog().info("Installing preliminary camel-quarkus-bom with community-only Camel constraints");
-        final InvocationRequest request = new DefaultInvocationRequest();
-        {
-            final Module m = finalTree.getModulesByGa().get(bomGa);
-            final String relPath = m.getPomPath();
-            final Path absPath = workRoot.resolve(relPath).getParent();
-            getLog().info("Invoking in " + absPath);
-            request.setBaseDirectory(absPath.toFile());
-            request.setGoals(Collections.singletonList("install"));
-            request.setProfiles(session.getProjectBuildingRequest().getActiveProfileIds());
-            try {
-                invoker.execute(request);
-            } catch (MavenInvocationException e) {
-                throw new RuntimeException("Could not install " + bomGa, e);
-            }
-        }
+        flattenAndInstallBom();
 
         new TransitiveDependenciesMojo(
                 version,
@@ -1307,14 +1310,82 @@ public class ProdExcludesMojo extends AbstractMojo {
                 repoSystem,
                 repoSession,
                 getLog(),
-                () -> {
-                    /* Install the BOM once again with corrected camel versions */
-                    try {
-                        invoker.execute(request);
-                    } catch (MavenInvocationException e) {
-                        throw new RuntimeException("Could not install " + bomGa, e);
-                    }
-                }).execute();
+                () -> flattenAndInstallBom())
+                        .execute();
+
+    }
+
+    private void flattenAndInstallBom() {
+        final Path rootDir = multiModuleProjectDirectory.toPath().toAbsolutePath().normalize();
+        ProjectBuildingRequest pbr = new DefaultProjectBuildingRequest(session.getProjectBuildingRequest());
+        pbr.setProcessPlugins(false);
+        final String cqBomRelPath = "poms/bom/pom.xml";
+        final Path cqBomAbsPath = rootDir.resolve(cqBomRelPath);
+        try {
+            final ProjectBuildingResult result = mavenProjectBuilder.build(cqBomAbsPath.toFile(), pbr);
+            final MavenProject p = result.getProject();
+            Xpp3Dom config = (Xpp3Dom) p.getModel().getBuild().getPlugins().stream()
+                    .filter(plugin -> plugin.getGroupId().equals("org.l2x6.cq")
+                            && plugin.getArtifactId().equals("cq-maven-plugin"))
+                    .flatMap(plugin -> plugin.getExecutions().stream())
+                    .filter(execution -> execution.getGoals().contains("flatten-bom"))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException(
+                            cqBomRelPath + " should contain a org.l2x6.cq:cq-maven-plugin:flatten-bom mojo definition"))
+                    .getConfiguration();
+
+            final List<BomEntryTransformation> bomEntryTransformations = Stream.of(
+                    Optional.ofNullable(config.getChild("bomEntryTransformations"))
+                            .flatMap(xpp3Dom -> Optional.ofNullable(xpp3Dom.getChildren()))
+                            .orElse(new Xpp3Dom[0]))
+                    .map(xpp3Dom -> new BomEntryTransformation(
+                            optionalChild(xpp3Dom, "gavPattern").orElse(null),
+                            optionalChild(xpp3Dom, "versionReplacement").orElse(null),
+                            optionalChild(xpp3Dom, "exclusions").orElse(null),
+                            optionalChild(xpp3Dom, "addExclusions").orElse(null)))
+                    .collect(Collectors.toList());
+
+            final Path flattenedBomPath = new FlattenBomMojo.FlattenBomTask(
+                    childList(config, "resolutionEntryPointIncludes"),
+                    childList(config, "resolutionEntryPointExcludes"),
+                    childList(config, "resolutionSuspects"),
+                    childList(config, "originExcludes"),
+                    bomEntryTransformations,
+                    optionalChild(config, "onCheckFailure").map(OnFailure::valueOf).orElse(null),
+                    p,
+                    rootDir,
+                    optionalChild(config, "fullPomPath").map(Paths::get).orElse(null),
+                    optionalChild(config, "reducedVerbosePamPath").map(Paths::get).orElse(null),
+                    optionalChild(config, "reducedPomPath").map(Paths::get).orElse(null),
+                    charset,
+                    getLog(),
+                    repositories,
+                    repoSystem,
+                    repoSession,
+                    FlattenBomMojo.getProfiles(session), !isChecking(),
+                    simpleElementWhitespace,
+                    optionalChild(config, "installFlavor").map(InstallFlavor::valueOf).orElse(InstallFlavor.REDUCED),
+                    false)
+                            .execute();
+            CqCommonUtils.installArtifact(flattenedBomPath, localRepositoryPath, p.getGroupId(), p.getArtifactId(), version,
+                    "pom");
+
+        } catch (ProjectBuildingException e) {
+            throw new RuntimeException("Could not build effective POM for " + cqBomRelPath, e);
+        }
+
+    }
+
+    static java.util.Optional<String> optionalChild(Xpp3Dom config, String childElementName) {
+        return Optional.ofNullable(config.getChild(childElementName)).map(Xpp3Dom::getValue);
+    }
+
+    static List<String> childList(Xpp3Dom config, String childElementName) {
+        final Xpp3Dom child = config.getChild(childElementName);
+        if (child == null) {
+            return null;
+        }
+        return Stream.of(child.getChildren()).map(Xpp3Dom::getValue).collect(Collectors.toList());
     }
 
     public Set<Ga> findRequiredCamelArtifacts(MavenSourceTree tree, Set<Ga> expandedIncludes,

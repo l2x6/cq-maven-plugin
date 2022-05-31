@@ -275,6 +275,9 @@ public class TransitiveDependenciesMojo {
                 .collect(Collectors.toCollection(TreeSet::new));
         write(nonProdTransitives, nonProductizedDependenciesFile);
 
+        log.info("Installing the final version of camel-quarkus-bom again, now with fine grained prod & non-prod versions");
+        bomInstaller.run();
+
     }
 
     private List<Dependency> readConstraints() {

@@ -80,6 +80,7 @@
         <camel-community.version>3.11.1</camel-community.version>
         <maven.version>3.8.4</maven.version>
         <maven-aether-provider.version>3.3.9</maven-aether-provider.version>
+        <maven-artifact-transfer.version>0.13.1</maven-artifact-transfer.version>
         <maven-project.version>3.0-alpha-2</maven-project.version>
         <maven.plugin-tools.version>3.5</maven.plugin-tools.version>
         <maven.shared.file-management>3.0.0</maven.shared.file-management>
@@ -194,6 +195,11 @@
                 <artifactId>cq-test-utils</artifactId>
                 <version>2.29.2-SNAPSHOT</version>
             </dependency>
+            <dependency>
+                <groupId>org.l2x6.cq</groupId>
+                <artifactId>cq-maven-plugin</artifactId>
+                <version>2.29.2-SNAPSHOT</version>
+            </dependency>
 
             <dependency>
                 <groupId>com.google.code.gson</groupId>
@@ -229,6 +235,11 @@
                 <groupId>org.apache.maven</groupId>
                 <artifactId>maven-aether-provider</artifactId>
                 <version>${maven-aether-provider.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.maven.shared</groupId>
+                <artifactId>maven-artifact-transfer</artifactId>
+                <version>${maven-artifact-transfer.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.maven</groupId>

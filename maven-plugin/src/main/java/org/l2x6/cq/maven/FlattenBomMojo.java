@@ -25,6 +25,7 @@ import java.io.Writer;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -118,7 +119,10 @@ import static java.util.stream.Collectors.joining;
 @Mojo(name = "flatten-bom", threadSafe = true, requiresProject = true)
 public class FlattenBomMojo extends AbstractMojo {
 
-    private static final String ORG_APACHE_CAMEL_QUARKUS_GROUP_ID = "org.apache.camel.quarkus";
+    public static final String DEFAULT_FLATTENED_REDUCED_VERBOSE_POM_FILE = "src/main/generated/flattened-reduced-verbose-pom.xml";
+    public static final String DEFAULT_FLATTENED_REDUCED_POM_FILE = "src/main/generated/flattened-reduced-pom.xml";
+    public static final String DEFAULT_FLATTENED_FULL_POM_FILE = "src/main/generated/flattened-full-pom.xml";
+    public static final String ORG_APACHE_CAMEL_QUARKUS_GROUP_ID = "org.apache.camel.quarkus";
 
     /**
      * The Maven project.
@@ -216,7 +220,7 @@ public class FlattenBomMojo extends AbstractMojo {
      *
      * @since 2.24.0
      */
-    @Parameter(defaultValue = "src/main/generated/flattened-full-pom.xml", property = "cq.flattenedFullPomFile")
+    @Parameter(defaultValue = DEFAULT_FLATTENED_FULL_POM_FILE, property = "cq.flattenedFullPomFile")
     File flattenedFullPomFile;
 
     /**
@@ -224,7 +228,7 @@ public class FlattenBomMojo extends AbstractMojo {
      *
      * @since 2.24.0
      */
-    @Parameter(defaultValue = "src/main/generated/flattened-reduced-pom.xml", property = "cq.flattenedReducedPomFile")
+    @Parameter(defaultValue = DEFAULT_FLATTENED_REDUCED_POM_FILE, property = "cq.flattenedReducedPomFile")
     File flattenedReducedPomFile;
 
     /**
@@ -233,7 +237,7 @@ public class FlattenBomMojo extends AbstractMojo {
      *
      * @since 2.24.0
      */
-    @Parameter(defaultValue = "src/main/generated/flattened-reduced-verbose-pom.xml", property = "cq.flattenedReducedVerbosePomFile")
+    @Parameter(defaultValue = DEFAULT_FLATTENED_REDUCED_VERBOSE_POM_FILE, property = "cq.flattenedReducedVerbosePomFile")
     File flattenedReducedVerbosePomFile;
 
     /**
@@ -371,48 +375,29 @@ public class FlattenBomMojo extends AbstractMojo {
             bomEntryTransformations.addAll(addExclusions);
         }
 
-        if (!quickly) {
-            new FlattenBomTask(
-                    resolutionEntryPointIncludes,
-                    resolutionEntryPointExcludes,
-                    resolutionSuspects,
-                    originExcludes,
-                    bomEntryTransformations,
-                    onCheckFailure,
-                    project.getModel(),
-                    project.getVersion(),
-                    project.getBasedir().toPath(),
-                    rootModuleDirectory,
-                    fullPomPath,
-                    reducedVerbosePamPath,
-                    reducedPomPath,
-                    charset,
-                    getLog(),
-                    repositories,
-                    repoSystem,
-                    repoSession,
-                    getProfiles(session),
-                    format,
-                    simpleElementWhitespace)
-                            .execute();
-        }
-        switch (installFlavor) {
-        case FULL:
-            project.setPomFile(fullPomPath.toFile());
-            break;
-        case REDUCED:
-            project.setPomFile(reducedPomPath.toFile());
-            break;
-        case REDUCED_VERBOSE:
-            project.setPomFile(reducedVerbosePamPath.toFile());
-            break;
-        case ORIGINAL:
-            /* nothing to do */
-            break;
-        default:
-            throw new IllegalStateException(
-                    "Unexpected " + InstallFlavor.class.getSimpleName() + ": " + installFlavor);
-        }
+        new FlattenBomTask(
+                resolutionEntryPointIncludes,
+                resolutionEntryPointExcludes,
+                resolutionSuspects,
+                originExcludes,
+                bomEntryTransformations,
+                onCheckFailure,
+                project,
+                rootModuleDirectory,
+                fullPomPath,
+                reducedVerbosePamPath,
+                reducedPomPath,
+                charset,
+                getLog(),
+                repositories,
+                repoSystem,
+                repoSession,
+                getProfiles(session),
+                format,
+                simpleElementWhitespace,
+                installFlavor,
+                quickly)
+                        .execute();
 
     }
 
@@ -536,36 +521,6 @@ public class FlattenBomMojo extends AbstractMojo {
     }
 
     public static class FlattenBomTask {
-        public FlattenBomTask(List<String> resolutionEntryPointIncludes, List<String> resolutionEntryPointExcludes,
-                List<String> resolutionSuspects, List<String> originExcludes,
-                List<BomEntryTransformation> bomEntryTransformations, OnFailure onCheckFailure, Model effectivePomModel,
-                String version, Path basePath, Path rootModuleDirectory, Path fullPomPath, Path reducedVerbosePamPath,
-                Path reducedPomPath, Charset charset, Log log, List<RemoteRepository> repositories, RepositorySystem repoSystem,
-                RepositorySystemSession repoSession, Predicate<Profile> profiles, boolean format,
-                SimpleElementWhitespace simpleElementWhitespace) {
-            this.resolutionEntryPointIncludes = resolutionEntryPointIncludes;
-            this.resolutionEntryPointExcludes = resolutionEntryPointExcludes;
-            this.resolutionSuspects = resolutionSuspects;
-            this.originExcludes = originExcludes;
-            this.bomEntryTransformations = bomEntryTransformations;
-            this.onCheckFailure = onCheckFailure;
-            this.effectivePomModel = effectivePomModel;
-            this.version = version;
-            this.basePath = basePath;
-            this.rootModuleDirectory = rootModuleDirectory;
-            this.fullPomPath = fullPomPath;
-            this.reducedVerbosePamPath = reducedVerbosePamPath;
-            this.reducedPomPath = reducedPomPath;
-            this.charset = charset;
-            this.log = log;
-            this.repositories = repositories;
-            this.repoSystem = repoSystem;
-            this.repoSession = repoSession;
-            this.profiles = profiles;
-            this.format = format;
-            this.simpleElementWhitespace = simpleElementWhitespace;
-        }
-
         private final List<String> resolutionEntryPointIncludes;
         private final List<String> resolutionEntryPointExcludes;
         private final List<String> resolutionSuspects;
@@ -587,62 +542,145 @@ public class FlattenBomMojo extends AbstractMojo {
         private final Predicate<Profile> profiles;
         private final boolean format;
         private final SimpleElementWhitespace simpleElementWhitespace;
+        private final MavenProject project;
+        private final InstallFlavor installFlavor;
+        private final boolean quickly;
 
-        public void execute() {
+        public FlattenBomTask(List<String> resolutionEntryPointIncludes, List<String> resolutionEntryPointExcludes,
+                List<String> resolutionSuspects, List<String> originExcludes,
+                List<BomEntryTransformation> bomEntryTransformations, OnFailure onCheckFailure,
+                MavenProject project,
+                Path rootModuleDirectory, Path fullPomPath, Path reducedVerbosePamPath,
+                Path reducedPomPath, Charset charset, Log log, List<RemoteRepository> repositories, RepositorySystem repoSystem,
+                RepositorySystemSession repoSession, Predicate<Profile> profiles, boolean format,
+                SimpleElementWhitespace simpleElementWhitespace, InstallFlavor installFlavor, boolean quickly) {
+            this.resolutionEntryPointIncludes = resolutionEntryPointIncludes;
+            this.resolutionEntryPointExcludes = resolutionEntryPointExcludes;
+            this.resolutionSuspects = resolutionSuspects;
+            this.originExcludes = originExcludes;
+            this.bomEntryTransformations = mergeTransformations(rootModuleDirectory, bomEntryTransformations, charset);
+            this.onCheckFailure = onCheckFailure;
+            this.project = project;
+            this.effectivePomModel = project.getModel();
+            this.version = project.getVersion();
+            this.basePath = project.getBasedir().toPath();
+            this.rootModuleDirectory = rootModuleDirectory;
+            this.fullPomPath = resolve(this.basePath, fullPomPath, DEFAULT_FLATTENED_FULL_POM_FILE);
+            this.reducedVerbosePamPath = resolve(this.basePath, reducedVerbosePamPath,
+                    DEFAULT_FLATTENED_REDUCED_VERBOSE_POM_FILE);
+            this.reducedPomPath = resolve(this.basePath, reducedPomPath, DEFAULT_FLATTENED_REDUCED_POM_FILE);
+            this.charset = charset;
+            this.log = log;
+            this.repositories = repositories;
+            this.repoSystem = repoSystem;
+            this.repoSession = repoSession;
+            this.profiles = profiles;
+            this.format = format;
+            this.simpleElementWhitespace = simpleElementWhitespace;
+            this.installFlavor = installFlavor;
+            this.quickly = quickly;
+        }
 
-            final GavSet excludedByOrigin = GavSet.builder()
-                    .includes(originExcludes == null ? Collections.emptyList() : originExcludes)
-                    .build();
-            final GavSet resolveSet = GavSet.builder()
-                    .includes(resolutionEntryPointIncludes == null ? Collections.emptyList() : resolutionEntryPointIncludes)
-                    .excludes(resolutionEntryPointExcludes == null ? Collections.emptyList() : resolutionEntryPointExcludes)
-                    .build();
-
-            /* Get the effective pom */
-            final DependencyManagement effectiveDependencyManagement = effectivePomModel.getDependencyManagement();
-            final List<Dependency> originalConstrains;
-            if (effectiveDependencyManagement == null) {
-                originalConstrains = Collections.emptyList();
-            } else {
-                final List<Dependency> deps = effectiveDependencyManagement.getDependencies();
-                originalConstrains = deps == null
-                        ? Collections.emptyList()
-                        : Collections.unmodifiableList(deps.stream()
-                                .map(Dependency::clone)
-                                .peek(dep -> {
-                                    if (!bomEntryTransformations.isEmpty()) {
-                                        bomEntryTransformations.stream()
-                                                .filter(transformation -> transformation.getGavPattern().matches(
-                                                        dep.getGroupId(),
-                                                        dep.getArtifactId(), dep.getVersion()))
-                                                .peek(transformation -> dep
-                                                        .setVersion(transformation.replaceVersion(dep.getVersion())))
-                                                .forEach(transformation -> dep.getExclusions()
-                                                        .addAll(transformation.getAddExclusions()));
-                                    }
-                                })
-                                .collect(Collectors.toList()));
+        static List<BomEntryTransformation> mergeTransformations(Path rootModuleDirectory,
+                List<BomEntryTransformation> bomEntryTransformations, Charset charset) {
+            final List<BomEntryTransformation> result = new ArrayList<>();
+            final Path prodArtifacts = rootModuleDirectory
+                    .resolve("product/src/main/generated/transitive-dependencies-non-productized.txt");
+            if (Files.isRegularFile(prodArtifacts)) {
+                try {
+                    Files.readAllLines(prodArtifacts, charset).stream()
+                            .filter(line -> !line.isBlank())
+                            .map(line -> new BomEntryTransformation(line, "[\\-\\.]redhat-\\d+$/", null, null))
+                            .forEach(result::add);
+                } catch (IOException e) {
+                    throw new RuntimeException("Could not read " + prodArtifacts, e);
+                }
             }
+            result.addAll(bomEntryTransformations);
+            return result;
+        }
 
-            /* Collect the GAs required by our extensions */
-            final Set<Ga> requiredGas = collectRequiredGas(originalConstrains, resolveSet);
+        static Path resolve(Path basePath, Path relPath, String defaultPath) {
+            return basePath.resolve(relPath == null ? Paths.get(defaultPath) : relPath);
+        }
 
-            /* Filter out constraints managed in io.quarkus:quarkus-bom */
-            final List<Dependency> filteredConstraints = Collections.unmodifiableList(originalConstrains.stream()
-                    /* Filter by origin */
-                    .filter(dep -> {
-                        final Gav locationGav = Gav.of(dep.getLocation("artifactId").getSource().getModelId());
-                        return !excludedByOrigin.contains(locationGav.getGroupId(), locationGav.getArtifactId(),
-                                locationGav.getVersion());
-                    })
-                    /* Exclude non-required constraints */
-                    .filter(dep -> requiredGas.contains(new Ga(dep.getGroupId(), dep.getArtifactId())))
-                    .collect(Collectors.toList()));
+        public Path execute() {
+            if (!quickly) {
+                final GavSet excludedByOrigin = GavSet.builder()
+                        .includes(originExcludes == null ? Collections.emptyList() : originExcludes)
+                        .build();
+                final GavSet resolveSet = GavSet.builder()
+                        .includes(resolutionEntryPointIncludes == null ? Collections.emptyList() : resolutionEntryPointIncludes)
+                        .excludes(resolutionEntryPointExcludes == null ? Collections.emptyList() : resolutionEntryPointExcludes)
+                        .build();
 
-            StringFormatter formatter = new InputLocationStringFormatter(version);
-            write(originalConstrains, fullPomPath, effectivePomModel, charset, true, formatter);
-            write(filteredConstraints, reducedVerbosePamPath, effectivePomModel, charset, true, formatter);
-            write(filteredConstraints, reducedPomPath, effectivePomModel, charset, false, formatter);
+                /* Get the effective pom */
+                final DependencyManagement effectiveDependencyManagement = effectivePomModel.getDependencyManagement();
+                final List<Dependency> originalConstrains;
+                if (effectiveDependencyManagement == null) {
+                    originalConstrains = Collections.emptyList();
+                } else {
+                    final List<Dependency> deps = effectiveDependencyManagement.getDependencies();
+                    originalConstrains = deps == null
+                            ? Collections.emptyList()
+                            : Collections.unmodifiableList(deps.stream()
+                                    .map(Dependency::clone)
+                                    .peek(dep -> {
+                                        if (!bomEntryTransformations.isEmpty()) {
+                                            bomEntryTransformations.stream()
+                                                    .filter(transformation -> transformation.getGavPattern().matches(
+                                                            dep.getGroupId(),
+                                                            dep.getArtifactId(), dep.getVersion()))
+                                                    .peek(transformation -> dep
+                                                            .setVersion(transformation.replaceVersion(dep.getVersion())))
+                                                    .forEach(transformation -> dep.getExclusions()
+                                                            .addAll(transformation.getAddExclusions()));
+                                        }
+                                    })
+                                    .collect(Collectors.toList()));
+                }
+
+                /* Collect the GAs required by our extensions */
+                final Set<Ga> requiredGas = collectRequiredGas(originalConstrains, resolveSet);
+
+                /* Filter out constraints managed in io.quarkus:quarkus-bom */
+                final List<Dependency> filteredConstraints = Collections.unmodifiableList(originalConstrains.stream()
+                        /* Filter by origin */
+                        .filter(dep -> {
+                            final Gav locationGav = Gav.of(dep.getLocation("artifactId").getSource().getModelId());
+                            return !excludedByOrigin.contains(locationGav.getGroupId(), locationGav.getArtifactId(),
+                                    locationGav.getVersion());
+                        })
+                        /* Exclude non-required constraints */
+                        .filter(dep -> requiredGas.contains(new Ga(dep.getGroupId(), dep.getArtifactId())))
+                        .collect(Collectors.toList()));
+
+                StringFormatter formatter = new InputLocationStringFormatter(version);
+                write(originalConstrains, fullPomPath, effectivePomModel, charset, true, formatter);
+                write(filteredConstraints, reducedVerbosePamPath, effectivePomModel, charset, true, formatter);
+                write(filteredConstraints, reducedPomPath, effectivePomModel, charset, false, formatter);
+            }
+            final Path result;
+            switch (installFlavor) {
+            case FULL:
+                result = fullPomPath;
+                break;
+            case REDUCED:
+                result = reducedPomPath;
+                break;
+            case REDUCED_VERBOSE:
+                result = reducedVerbosePamPath;
+                break;
+            case ORIGINAL:
+                /* nothing to do */
+                result = project.getFile().toPath();
+                break;
+            default:
+                throw new IllegalStateException(
+                        "Unexpected " + InstallFlavor.class.getSimpleName() + ": " + installFlavor);
+            }
+            project.setPomFile(result.toFile());
+            return result;
 
         }
 
@@ -1023,6 +1061,24 @@ public class FlattenBomMojo extends AbstractMojo {
         private List<Exclusion> addExclusions = new ArrayList<>();
         private Pattern versionPattern;
         private String versionReplace;
+
+        public BomEntryTransformation() {
+        }
+
+        public BomEntryTransformation(String gavPattern, String versionReplacement, String exclusions, String addExclusions) {
+            if (gavPattern != null) {
+                setGavPattern(gavPattern);
+            }
+            if (versionReplacement != null) {
+                setVersionReplacement(versionReplacement);
+            }
+            if (exclusions != null) {
+                setExclusions(exclusions);
+            }
+            if (addExclusions != null) {
+                setAddExclusions(addExclusions);
+            }
+        }
 
         public List<Exclusion> getAddExclusions() {
             return addExclusions;
