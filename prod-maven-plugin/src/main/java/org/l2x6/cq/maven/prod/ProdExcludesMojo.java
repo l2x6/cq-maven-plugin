@@ -75,10 +75,9 @@ import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.CqCommonUtils;
+import org.l2x6.cq.common.FlattenBomTask;
+import org.l2x6.cq.common.FlattenBomTask.BomEntryTransformation;
 import org.l2x6.cq.common.OnFailure;
-import org.l2x6.cq.maven.FlattenBomMojo;
-import org.l2x6.cq.maven.FlattenBomMojo.BomEntryTransformation;
-import org.l2x6.cq.maven.FlattenBomMojo.InstallFlavor;
 import org.l2x6.pom.tuner.ExpressionEvaluator;
 import org.l2x6.pom.tuner.MavenSourceTree;
 import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
@@ -1345,7 +1344,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                             optionalChild(xpp3Dom, "addExclusions").orElse(null)))
                     .collect(Collectors.toList());
 
-            final Path flattenedBomPath = new FlattenBomMojo.FlattenBomTask(
+            final Path flattenedBomPath = new FlattenBomTask(
                     childList(config, "resolutionEntryPointIncludes"),
                     childList(config, "resolutionEntryPointExcludes"),
                     childList(config, "resolutionSuspects"),
@@ -1362,9 +1361,10 @@ public class ProdExcludesMojo extends AbstractMojo {
                     repositories,
                     repoSystem,
                     repoSession,
-                    FlattenBomMojo.getProfiles(session), !isChecking(),
+                    CqCommonUtils.getProfiles(session), !isChecking(),
                     simpleElementWhitespace,
-                    optionalChild(config, "installFlavor").map(InstallFlavor::valueOf).orElse(InstallFlavor.REDUCED),
+                    optionalChild(config, "installFlavor").map(FlattenBomTask.InstallFlavor::valueOf)
+                            .orElse(FlattenBomTask.InstallFlavor.REDUCED),
                     false)
                             .execute();
             CqCommonUtils.installArtifact(flattenedBomPath, localRepositoryPath, p.getGroupId(), p.getArtifactId(), version,

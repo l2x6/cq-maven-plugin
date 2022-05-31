@@ -95,10 +95,6 @@
         </dependency>
 
         <dependency>
-            <groupId>org.l2x6.cq</groupId>
-            <artifactId>cq-maven-plugin</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.l2x6.pom-tuner</groupId>
             <artifactId>pom-tuner</artifactId>
         </dependency>
