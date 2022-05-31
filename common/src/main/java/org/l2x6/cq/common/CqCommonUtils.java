@@ -72,6 +72,7 @@ import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.ArtifactRequest;
 import org.eclipse.aether.resolution.ArtifactResolutionException;
 import org.eclipse.aether.resolution.ArtifactResult;
+import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
@@ -80,6 +81,7 @@ import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.PomTunerUtils;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gavtcs;
+import org.l2x6.pom.tuner.model.Profile;
 import org.w3c.dom.Comment;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -622,4 +624,13 @@ public class CqCommonUtils {
                             + " in " + groupId + ":" + artifactId + ":" + resolvedVersion + ":pom"));
         }
     }
+
+    public static Predicate<Profile> getProfiles(MavenSession session) {
+        final Predicate<Profile> profiles = ActiveProfiles.of(
+                session.getCurrentProject().getActiveProfiles().stream()
+                        .map(org.apache.maven.model.Profile::getId)
+                        .toArray(String[]::new));
+        return profiles;
+    }
+
 }
