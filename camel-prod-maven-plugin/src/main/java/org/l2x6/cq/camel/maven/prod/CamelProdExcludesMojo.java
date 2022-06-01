@@ -176,6 +176,20 @@ public class CamelProdExcludesMojo extends AbstractMojo {
     /**
      * {@code artifactId}s that need to get productized in addition to
      * {@code product/src/main/resources/required-productized-camel-artifacts.txt}.
+     * <p>
+     * Since 2.31.0 the elements can optionally prepended with a {@code groupId}.
+     * Elements without {@code groupId} are interpreted as having implicit {@code groupId} {@code org.apache.camel}
+     * <p>
+     * Example:
+     *
+     * <pre>
+     * {@code
+     * <additionalProductizedArtifactIds>
+     *     <additionalProductizedArtifactId>camel-foo</additionalProductizedArtifactId>
+     *     <additionalProductizedArtifactId>org.bar:bar-baz</additionalProductizedArtifactId>
+     * </addExclusion>
+     * }
+     * </pre>
      *
      * @since 2.11.0
      */
@@ -263,7 +277,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
         /* Add the additional ones */
         additionalProductizedArtifactIds.stream()
                 .map(artifactId -> (artifactId.contains(":") ? Ga.of(artifactId)
-                    : new Ga("org.apache.camel", artifactId)))
+                        : new Ga("org.apache.camel", artifactId)))
                 .forEach(includes::add);
         /*
          * Let's edit the pom.xml files out of the real source tree if we are just checking or pom editing is not

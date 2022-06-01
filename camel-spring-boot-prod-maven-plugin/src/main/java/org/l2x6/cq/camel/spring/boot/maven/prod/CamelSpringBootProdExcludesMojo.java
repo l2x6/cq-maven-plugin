@@ -172,6 +172,21 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
     /**
      * {@code artifactId}s that need to get productized in addition to
      * {@code product/src/main/resources/required-productized-camel-artifacts.txt}.
+     * <p>
+     * Since 2.31.0 the elements can optionally prepended with a {@code groupId}.
+     * Elements without {@code groupId} are interpreted as having implicit {@code groupId}
+     * {@code org.apache.camel.springboot}
+     * <p>
+     * Example:
+     *
+     * <pre>
+     * {@code
+     * <additionalProductizedArtifactIds>
+     *     <additionalProductizedArtifactId>camel-foo-starter</additionalProductizedArtifactId>
+     *     <additionalProductizedArtifactId>org.bar:bar-baz</additionalProductizedArtifactId>
+     * </addExclusion>
+     * }
+     * </pre>
      *
      * @since 2.19.1
      */
