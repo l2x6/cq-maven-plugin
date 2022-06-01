@@ -258,7 +258,8 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
         }
         /* Add the additional ones */
         additionalProductizedArtifactIds.stream()
-                .map(artifactId -> new Ga("org.apache.camel.springboot", artifactId))
+                .map(artifactId -> (artifactId.contains(":") ? Ga.of(artifactId)
+                        : new Ga("org.apache.camel.springboot", artifactId)))
                 .forEach(includes::add);
         /*
          * Let's edit the pom.xml files out of the real source tree if we are just checking or pom editing is not
