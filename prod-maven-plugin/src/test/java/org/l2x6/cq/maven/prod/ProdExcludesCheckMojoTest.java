@@ -22,7 +22,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.Collections;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
@@ -38,6 +37,7 @@ public class ProdExcludesCheckMojoTest {
         final ProdExcludesCheckMojo mojo = new ProdExcludesCheckMojo();
         final Path basePath = projectDir.toAbsolutePath().normalize();
         mojo.basedir = basePath.toFile();
+        mojo.multiModuleProjectDirectory = basePath.toFile();
         mojo.encoding = "utf-8";
         mojo.productJson = basePath.resolve("product/src/main/resources/camel-quarkus-product-source.json").toFile();
         mojo.simpleElementWhitespace = SimpleElementWhitespace.SPACE;
@@ -47,21 +47,10 @@ public class ProdExcludesCheckMojoTest {
                 "integration-tests/*/pom.xml",
                 "integration-tests-jvm/*/pom.xml",
                 "integration-test-groups/*/*/pom.xml");
-        mojo.integrationTests = Collections.singletonList(scanner);
-        mojo.requiredProductizedCamelArtifacts = basePath
-                .resolve(ProdExcludesMojo.DEFAULT_REQUIRED_PRODUCTIZED_CAMEL_ARTIFACTS_TXT).toFile();
-        mojo.productizedCamelQuarkusArtifacts = basePath
-                .resolve(ProdExcludesMojo.DEFAULT_PRODUCTIZED_CAMEL_QUARKUS_ARTIFACTS_TXT).toFile();
-        mojo.jenkinsfile = basePath.resolve("Jenkinsfile.redhat").toFile();
         mojo.localRepository = basePath.resolve("target/local-maven-repo").toString();
         mojo.camelVersion = "3.11.1-fuse1";
         mojo.version = "2.3.4";
         mojo.onCheckFailure = OnFailure.FAIL;
-        mojo.productizedDependenciesFile = basePath
-                .resolve("product/src/main/generated/transitive-dependencies-productized.txt").toFile();
-        mojo.nonProductizedDependenciesFile = basePath
-                .resolve("product/src/main/generated/transitive-dependencies-non-productized.txt").toFile();
-        mojo.allDependenciesFile = basePath.resolve("product/src/main/generated/transitive-dependencies-all.txt").toFile();
         return mojo;
     }
 
