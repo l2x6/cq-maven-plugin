@@ -18,5 +18,19 @@
     "additionalProductizedArtifacts": [
         "camel-quarkus-catalog"
     ],
-    "guideUrlTemplate": "https://access.redhat.com/documentation/en-us/red_hat_integration/${cqMajorVersion}.latest/html/camel_extensions_for_quarkus_reference/extensions-${artifactIdBase}"
+    "guideUrlTemplate": "https://access.redhat.com/documentation/en-us/red_hat_integration/${cqMajorVersion}.latest/html/camel_extensions_for_quarkus_reference/extensions-${artifactIdBase}",
+    "integrationTests": [
+        {
+            "basedir": ".",
+            "includes": [
+                "integration-tests/*/pom.xml",
+                "integration-test-groups/*/*/pom.xml",
+                "integration-tests-jvm/*/pom.xml"
+            ],
+            "excludes": [
+                "integration-tests/messaging/pom.xml",
+                "integration-tests/*-grouped/pom.xml"
+            ]
+        }
+    ]
 }

@@ -59,6 +59,7 @@ import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugin.descriptor.PluginDescriptor;
+import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
@@ -92,6 +93,7 @@ import org.l2x6.pom.tuner.PomTunerUtils;
 import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.Expression;
 import org.l2x6.pom.tuner.model.Ga;
+import org.l2x6.pom.tuner.model.GavSet;
 import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.model.Module;
 import org.l2x6.pom.tuner.model.Profile;
@@ -221,6 +223,9 @@ public class ProdExcludesMojo extends AbstractMojo {
     static final String MODULE_COMMENT = "disabled by cq-prod-maven-plugin:prod-excludes";
     static final String DEFAULT_REQUIRED_PRODUCTIZED_CAMEL_ARTIFACTS_TXT = "target/required-productized-camel-artifacts.txt";
     static final String DEFAULT_PRODUCTIZED_CAMEL_QUARKUS_ARTIFACTS_TXT = "target/productized-camel-quarkus-artifacts.txt";
+    static final String DEFAULT_AVAILABLE_CI_NODES = "10";
+    static final String DEFAULT_JENKINSFILE = "Jenkinsfile.redhat";
+    static final String DEFAULT_JENKINSFILE_STAGE_TEMPLATE = "product/jenkinsfile-stage-template.txt";
     static final Pattern JVM_PARENT_MODULE_PATH_PATTERN = Pattern.compile("extensions-jvm/[^/]+/pom.xml");
     static final Pattern JENKINSFILE_PATTERN = Pattern
             .compile("(\\Q// %generated-stages-start%\n\\E)(.*)(\\Q// %generated-stages-end%\\E)", Pattern.DOTALL);
@@ -230,6 +235,9 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     static final String communityGuideUrlTemplate = "https://camel.apache.org/camel-quarkus/latest/reference/extensions/${artifactIdBase}.html";
     static final String defaultCommunityGuide = "https://camel.apache.org/camel-quarkus/latest/user-guide/index.html";
+    static final String DEFAULT_PRODUCTIZED_DEPENDENCIES_FILE = "product/src/main/generated/transitive-dependencies-productized.txt";
+    static final String DEFAULT_ALL_DEPENDENCIES_FILE = "product/src/main/generated/transitive-dependencies-all.txt";
+    static final String DEFAULT_NON_PRODUCTIZED_DEPENDENCIES_FILE = "product/src/main/generated/transitive-dependencies-non-productized.txt";
 
     /**
      * The basedir
@@ -260,64 +268,12 @@ public class ProdExcludesMojo extends AbstractMojo {
     boolean skip;
 
     /**
-     * A list of {@link DirectoryScanner}s selecting integration test {@code pom.xml} files.
-     *
-     * @since 1.4.0
-     */
-    @Parameter
-    List<DirectoryScanner> integrationTests;
-
-    /**
      * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
      *
      * @since 1.1.0
      */
     @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "SPACE")
     SimpleElementWhitespace simpleElementWhitespace;
-
-    /**
-     * Where to write a list of Camel artifacts required by Camel Quarkus productized extensions.
-     * It is a text file one artifactId per line.
-     *
-     * @since 2.3.0
-     */
-    @Parameter(property = "cq.requiredProductizedCamelArtifacts", defaultValue = "${project.basedir}/"
-            + DEFAULT_REQUIRED_PRODUCTIZED_CAMEL_ARTIFACTS_TXT)
-    File requiredProductizedCamelArtifacts;
-
-    /**
-     * Where to write a list of Camel artifacts required by Camel Quarkus productized extensions.
-     * It is a text file one artifactId per line.
-     *
-     * @since 2.5.0
-     */
-    @Parameter(property = "cq.productizedCamelQuarkusArtifacts", defaultValue = "${project.basedir}/"
-            + DEFAULT_PRODUCTIZED_CAMEL_QUARKUS_ARTIFACTS_TXT)
-    File productizedCamelQuarkusArtifacts;
-
-    /**
-     * Number of nodes available to the CI. The tests will be split into as many groups.
-     *
-     * @since 2.4.0
-     */
-    @Parameter(property = "cq.availableCiNodes", defaultValue = "10")
-    int availableCiNodes;
-
-    /**
-     * Path to Jenkinsfile containing {@code // %generated-stages-start%} and {@code // %generated-stages-end%}
-     *
-     * @since 2.4.0
-     */
-    @Parameter(property = "cq.jenkinsfile", defaultValue = "${basedir}/Jenkinsfile.redhat")
-    File jenkinsfile;
-
-    /**
-     * Path to Jenkinsfile containing {@code // %generated-stages-start%} and {@code // %generated-stages-end%}
-     *
-     * @since 2.4.0
-     */
-    @Parameter(property = "cq.jenkinsfileStageTemplate")
-    File jenkinsfileStageTemplate;
 
     /**
      * @since 2.6.0
@@ -394,47 +350,6 @@ public class ProdExcludesMojo extends AbstractMojo {
     String camelQuarkusCommunityVersion;
 
     /**
-     * Where to write a list of runtime dependencies of all Camel Quarkus productized extensions.
-     * It is a text file one artifactId per line.
-     *
-     * @since 2.17.0
-     */
-    @Parameter(property = "cq.productizedDependenciesFile", defaultValue = "${basedir}/product/src/main/generated/transitive-dependencies-productized.txt")
-    File productizedDependenciesFile;
-    Path productizedDependenciesPath;
-
-    /**
-     * Where to write a list of runtime dependencies of all Camel Quarkus productized extensions.
-     * It is a text file one artifactId per line.
-     *
-     * @since 2.17.0
-     */
-    @Parameter(property = "cq.allTransitivesFile", defaultValue = "${basedir}/product/src/main/generated/transitive-dependencies-all.txt")
-    File allDependenciesFile;
-    Path allDependenciesPath;
-
-    /**
-     * Where to write a list of runtime dependencies of all Camel Quarkus productized extensions.
-     * It is a text file one artifactId per line.
-     *
-     * @since 2.17.0
-     */
-    @Parameter(property = "cq.nonProductizedDependenciesFile", defaultValue = "${basedir}/product/src/main/generated/transitive-dependencies-non-productized.txt")
-    File nonProductizedDependenciesFile;
-    Path nonProductizedDependenciesPath;
-
-    /**
-     * A map from Camel Quarkus artifactIds to comma separated list of {@code groupId:artifactId} patterns.
-     * Used for assigning shaded dependencies to a Camel Quarkus artifact when deciding whether the given transitive
-     * needs
-     * to get productized.
-     *
-     * @since 2.18.0
-     */
-    @Parameter(property = "cq.additionalExtensionDependencies")
-    Map<String, String> additionalExtensionDependencies;
-
-    /**
      * Overridden by {@link ProdExcludesCheckMojo}.
      *
      * @return {@code always false}
@@ -453,12 +368,18 @@ public class ProdExcludesMojo extends AbstractMojo {
         charset = Charset.forName(encoding);
         localRepositoryPath = Paths.get(localRepository);
 
-        setIntegrationTests();
-        final Path jenkinsfileName = jenkinsfile.toPath().getFileName();
+        final String majorVersion = version.split("\\.")[0];
+        final Path docReferenceDir = basedir.toPath().resolve("docs/modules/ROOT/pages/reference/extensions");
+
+        final Path absProdJson = basedir.toPath().resolve(productJson.toPath());
+        final Product product = Product.read(absProdJson, charset, majorVersion, docReferenceDir,
+                multiModuleProjectDirectory.toPath());
+
+        final Path jenkinsfileName = product.getJenkinsfile().getFileName();
         final Path basePath = basedir.toPath();
-        productizedDependenciesPath = basePath.relativize(productizedDependenciesFile.toPath());
-        nonProductizedDependenciesPath = basePath.relativize(nonProductizedDependenciesFile.toPath());
-        allDependenciesPath = basePath.relativize(allDependenciesFile.toPath());
+        final Path productizedDependenciesPath = basePath.relativize(product.getProductizedDependenciesFile());
+        final Path nonProductizedDependenciesPath = basePath.relativize(product.getNonProductizedDependenciesFile());
+        final Path allDependenciesPath = basePath.relativize(product.getAllDependenciesFile());
 
         final Path extensionYamlRelPath = Paths.get("src/main/resources/META-INF/quarkus-extension.yaml");
         additionalFiles = path -> jenkinsfileName.equals(path.getFileName())
@@ -466,11 +387,6 @@ public class ProdExcludesMojo extends AbstractMojo {
                 || path.endsWith(allDependenciesPath)
                 || path.endsWith(nonProductizedDependenciesPath)
                 || path.endsWith(productizedDependenciesPath);
-        final String majorVersion = version.split("\\.")[0];
-        final Path docReferenceDir = basedir.toPath().resolve("docs/modules/ROOT/pages/reference/extensions");
-
-        final Path absProdJson = basedir.toPath().resolve(productJson.toPath());
-        final Product product = Product.read(absProdJson, charset, majorVersion, docReferenceDir);
 
         /*
          * Let's edit the copies of pom.xml files outside of the real source tree, if we are just checking or pom
@@ -514,7 +430,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         /* Tests */
         final Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions = new TreeMap<>();
         final Map<Ga, TestCategory> tests = analyzeTests(fullTree, expandedIncludesWithoutTests, profiles, uncoveredExtensions,
-                product.getAllowedMixedTests(), product.getExcludeTests());
+                product.getAllowedMixedTests(), product.getExcludeTests(), product.getIntegrationTests());
 
         /* Add the found product tests to the includes */
         final Set<Ga> tempExpandedIncludesWithTests = new TreeSet<>(expandedIncludesWithoutTests);
@@ -527,7 +443,7 @@ public class ProdExcludesMojo extends AbstractMojo {
 
         final Set<Ga> requiredCamelArtifacts = findRequiredCamelArtifacts(fullTree, expandedIncludesWithProdTests,
                 fullTree.getExpressionEvaluator(profiles));
-        writeProdReports(fullTree, expandedIncludesWithProdTests, profiles, requiredCamelArtifacts);
+        writeProdReports(fullTree, expandedIncludesWithProdTests, profiles, requiredCamelArtifacts, product);
 
         /* Comment all non-productized modules in the tree */
         minimizeTree(workRoot, expandedIncludesWithProdTests, tests, profiles);
@@ -540,7 +456,8 @@ public class ProdExcludesMojo extends AbstractMojo {
         CqCommonUtils.updateVirtualDependencies(charset, simpleElementWhitespace, allVirtualExtensions, catalogPomPath);
 
         /* Enable the mixed tests in special modules */
-        final TreeSet<Ga> expandedIncludesWithAllTests = updateMixedTests(fullTree, expandedIncludesWithProdTests, tests);
+        final TreeSet<Ga> expandedIncludesWithAllTests = updateMixedTests(fullTree, expandedIncludesWithProdTests, tests,
+                product);
 
         /* BOMs */
         final Set<Ga> missingCamelArtifacts = updateBoms(fullTree, expandedIncludesWithAllTests, profiles,
@@ -562,7 +479,13 @@ public class ProdExcludesMojo extends AbstractMojo {
                 workRoot.resolve("integration-tests"), product.getExcludeTests());
 
         /* Invoke transitive-deps mojo */
-        invokeTransitiveDependenciesMojo(basedir.toPath(), workRoot);
+        invokeTransitiveDependenciesMojo(
+                basedir.toPath(),
+                workRoot,
+                product,
+                productizedDependenciesPath,
+                nonProductizedDependenciesPath,
+                allDependenciesPath);
 
         if (isChecking()) {
             final MavenSourceTree finalTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
@@ -614,12 +537,6 @@ public class ProdExcludesMojo extends AbstractMojo {
             throw new MojoFailureException(sb.toString());
         }
 
-    }
-
-    void setIntegrationTests() {
-        if (integrationTests == null) {
-            integrationTests = new ArrayList<>();
-        }
     }
 
     void excludeTestsFromTestList(Path workRoot, MavenSourceTree fullTree, Path testListPomPath, Path integrationTestsDir,
@@ -790,12 +707,13 @@ public class ProdExcludesMojo extends AbstractMojo {
                 (Set<String> unlinkModules) -> Transformation.commentModules(unlinkModules, MODULE_COMMENT));
     }
 
-    TreeSet<Ga> updateMixedTests(final MavenSourceTree fullTree, Set<Ga> expandedIncludes, final Map<Ga, TestCategory> tests) {
+    TreeSet<Ga> updateMixedTests(final MavenSourceTree fullTree, Set<Ga> expandedIncludes, final Map<Ga, TestCategory> tests,
+            Product product) {
         /* Count all native tests */
         int nativeTestsCount = (int) tests.entrySet().stream()
                 .filter(en -> en.getValue().isNative)
                 .count();
-        int availableNodes = availableCiNodes - 1;
+        int availableNodes = product.getAvailableCiNodes() - 1;
         int maxTestsPerGroup = (nativeTestsCount / availableNodes) + 1;
         final Map<TestCategory, TestCategoryTests> testGroups = new EnumMap<>(TestCategory.class);
         Stream.of(TestCategory.values())
@@ -815,15 +733,15 @@ public class ProdExcludesMojo extends AbstractMojo {
                 .map(Entry::getKey)
                 .forEach(includesPlusTests::add);
 
-        updateJenkinsfile(fullTree.getRootDirectory(), groups);
+        updateJenkinsfile(fullTree.getRootDirectory(), groups, product);
 
         return includesPlusTests;
     }
 
     @SuppressWarnings("deprecation")
-    void updateJenkinsfile(Path workRoot, List<TestGroup> groups) {
+    void updateJenkinsfile(Path workRoot, List<TestGroup> groups, Product product) {
         final String stageTemplate;
-        if (jenkinsfileStageTemplate == null) {
+        if (!Files.isRegularFile(product.getJenkinsfileStageTemplate())) {
             final Writer out = new StringWriter();
             try (Reader in = new InputStreamReader(
                     ProdExcludesMojo.class.getClassLoader().getResourceAsStream("jenkinsfile-stage-template.txt"),
@@ -835,9 +753,9 @@ public class ProdExcludesMojo extends AbstractMojo {
             stageTemplate = out.toString();
         } else {
             try {
-                stageTemplate = new String(Files.readAllBytes(jenkinsfileStageTemplate.toPath()), charset);
+                stageTemplate = new String(Files.readAllBytes(product.getJenkinsfileStageTemplate()), charset);
             } catch (IOException e) {
-                throw new RuntimeException("Could not read from " + jenkinsfileStageTemplate, e);
+                throw new RuntimeException("Could not read from " + product.getJenkinsfileStageTemplate(), e);
             }
         }
 
@@ -847,7 +765,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                         .replace("${stageName}", g.getHumanName()))
                 .collect(Collectors.joining());
 
-        final Path relJenkinsfile = basedir.toPath().relativize(jenkinsfile.toPath());
+        final Path relJenkinsfile = basedir.toPath().relativize(product.getJenkinsfile());
         final Path absJenkinsfilePath = workRoot.resolve(relJenkinsfile);
         String content;
         try {
@@ -1038,16 +956,19 @@ public class ProdExcludesMojo extends AbstractMojo {
      * @param  profiles            the active profiles
      * @param  uncoveredExtensions a map from an extension {@link Ga} to set of missing dependencies
      * @param  allowedMixedTests   a Map from extension {@link Ga} to a set of mixed tests covering it that are allowed
+     * @param  integrationTests
      * @return                     a {@link Map} covering all integration tests, from {@link Ga} to {@link TestCategory}
      */
     Map<Ga, TestCategory> analyzeTests(final MavenSourceTree tree, final Set<Ga> productizedGas, Predicate<Profile> profiles,
-            Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions, Map<Ga, Set<Ga>> allowedMixedTests, Set<Ga> excludeTests) {
+            Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions, Map<Ga, Set<Ga>> allowedMixedTests, Set<Ga> excludeTests,
+            List<DirectoryScanner> integrationTests) {
         getLog().debug("Included extensions before considering tests:");
         final Set<Ga> expandedExtensions = CqCommonUtils.filterExtensions(productizedGas.stream())
                 .peek(ga -> getLog().debug(" - " + ga.getArtifactId()))
                 .collect(Collectors.toCollection(TreeSet::new));
 
-        final Map<Ga, Set<Ga>> testModules = collectIntegrationTests(tree, profiles, excludeTests);
+        final Map<Ga, Set<Ga>> testModules = collectIntegrationTests(tree, profiles, excludeTests, getLog(), basedir.toPath(),
+                integrationTests);
 
         final Map<Ga, TestCategory> tests = new TreeMap<>();
         testModules.keySet().stream().forEach(ga -> tests.put(ga, findInitialTestCategory(tree, ga)));
@@ -1115,8 +1036,8 @@ public class ProdExcludesMojo extends AbstractMojo {
         throw new IllegalStateException("Could not assign a category to test " + pomPath);
     }
 
-    public Map<Ga, Set<Ga>> collectIntegrationTests(final MavenSourceTree tree, Predicate<Profile> profiles,
-            Set<Ga> excludeTests) {
+    static Map<Ga, Set<Ga>> collectIntegrationTests(final MavenSourceTree tree, Predicate<Profile> profiles,
+            Set<Ga> excludeTests, Log log, Path basedir, List<DirectoryScanner> integrationTests) {
         final ExpressionEvaluator evaluator = tree.getExpressionEvaluator(profiles);
         final Map<Ga, Set<Ga>> testModules = new TreeMap<>();
         for (DirectoryScanner scanner : integrationTests) {
@@ -1124,7 +1045,7 @@ public class ProdExcludesMojo extends AbstractMojo {
             final Path base = scanner.getBasedir().toPath().toAbsolutePath().normalize();
             for (String scannerPath : scanner.getIncludedFiles()) {
                 final Path pomXmlPath = base.resolve(scannerPath);
-                final String pomXmlRelPath = PomTunerUtils.toUnixPath(basedir.toPath().relativize(pomXmlPath).toString());
+                final String pomXmlRelPath = PomTunerUtils.toUnixPath(basedir.relativize(pomXmlPath).toString());
                 final Module testModule = tree.getModulesByPath().get(pomXmlRelPath);
                 if (testModule == null) {
                     throw new IllegalStateException("Could not find module for path " + pomXmlRelPath);
@@ -1144,14 +1065,18 @@ public class ProdExcludesMojo extends AbstractMojo {
                 }
             }
         }
-        getLog().debug("Found tests:");
-        testModules.entrySet().forEach(m -> getLog().debug(" - " + m.getKey().getArtifactId() + ": " + m.getValue()));
+        log.debug("Found tests:");
+        testModules.entrySet().forEach(m -> log.debug(" - " + m.getKey().getArtifactId() + ": " + m.getValue()));
         return testModules;
     }
 
-    void writeProdReports(MavenSourceTree tree, Set<Ga> expandedIncludes, Predicate<Profile> profiles,
-            Set<Ga> requiredCamelArtifacts) {
-        final Path cqFile = productizedCamelQuarkusArtifacts.toPath();
+    void writeProdReports(
+            MavenSourceTree tree,
+            Set<Ga> expandedIncludes,
+            Predicate<Profile> profiles,
+            Set<Ga> requiredCamelArtifacts,
+            Product product) {
+        final Path cqFile = product.getProductizedCamelQuarkusArtifacts();
         try {
             Files.createDirectories(cqFile.getParent());
         } catch (IOException e1) {
@@ -1175,7 +1100,7 @@ public class ProdExcludesMojo extends AbstractMojo {
             throw new RuntimeException("Could not write to " + cqFile);
         }
 
-        final Path camelFile = requiredProductizedCamelArtifacts.toPath();
+        final Path camelFile = product.getRequiredProductizedCamelArtifacts();
         try (Writer out = Files.newBufferedWriter(camelFile, charset)) {
             requiredCamelArtifacts.stream()
                     .map(Ga::getArtifactId)
@@ -1198,7 +1123,13 @@ public class ProdExcludesMojo extends AbstractMojo {
      * @param realRoot the real root of the source tree
      * @param workRoot the work root, possibly under realRoot/target where we perform non-permanent changes
      */
-    void invokeTransitiveDependenciesMojo(Path realRoot, Path workRoot) {
+    void invokeTransitiveDependenciesMojo(
+            Path realRoot,
+            Path workRoot,
+            Product product,
+            Path productizedDependenciesPath,
+            Path nonProductizedDependenciesPath,
+            Path allDependenciesPath) {
         if (invoker == null) {
             /* Do not test this */
             return;
@@ -1230,7 +1161,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                 workRoot.resolve(productizedDependenciesPath),
                 workRoot.resolve(allDependenciesPath),
                 workRoot.resolve(nonProductizedDependenciesPath),
-                additionalExtensionDependencies,
+                product.getAdditionalExtensionDependencies(),
                 simpleElementWhitespace,
                 repositories,
                 repoSystem,
@@ -1364,7 +1295,8 @@ public class ProdExcludesMojo extends AbstractMojo {
      */
     static class Product {
 
-        public static Product read(Path absProdJson, Charset charset, String majorVersion, Path docReferenceDir) {
+        public static Product read(Path absProdJson, Charset charset, String majorVersion, Path docReferenceDir,
+                Path multiModuleProjectDirectory) {
 
             try (Reader r = Files.newBufferedReader(absProdJson, charset)) {
                 @SuppressWarnings("unchecked")
@@ -1408,6 +1340,46 @@ public class ProdExcludesMojo extends AbstractMojo {
                 final Map<String, String> versionTransformations = (Map<String, String>) json.getOrDefault(
                         "versionTransformations",
                         Collections.emptyMap());
+                final List<DirectoryScanner> integrationTests = new ArrayList<>();
+                final List<Map<String, Object>> itEntries = (List<Map<String, Object>>) json
+                        .getOrDefault("integrationTests", Collections.emptyList());
+                for (Map<String, Object> itEntry : itEntries) {
+                    final DirectoryScanner ds = new DirectoryScanner();
+                    ds.setBasedir(multiModuleProjectDirectory.resolve((String) itEntry.getOrDefault("basedir", ".")).normalize()
+                            .toFile());
+                    ds.setIncludes(
+                            ((List<String>) itEntry.getOrDefault("includes", Collections.emptyList())).toArray(new String[0]));
+                    ds.setExcludes(
+                            ((List<String>) itEntry.getOrDefault("excludes", Collections.emptyList())).toArray(new String[0]));
+                    integrationTests.add(ds);
+                }
+
+                final Path requiredProductizedCamelArtifacts = multiModuleProjectDirectory.resolve((String) json
+                        .getOrDefault("requiredProductizedCamelArtifacts", DEFAULT_REQUIRED_PRODUCTIZED_CAMEL_ARTIFACTS_TXT));
+                final Path productizedCamelQuarkusArtifacts = multiModuleProjectDirectory.resolve((String) json
+                        .getOrDefault("productizedCamelQuarkusArtifacts", DEFAULT_PRODUCTIZED_CAMEL_QUARKUS_ARTIFACTS_TXT));
+                final int availableCiNodes = (Integer) json
+                        .getOrDefault("availableCiNodes", Integer.valueOf(DEFAULT_AVAILABLE_CI_NODES));
+                final Path jenkinsfile = multiModuleProjectDirectory.resolve((String) json
+                        .getOrDefault("jenkinsfile", DEFAULT_JENKINSFILE));
+                final Path jenkinsfileStageTemplate = multiModuleProjectDirectory.resolve((String) json
+                        .getOrDefault("jenkinsfileStageTemplate", DEFAULT_JENKINSFILE_STAGE_TEMPLATE));
+                final Path productizedDependenciesFile = multiModuleProjectDirectory.resolve((String) json
+                        .getOrDefault("productizedDependenciesFile", DEFAULT_PRODUCTIZED_DEPENDENCIES_FILE));
+                final Path allDependenciesFile = multiModuleProjectDirectory.resolve((String) json
+                        .getOrDefault("allDependenciesFile", DEFAULT_ALL_DEPENDENCIES_FILE));
+                final Path nonProductizedDependenciesFile = multiModuleProjectDirectory.resolve((String) json
+                        .getOrDefault("nonProductizedDependenciesFile", DEFAULT_NON_PRODUCTIZED_DEPENDENCIES_FILE));
+                @SuppressWarnings("unchecked")
+                final Map<String, String> additionalExtensionDependencies = (Map<String, String>) json
+                        .getOrDefault("additionalExtensionDependencies", Collections.emptyMap());
+
+                final TreeMap<String, GavSet> additionalDependenciesMap = new TreeMap<>();
+                if (additionalExtensionDependencies != null) {
+                    for (Entry<String, String> en : additionalExtensionDependencies.entrySet()) {
+                        additionalDependenciesMap.put(en.getKey(), GavSet.builder().includes(en.getValue()).build());
+                    }
+                }
 
                 return new Product(
                         Collections.unmodifiableMap(extensionsMap),
@@ -1417,7 +1389,17 @@ public class ProdExcludesMojo extends AbstractMojo {
                         Collections.unmodifiableMap(versionTransformations),
                         Collections.unmodifiableList(additionalProductizedArtifacts),
                         Collections.unmodifiableSet(excludeTests),
-                        allowedMixedTests);
+                        allowedMixedTests,
+                        Collections.unmodifiableList(integrationTests),
+                        requiredProductizedCamelArtifacts,
+                        productizedCamelQuarkusArtifacts,
+                        availableCiNodes,
+                        jenkinsfile,
+                        jenkinsfileStageTemplate,
+                        productizedDependenciesFile,
+                        allDependenciesFile,
+                        nonProductizedDependenciesFile,
+                        Collections.unmodifiableMap(additionalDependenciesMap));
             } catch (IOException e) {
                 throw new RuntimeException("Could not read " + absProdJson, e);
             }
@@ -1431,10 +1413,29 @@ public class ProdExcludesMojo extends AbstractMojo {
         private final List<String> additionalProductizedArtifacts;
         private final Set<Ga> excludeTests;
         private final Map<Ga, Set<Ga>> allowedMixedTests;
+        private final List<DirectoryScanner> integrationTests;
+        private final Path requiredProductizedCamelArtifacts;
+        private final Path productizedCamelQuarkusArtifacts;
+        private final int availableCiNodes;
+        private final Path jenkinsfile;
+        private final Path jenkinsfileStageTemplate;
+        private final Path productizedDependenciesFile;
+        private final Path allDependenciesFile;
+        private final Path nonProductizedDependenciesFile;
+        private final Map<String, GavSet> additionalExtensionDependencies;
 
         public Product(Map<Ga, Extension> extensions, String prodGuideUrlTemplate, String majorVersion, Path docReferenceDir,
                 Map<String, String> versionTransformations, List<String> additionalProductizedArtifacts, Set<Ga> excludeTests,
-                Map<Ga, Set<Ga>> allowedMixedTests) {
+                Map<Ga, Set<Ga>> allowedMixedTests, List<DirectoryScanner> integrationTests,
+                Path requiredProductizedCamelArtifacts,
+                Path productizedCamelQuarkusArtifacts,
+                int availableCiNodes,
+                Path jenkinsfile,
+                Path jenkinsfileStageTemplate,
+                Path productizedDependenciesFile,
+                Path allDependenciesFile,
+                Path nonProductizedDependenciesFile,
+                Map<String, GavSet> additionalExtensionDependencies) {
             this.extensions = extensions;
             this.prodGuideUrlTemplate = prodGuideUrlTemplate;
             this.majorVersion = majorVersion;
@@ -1443,6 +1444,16 @@ public class ProdExcludesMojo extends AbstractMojo {
             this.additionalProductizedArtifacts = additionalProductizedArtifacts;
             this.excludeTests = excludeTests;
             this.allowedMixedTests = allowedMixedTests;
+            this.integrationTests = integrationTests;
+            this.requiredProductizedCamelArtifacts = requiredProductizedCamelArtifacts;
+            this.productizedCamelQuarkusArtifacts = productizedCamelQuarkusArtifacts;
+            this.availableCiNodes = availableCiNodes;
+            this.jenkinsfile = jenkinsfile;
+            this.jenkinsfileStageTemplate = jenkinsfileStageTemplate;
+            this.productizedDependenciesFile = productizedDependenciesFile;
+            this.allDependenciesFile = allDependenciesFile;
+            this.nonProductizedDependenciesFile = nonProductizedDependenciesFile;
+            this.additionalExtensionDependencies = additionalExtensionDependencies;
         }
 
         /**
@@ -1472,7 +1483,8 @@ public class ProdExcludesMojo extends AbstractMojo {
 
         /**
          * @param  ga the {@link Ga} to look the doc page URL for
-         * @return    an URL to a doc page of the given extension, either a product doc page or a community page or the default
+         * @return    an URL to a doc page of the given extension, either a product doc page or a community page or the
+         *            default
          *            {@value ProdExcludesMojo#defaultCommunityGuide}
          */
         public String getExtensionDocPageUrl(Ga ga) {
@@ -1524,6 +1536,46 @@ public class ProdExcludesMojo extends AbstractMojo {
             public Ga getGa() {
                 return ga;
             }
+        }
+
+        public List<DirectoryScanner> getIntegrationTests() {
+            return integrationTests;
+        }
+
+        public Path getRequiredProductizedCamelArtifacts() {
+            return requiredProductizedCamelArtifacts;
+        }
+
+        public Path getProductizedCamelQuarkusArtifacts() {
+            return productizedCamelQuarkusArtifacts;
+        }
+
+        public int getAvailableCiNodes() {
+            return availableCiNodes;
+        }
+
+        public Path getJenkinsfile() {
+            return jenkinsfile;
+        }
+
+        public Path getJenkinsfileStageTemplate() {
+            return jenkinsfileStageTemplate;
+        }
+
+        public Path getProductizedDependenciesFile() {
+            return productizedDependenciesFile;
+        }
+
+        public Path getAllDependenciesFile() {
+            return allDependenciesFile;
+        }
+
+        public Path getNonProductizedDependenciesFile() {
+            return nonProductizedDependenciesFile;
+        }
+
+        public Map<String, GavSet> getAdditionalExtensionDependencies() {
+            return additionalExtensionDependencies;
         }
     }
 

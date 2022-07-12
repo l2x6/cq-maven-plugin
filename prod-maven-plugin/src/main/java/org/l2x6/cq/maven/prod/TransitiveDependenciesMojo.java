@@ -125,7 +125,7 @@ public class TransitiveDependenciesMojo {
      *
      * @since 2.18.0
      */
-    private final Map<String, String> additionalExtensionDependencies;
+    private final Map<String, GavSet> additionalExtensionDependencies;
 
     /**
      * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
@@ -148,7 +148,7 @@ public class TransitiveDependenciesMojo {
             String version, String camelQuarkusCommunityVersion,
             Path basedir, Charset charset,
             Path productizedDependenciesFile, Path allDependenciesFile, Path nonProductizedDependenciesFile,
-            Map<String, String> additionalExtensionDependencies, SimpleElementWhitespace simpleElementWhitespace,
+            Map<String, GavSet> additionalExtensionDependencies, SimpleElementWhitespace simpleElementWhitespace,
             List<RemoteRepository> repositories, RepositorySystem repoSystem,
             RepositorySystemSession repoSession,
             Log log,
@@ -170,12 +170,6 @@ public class TransitiveDependenciesMojo {
     }
 
     public void execute() {
-        final TreeMap<String, GavSet> additionalDependenciesMap = new TreeMap<>();
-        if (additionalExtensionDependencies != null) {
-            for (Entry<String, String> en : additionalExtensionDependencies.entrySet()) {
-                additionalDependenciesMap.put(en.getKey(), GavSet.builder().includes(en.getValue()).build());
-            }
-        }
 
         final Model bomModel = CqCommonUtils.readPom(basedir.resolve("poms/bom/pom.xml"), charset);
 
@@ -202,7 +196,7 @@ public class TransitiveDependenciesMojo {
                 .filter(dep -> !"import".equals(dep.getScope()))
                 .forEach(dep -> {
                     final Ga depGa = new Ga(dep.getGroupId(), dep.getArtifactId());
-                    additionalDependenciesMap.entrySet().stream()
+                    additionalExtensionDependencies.entrySet().stream()
                             .filter(en -> en.getValue().contains(dep.getGroupId(), dep.getArtifactId(), dep.getVersion()))
                             .map(Entry::getKey) // artifactId
                             .findFirst()
