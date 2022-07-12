@@ -43,6 +43,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Predicate;
@@ -200,20 +201,6 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     }
 
-    static class ExtensionSupportStatus {
-        public ExtensionSupportStatus(ModeSupportStatus jvmSupportStatus, ModeSupportStatus nativeSupportStatus) {
-            this.jvmSupportStatus = jvmSupportStatus;
-            this.nativeSupportStatus = nativeSupportStatus;
-        }
-
-        private final ModeSupportStatus jvmSupportStatus;
-        private final ModeSupportStatus nativeSupportStatus;
-
-        public boolean hasProductDocumentationPage() {
-            return jvmSupportStatus.hasProductDocumentationPage() || nativeSupportStatus.hasProductDocumentationPage();
-        }
-    }
-
     enum ModeSupportStatus {
         community, techPreview, supported;
 
@@ -240,6 +227,10 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     static final Ga IO_QUARKUS_QUARKUS_BOM = new Ga("io.quarkus", "quarkus-bom");
     static final Ga IO_QUARKUS_QUARKUS_BOM_TEST = new Ga("io.quarkus", "quarkus-bom-test");
+
+    static final String communityGuideUrlTemplate = "https://camel.apache.org/camel-quarkus/latest/reference/extensions/${artifactIdBase}.html";
+    static final String defaultCommunityGuide = "https://camel.apache.org/camel-quarkus/latest/user-guide/index.html";
+
     /**
      * The basedir
      *
@@ -461,9 +452,8 @@ public class ProdExcludesMojo extends AbstractMojo {
         }
         charset = Charset.forName(encoding);
         localRepositoryPath = Paths.get(localRepository);
-        if (integrationTests == null) {
-            integrationTests = Collections.emptyList();
-        }
+
+        setIntegrationTests();
         final Path jenkinsfileName = jenkinsfile.toPath().getFileName();
         final Path basePath = basedir.toPath();
         productizedDependenciesPath = basePath.relativize(productizedDependenciesFile.toPath());
@@ -477,64 +467,10 @@ public class ProdExcludesMojo extends AbstractMojo {
                 || path.endsWith(nonProductizedDependenciesPath)
                 || path.endsWith(productizedDependenciesPath);
         final String majorVersion = version.split("\\.")[0];
-        final String communityGuideUrlTemplate = "https://camel.apache.org/camel-quarkus/latest/reference/extensions/${artifactIdBase}.html";
-        final String defaultCommunityGuide = "https://camel.apache.org/camel-quarkus/latest/user-guide/index.html";
         final Path docReferenceDir = basedir.toPath().resolve("docs/modules/ROOT/pages/reference/extensions");
 
-        /* Collect the list of productize artifacts based on data from camel-quarkus-product-source.json */
         final Path absProdJson = basedir.toPath().resolve(productJson.toPath());
-        final Set<Ga> includes = new TreeSet<Ga>();
-        final Map<Ga, String> extensionsDocPages = new TreeMap<>();
-        final Set<Ga> requiredExtensions = new TreeSet<Ga>();
-        final Set<Ga> excludeTests = new TreeSet<Ga>();
-        final Map<Ga, Set<Ga>> allowedMixedTests = new TreeMap<>();
-        final Map<String, String> versionTransformations;
-        try (Reader r = Files.newBufferedReader(absProdJson, charset)) {
-            @SuppressWarnings("unchecked")
-            final Map<String, Object> json = new Gson().fromJson(r, Map.class);
-            final String prodGuideUrlTemplate = (String) json.get("guideUrlTemplate");
-            @SuppressWarnings("unchecked")
-            final Map<String, Object> extensions = (Map<String, Object>) json.get("extensions");
-            for (Entry<String, Object> en : extensions.entrySet()) {
-                final String artifactId = en.getKey();
-                final Ga extensionGa = new Ga("org.apache.camel.quarkus", artifactId);
-                requiredExtensions.add(extensionGa);
-                includes.add(extensionGa);
-                includes.add(new Ga("org.apache.camel.quarkus", artifactId + "-deployment"));
-
-                Map<String, Object> extensionEntry = (Map<String, Object>) en.getValue();
-                if (new ExtensionSupportStatus(ModeSupportStatus.valueOf((String) extensionEntry.get("jvm")),
-                        ModeSupportStatus.valueOf((String) extensionEntry.get("native"))).hasProductDocumentationPage()) {
-                    extensionsDocPages.put(extensionGa, guideUrl(majorVersion, extensionGa, prodGuideUrlTemplate));
-                }
-
-                @SuppressWarnings("unchecked")
-                final List<String> allowedMixedTestsList = (List<String>) extensionEntry.get("allowedMixedTests");
-                if (allowedMixedTestsList != null) {
-                    final Set<Ga> moduleAllowedMixedTests = allowedMixedTestsList.stream()
-                            .map(a -> new Ga("org.apache.camel.quarkus", a))
-                            .collect(Collectors.toCollection(TreeSet::new));
-                    allowedMixedTests.put(extensionGa, moduleAllowedMixedTests);
-                }
-            }
-            @SuppressWarnings("unchecked")
-            final List<String> additionalProductizedArtifacts = (List<String>) json.get("additionalProductizedArtifacts");
-            if (additionalProductizedArtifacts != null) {
-                for (String artifactId : additionalProductizedArtifacts) {
-                    includes.add(new Ga("org.apache.camel.quarkus", artifactId));
-                }
-            }
-            @SuppressWarnings("unchecked")
-            final List<String> excludeTestsList = (List<String>) json.get("excludeTests");
-            if (excludeTestsList != null) {
-                for (String artifactId : excludeTestsList) {
-                    excludeTests.add(new Ga("org.apache.camel.quarkus", artifactId));
-                }
-            }
-            versionTransformations = (Map<String, String>) json.getOrDefault("versionTransformations", Collections.emptyMap());
-        } catch (IOException e) {
-            throw new RuntimeException("Could not read " + absProdJson, e);
-        }
+        final Product product = Product.read(absProdJson, charset, majorVersion, docReferenceDir);
 
         /*
          * Let's edit the copies of pom.xml files outside of the real source tree, if we are just checking or pom
@@ -569,19 +505,16 @@ public class ProdExcludesMojo extends AbstractMojo {
         /* Re-link any previously commented modules */
         final MavenSourceTree fullTree = initialTree.relinkModules(charset, simpleElementWhitespace, MODULE_COMMENT);
 
-        extensionsDocPages(docReferenceDir, majorVersion, communityGuideUrlTemplate, defaultCommunityGuide,
-                fullTree.getModulesByGa().keySet(), extensionsDocPages);
-
         /* Add the modules required by the includes */
         final Set<Ga> expandedIncludesWithoutTests = Collections
-                .unmodifiableSet(fullTree.findRequiredModules(includes, profiles));
+                .unmodifiableSet(fullTree.findRequiredModules(product.getInitialProductizedModules(), profiles));
 
-        updateVersions(fullTree, profiles, versionTransformations);
+        updateVersions(fullTree, profiles, product.versionTransformations);
 
         /* Tests */
         final Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions = new TreeMap<>();
         final Map<Ga, TestCategory> tests = analyzeTests(fullTree, expandedIncludesWithoutTests, profiles, uncoveredExtensions,
-                allowedMixedTests, excludeTests);
+                product.getAllowedMixedTests(), product.getExcludeTests());
 
         /* Add the found product tests to the includes */
         final Set<Ga> tempExpandedIncludesWithTests = new TreeSet<>(expandedIncludesWithoutTests);
@@ -600,7 +533,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         minimizeTree(workRoot, expandedIncludesWithProdTests, tests, profiles);
 
         /* Fix the virtual deps in the Catalog */
-        final Set<Gavtcs> allVirtualExtensions = requiredExtensions.stream()
+        final Set<Gavtcs> allVirtualExtensions = product.getProductExtensions().keySet().stream()
                 .map(ga -> new Gavtcs(ga.getGroupId(), ga.getArtifactId(), null))
                 .map(gavtcs -> gavtcs.toVirtual())
                 .collect(Collectors.toSet());
@@ -613,7 +546,8 @@ public class ProdExcludesMojo extends AbstractMojo {
         final Set<Ga> missingCamelArtifacts = updateBoms(fullTree, expandedIncludesWithAllTests, profiles,
                 requiredCamelArtifacts);
 
-        updateSuperApp(workRoot, requiredExtensions, fullTree.getRootModule().getGav().getVersion().asConstant());
+        updateSuperApp(workRoot, product.getProductExtensions().keySet(),
+                fullTree.getRootModule().getGav().getVersion().asConstant());
 
         /* Uncomment the product module and comment test modules */
         new PomTransformer(workRoot.resolve("pom.xml"), charset, simpleElementWhitespace)
@@ -621,11 +555,11 @@ public class ProdExcludesMojo extends AbstractMojo {
                         Transformation.uncommentModules(MODULE_COMMENT, m -> m.equals("product")));
 
         /* Product guide links */
-        updateProductGuideLinks(workRoot, extensionsDocPages, fullTree, extensionYamlRelPath);
+        updateProductGuideLinks(workRoot, product, fullTree, extensionYamlRelPath);
 
         /* Make sure all excludeTests are excluded from the config in tooling/test-list/pom.xml */
         excludeTestsFromTestList(workRoot, fullTree, workRoot.resolve("tooling/test-list/pom.xml"),
-                workRoot.resolve("integration-tests"), excludeTests);
+                workRoot.resolve("integration-tests"), product.getExcludeTests());
 
         /* Invoke transitive-deps mojo */
         invokeTransitiveDependenciesMojo(basedir.toPath(), workRoot);
@@ -682,18 +616,10 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     }
 
-    static void extensionsDocPages(Path docReferenceDir, String majorVersion, String guideUrlTemplate,
-            String defaultGuideUrlTemplate, Set<Ga> allGas, Map<Ga, String> extensionsDocPages) {
-        CqCommonUtils.filterExtensions(allGas.stream())
-                .filter(ga -> !extensionsDocPages.containsKey(ga))
-                .forEach(ga -> {
-                    final String artifactIdBase = ga.getArtifactId().replace("camel-quarkus-", "");
-                    if (Files.isRegularFile(docReferenceDir.resolve(artifactIdBase + ".adoc"))) {
-                        extensionsDocPages.put(ga, guideUrl(majorVersion, ga, guideUrlTemplate));
-                    } else {
-                        extensionsDocPages.put(ga, defaultGuideUrlTemplate);
-                    }
-                });
+    void setIntegrationTests() {
+        if (integrationTests == null) {
+            integrationTests = new ArrayList<>();
+        }
     }
 
     void excludeTestsFromTestList(Path workRoot, MavenSourceTree fullTree, Path testListPomPath, Path integrationTestsDir,
@@ -726,7 +652,7 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     void updateProductGuideLinks(
             Path workRoot,
-            Map<Ga, String> extensionDocPages,
+            Product productDefinition,
             MavenSourceTree fullTree,
             Path extensionYamlRelPath) {
         final Pattern guidePattern = Pattern.compile("guide: \"([^\"]*)\"");
@@ -741,7 +667,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                     final Matcher m = guidePattern.matcher(src);
                     if (m.find()) {
                         final String oldUrl = m.group(1);
-                        final String newUrl = extensionDocPages.get(ga);
+                        final String newUrl = productDefinition.getExtensionDocPageUrl(ga);
                         if (!newUrl.equals(oldUrl)) {
                             final StringBuilder sb = new StringBuilder(src.length());
                             m.appendReplacement(sb, "guide: \"" + newUrl + "\"");
@@ -894,6 +820,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         return includesPlusTests;
     }
 
+    @SuppressWarnings("deprecation")
     void updateJenkinsfile(Path workRoot, List<TestGroup> groups) {
         final String stageTemplate;
         if (jenkinsfileStageTemplate == null) {
@@ -1429,6 +1356,174 @@ public class ProdExcludesMojo extends AbstractMojo {
             Files.write(destinationPath, content.getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             throw new RuntimeException("Could not write to " + destinationPath);
+        }
+    }
+
+    /**
+     * A representation of data stored in {@code product/src/main/resources/camel-quarkus-product-source.json}.
+     */
+    static class Product {
+
+        public static Product read(Path absProdJson, Charset charset, String majorVersion, Path docReferenceDir) {
+
+            try (Reader r = Files.newBufferedReader(absProdJson, charset)) {
+                @SuppressWarnings("unchecked")
+                final Map<String, Object> json = new Gson().fromJson(r, Map.class);
+                final String prodGuideUrlTemplate = (String) json.get("guideUrlTemplate");
+                @SuppressWarnings("unchecked")
+                final Map<String, Object> extensions = (Map<String, Object>) json.get("extensions");
+                final Map<Ga, Extension> extensionsMap = new TreeMap<>();
+                final Set<Ga> excludeTests = new TreeSet<Ga>();
+                final Map<Ga, Set<Ga>> allowedMixedTests = new TreeMap<>();
+                for (Entry<String, Object> en : extensions.entrySet()) {
+
+                    final String artifactId = en.getKey();
+                    final Ga extensionGa = new Ga("org.apache.camel.quarkus", artifactId);
+                    Map<String, Object> extensionEntry = (Map<String, Object>) en.getValue();
+                    extensionsMap.put(extensionGa,
+                            new Extension(extensionGa, ModeSupportStatus.valueOf((String) extensionEntry.get("jvm")),
+                                    ModeSupportStatus.valueOf((String) extensionEntry.get("native"))));
+
+                    @SuppressWarnings("unchecked")
+                    final List<String> allowedMixedTestsList = (List<String>) extensionEntry.get("allowedMixedTests");
+                    if (allowedMixedTestsList != null) {
+                        final Set<Ga> moduleAllowedMixedTests = allowedMixedTestsList.stream()
+                                .map(a -> new Ga("org.apache.camel.quarkus", a))
+                                .collect(Collectors.toCollection(TreeSet::new));
+                        allowedMixedTests.put(extensionGa, moduleAllowedMixedTests);
+                    }
+                }
+                @SuppressWarnings("unchecked")
+                final List<String> additionalProductizedArtifacts = (List<String>) json
+                        .getOrDefault("additionalProductizedArtifacts", Collections.emptyList());
+                @SuppressWarnings("unchecked")
+                final List<String> excludeTestsList = (List<String>) json.get("excludeTests");
+                if (excludeTestsList != null) {
+                    for (String artifactId : excludeTestsList) {
+                        excludeTests.add(new Ga("org.apache.camel.quarkus", artifactId));
+                    }
+                }
+
+                @SuppressWarnings("unchecked")
+                final Map<String, String> versionTransformations = (Map<String, String>) json.getOrDefault(
+                        "versionTransformations",
+                        Collections.emptyMap());
+
+                return new Product(
+                        Collections.unmodifiableMap(extensionsMap),
+                        prodGuideUrlTemplate,
+                        majorVersion,
+                        docReferenceDir,
+                        Collections.unmodifiableMap(versionTransformations),
+                        Collections.unmodifiableList(additionalProductizedArtifacts),
+                        Collections.unmodifiableSet(excludeTests),
+                        allowedMixedTests);
+            } catch (IOException e) {
+                throw new RuntimeException("Could not read " + absProdJson, e);
+            }
+        }
+
+        private final Map<Ga, Extension> extensions;
+        private final String prodGuideUrlTemplate;
+        private final String majorVersion;
+        private final Path docReferenceDir;
+        private final Map<String, String> versionTransformations;
+        private final List<String> additionalProductizedArtifacts;
+        private final Set<Ga> excludeTests;
+        private final Map<Ga, Set<Ga>> allowedMixedTests;
+
+        public Product(Map<Ga, Extension> extensions, String prodGuideUrlTemplate, String majorVersion, Path docReferenceDir,
+                Map<String, String> versionTransformations, List<String> additionalProductizedArtifacts, Set<Ga> excludeTests,
+                Map<Ga, Set<Ga>> allowedMixedTests) {
+            this.extensions = extensions;
+            this.prodGuideUrlTemplate = prodGuideUrlTemplate;
+            this.majorVersion = majorVersion;
+            this.docReferenceDir = docReferenceDir;
+            this.versionTransformations = versionTransformations;
+            this.additionalProductizedArtifacts = additionalProductizedArtifacts;
+            this.excludeTests = excludeTests;
+            this.allowedMixedTests = allowedMixedTests;
+        }
+
+        /**
+         * @return a {@link Map} of {@link Extension}s defining a product
+         */
+        public Map<Ga, Extension> getProductExtensions() {
+            return extensions;
+        }
+
+        /**
+         * @return a {@link SortedSet} of {@link Ga}s representing modules required by the product. This is the
+         *         "initial" set - i.e. any possible transitive dependencies are yet to be resolved.
+         */
+        public SortedSet<Ga> getInitialProductizedModules() {
+            SortedSet<Ga> result = new TreeSet<>();
+            for (Ga ga : extensions.keySet()) {
+                result.add(ga);
+                result.add(new Ga("org.apache.camel.quarkus", ga.getArtifactId() + "-deployment"));
+            }
+            if (additionalProductizedArtifacts != null) {
+                for (String artifactId : additionalProductizedArtifacts) {
+                    result.add(new Ga("org.apache.camel.quarkus", artifactId));
+                }
+            }
+            return Collections.unmodifiableSortedSet(result);
+        }
+
+        /**
+         * @param  ga the {@link Ga} to look the doc page URL for
+         * @return    an URL to a doc page of the given extension, either a product doc page or a community page or the default
+         *            {@value ProdExcludesMojo#defaultCommunityGuide}
+         */
+        public String getExtensionDocPageUrl(Ga ga) {
+            final Extension ext = extensions.get(ga);
+
+            if (ext != null && ext.hasProductDocumentationPage()) {
+                return guideUrl(majorVersion, ga, prodGuideUrlTemplate);
+            }
+            final String artifactIdBase = ga.getArtifactId().replace("camel-quarkus-", "");
+            if (Files.isRegularFile(docReferenceDir.resolve(artifactIdBase + ".adoc"))) {
+                return guideUrl(majorVersion, ga, communityGuideUrlTemplate);
+            } else {
+                return defaultCommunityGuide;
+            }
+        }
+
+        /**
+         * @return see {@code product/README.adoc} of the current product branch
+         */
+        public Set<Ga> getExcludeTests() {
+            return excludeTests;
+        }
+
+        /**
+         * @return see {@code product/README.adoc} of the current product branch
+         */
+        public Map<Ga, Set<Ga>> getAllowedMixedTests() {
+            return allowedMixedTests;
+        }
+
+        /**
+         * A representation of a product extension as defined in {@code camel-quarkus-product-source.json}
+         */
+        static class Extension {
+            private final Ga ga;
+            private final ModeSupportStatus jvmSupportStatus;
+            private final ModeSupportStatus nativeSupportStatus;
+
+            public Extension(Ga ga, ModeSupportStatus jvmSupportStatus, ModeSupportStatus nativeSupportStatus) {
+                this.ga = ga;
+                this.jvmSupportStatus = jvmSupportStatus;
+                this.nativeSupportStatus = nativeSupportStatus;
+            }
+
+            public boolean hasProductDocumentationPage() {
+                return jvmSupportStatus.hasProductDocumentationPage() || nativeSupportStatus.hasProductDocumentationPage();
+            }
+
+            public Ga getGa() {
+                return ga;
+            }
         }
     }
 
