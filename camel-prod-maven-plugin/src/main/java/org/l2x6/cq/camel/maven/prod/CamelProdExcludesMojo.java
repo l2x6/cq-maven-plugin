@@ -310,9 +310,22 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                 additionalFiles);
 
         /* Remove non-prod components from camel-allcomponents in the copy */
-        new PomTransformer(originalFullTreeCopyDir.resolve("core/camel-allcomponents/pom.xml"), charset,
+        /* Find the first existing allcomponents dir */
+        Path allComponents = Stream.of(
+                "core/camel-allcomponents/pom.xml",
+                "catalog/camel-allcomponents/pom.xml" // since Camel 3.17 or so
+        )
+                .map(originalFullTreeCopyDir::resolve)
+                .filter(Files::isRegularFile)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "Could not find allcomponents module; searched in core/camel-allcomponents/pom.xml and catalog/camel-allcomponents/pom.xml"));
+
+        /* Remove non-prod components from camel-allcomponents in the copy */
+        new PomTransformer(allComponents, charset,
                 simpleElementWhitespace)
-                        .transform(Transformation.removeDependency(true, true, gavtcs -> !includes.contains(gavtcs.toGa())));
+                        .transform(
+                                Transformation.removeDependency(true, true, gavtcs -> !includes.contains(gavtcs.toGa())));
 
         /* Remove own plugins from the copy */
         Stream.of("dsl/camel-yaml-dsl/camel-yaml-dsl/pom.xml").forEach(relPath -> {
