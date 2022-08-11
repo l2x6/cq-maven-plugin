@@ -521,24 +521,37 @@ public class FlattenBomTask {
                                     final String type = dep.getType() == null ? "jar" : dep.getType();
                                     final String classifier = dep.getClassifier() == null ? null
                                             : evaluator.evaluate(dep.getClassifier());
-                                    final String version = originalConstrains.stream()
-                                            .filter(d -> groupId.equals(d.getGroupId())
-                                                    && artifactId.equals(d.getArtifactId())
-                                                    && compare(type, d.getType(), "jar")
-                                                    && compare(classifier, d.getClassifier(), ""))
-                                            .map(Dependency::getVersion)
-                                            .findFirst()
-                                            .orElseThrow();
                                     return new Gavtcs(
                                             groupId,
                                             artifactId,
-                                            version,
+                                            null,
                                             type,
                                             classifier, null);
-
                                 })
                                 .filter(dep -> FlattenBomTask.toResolveDependencies.contains(dep.getGroupId(),
                                         dep.getArtifactId()))
+                                .map(gavtcs -> {
+                                    final String version = originalConstrains.stream()
+                                            .filter(d -> gavtcs.getGroupId().equals(d.getGroupId())
+                                                    && gavtcs.getArtifactId().equals(d.getArtifactId())
+                                                    && compare(gavtcs.getType(), d.getType(), "jar")
+                                                    && compare(gavtcs.getClassifier(), d.getClassifier(), ""))
+                                            .map(Dependency::getVersion)
+                                            .findFirst()
+                                            /* If the given gatc is not found in the set of original constraints,
+                                             * it is an artifact managed in a BOM distinct from ours (e.g. in quarkus-bom).
+                                             * Transitives of artifacts managed in quarkus might matter in some cases.
+                                             * Maybe we should resolve using all available BOMs
+                                             */
+                                            .orElse(null);
+                                    return new Gavtcs(
+                                            gavtcs.getGroupId(),
+                                            gavtcs.getArtifactId(),
+                                            version,
+                                            gavtcs.getType(),
+                                            gavtcs.getClassifier(), null);
+                                })
+                                .filter(gavtcs -> gavtcs.getVersion() != null)
                                 .forEach(result::add);
                     }
                 });
