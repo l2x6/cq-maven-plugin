@@ -653,6 +653,12 @@ public class FlattenBomTask {
 
     void checkBannedDependencies(Map<Gavtcs, Set<Ga>> transitivesByBomEntry) {
 
+        transitivesByBomEntry.keySet()
+                .stream()
+                .map(ga -> ga.toString())
+                .sorted()
+                .forEach(key -> System.out.println("==trnasitive key " + key));
+
         final org.w3c.dom.Document document;
         final Path path = rootModuleDirectory.resolve("pom.xml");
         try {

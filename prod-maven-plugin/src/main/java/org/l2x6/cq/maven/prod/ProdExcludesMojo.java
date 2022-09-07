@@ -1208,7 +1208,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                     childList(config, "resolutionSuspects"),
                     childList(config, "originExcludes"),
                     bomEntryTransformations,
-                    optionalChild(config, "onCheckFailure").map(OnFailure::valueOf).orElse(null),
+                    onCheckFailure,
                     p,
                     rootDir,
                     optionalChild(config, "fullPomPath").map(Paths::get).orElse(null),
