@@ -163,6 +163,26 @@ public class FlattenBomMojo extends AbstractMojo {
     File flattenedReducedVerbosePomFile;
 
     /**
+     * A list of GAV patterns to select a set of entries that must be present in the resulting flattened BOM.
+     * The universe against which these patterns will be resolved is the set if {@link #resolutionEntryPointIncludes}
+     * (minus {@link #resolutionEntryPointIncludes}) and all their transitive dependencies. This is handy to make sure
+     * that e.g. some groups are managed completely.
+     *
+     * @since 3.2.0
+     */
+    @Parameter(property = "cq.requiredBomEntryIncludes", defaultValue = "org.apache.camel")
+    List<String> requiredBomEntryIncludes;
+
+    /**
+     * A list of GAV patterns to select a set of entries that may not be present in the resulting flattened BOM.
+     * See {@link #requiredBomEntryIncludes}.
+     *
+     * @since 3.2.0
+     */
+    @Parameter(property = "cq.requiredBomEntryExcludes")
+    List<String> requiredBomEntryExcludes;
+
+    /**
      * What should happen when the checks performed by this plugin fail. Possible values: {@code WARN}, {@code FAIL},
      * {@code IGNORE}.
      *
@@ -293,6 +313,8 @@ public class FlattenBomMojo extends AbstractMojo {
                 resolutionSuspects,
                 originExcludes,
                 bomEntryTransformations,
+                requiredBomEntryIncludes,
+                requiredBomEntryExcludes,
                 onCheckFailure,
                 project,
                 rootModuleDirectory,

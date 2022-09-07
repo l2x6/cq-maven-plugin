@@ -1202,12 +1202,18 @@ public class ProdExcludesMojo extends AbstractMojo {
                             optionalChild(xpp3Dom, "addExclusions").orElse(null)))
                     .collect(Collectors.toList());
 
+            List<String> requiredBomEntryIncludes = childList(config, "requiredBomEntryIncludes");
+            if (requiredBomEntryIncludes == null) {
+                requiredBomEntryIncludes = List.of("org.apache.camel");
+            }
             final Path flattenedBomPath = new FlattenBomTask(
                     childList(config, "resolutionEntryPointIncludes"),
                     childList(config, "resolutionEntryPointExcludes"),
                     childList(config, "resolutionSuspects"),
                     childList(config, "originExcludes"),
                     bomEntryTransformations,
+                    requiredBomEntryIncludes,
+                    childList(config, "requiredBomEntryExcludes"),
                     onCheckFailure,
                     p,
                     rootDir,

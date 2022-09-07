@@ -237,6 +237,7 @@ public class FlattenBomTask {
     private final List<String> resolutionSuspects;
     private final List<String> originExcludes;
     private final List<FlattenBomTask.BomEntryTransformation> bomEntryTransformations;
+    private final GavSet requiredBomEntries;
     private final OnFailure onCheckFailure;
     private final Model effectivePomModel;
     private final String version;
@@ -267,7 +268,9 @@ public class FlattenBomTask {
 
     public FlattenBomTask(List<String> resolutionEntryPointIncludes, List<String> resolutionEntryPointExcludes,
             List<String> resolutionSuspects, List<String> originExcludes,
-            List<FlattenBomTask.BomEntryTransformation> bomEntryTransformations, OnFailure onCheckFailure,
+            List<FlattenBomTask.BomEntryTransformation> bomEntryTransformations,
+            List<String> requiredBomEntryIncludes, List<String> requiredBomEntryExcludes,
+            OnFailure onCheckFailure,
             MavenProject project,
             Path rootModuleDirectory, Path fullPomPath, Path reducedVerbosePamPath,
             Path reducedPomPath, Charset charset, Log log, List<RemoteRepository> repositories, RepositorySystem repoSystem,
@@ -278,6 +281,10 @@ public class FlattenBomTask {
         this.resolutionSuspects = resolutionSuspects;
         this.originExcludes = originExcludes;
         this.bomEntryTransformations = mergeTransformations(rootModuleDirectory, bomEntryTransformations, charset);
+        this.requiredBomEntries = GavSet.builder()
+                .includes(requiredBomEntryIncludes == null ? Collections.emptyList() : requiredBomEntryIncludes)
+                .excludes(requiredBomEntryExcludes == null ? Collections.emptyList() : requiredBomEntryExcludes)
+                .build();
         this.onCheckFailure = onCheckFailure;
         this.project = project;
         this.effectivePomModel = project.getModel();
@@ -373,6 +380,8 @@ public class FlattenBomTask {
                     /* Exclude non-required constraints */
                     .filter(dep -> requiredGas.contains(new Ga(dep.getGroupId(), dep.getArtifactId())))
                     .collect(Collectors.toList()));
+
+            checkReuiredConstraints(requiredGas, filteredConstraints);
 
             StringFormatter formatter = new InputLocationStringFormatter(version);
             write(originalConstrains, fullPomPath, effectivePomModel, charset, true, formatter);
@@ -480,7 +489,6 @@ public class FlattenBomTask {
             allTransitives.addAll(collector.allTransitives);
         }
 
-        checkManagedCamelArtifacts(allTransitives, originalConstrains);
         checkManagedCamelQuarkusArtifacts(t, originalConstrains);
         checkBannedDependencies(transitivesByBomEntry);
 
@@ -614,15 +622,15 @@ public class FlattenBomTask {
         return deploymentArtifactId.substring(0, deploymentArtifactId.length() - "-deployment".length());
     }
 
-    void checkManagedCamelArtifacts(Set<Ga> allTransitives, List<Dependency> originalConstrains) {
+    void checkReuiredConstraints(Set<Ga> allTransitives, List<Dependency> originalConstrains) {
         final List<String> requiredCamelArtifacts = allTransitives.stream()
-                .filter(ga -> ga.getGroupId().equals("org.apache.camel"))
+                .filter(ga -> requiredBomEntries.contains(ga.getGroupId(), ga.getArtifactId()))
                 .map(Ga::toString)
                 .sorted()
                 .collect(Collectors.toList());
 
         final List<String> managedCamelArtifacts = originalConstrains.stream()
-                .filter(dep -> dep.getGroupId().equals("org.apache.camel"))
+                .filter(dep -> requiredBomEntries.contains(dep.getGroupId(), dep.getArtifactId()))
                 .map(dep -> dep.getGroupId() + ":" + dep.getArtifactId())
                 .distinct()
                 .sorted()
@@ -630,7 +638,7 @@ public class FlattenBomTask {
 
         final List<Delta<String>> diffs = DiffUtils.diff(requiredCamelArtifacts, managedCamelArtifacts).getDeltas();
         if (!diffs.isEmpty()) {
-            String msg = "Too little or too much org.apache.camel:* entries in camel-quarkus-bom:\n\n    "
+            String msg = "Too little or too much required constraints in camel-quarkus-bom:\n\n    "
                     + diffs.stream().map(Delta::toString).collect(joining("\n    "))
                     + "\n\nConsider adding, removing or excluding them in the BOM\n\n";
             reportFailure(msg);
@@ -652,12 +660,6 @@ public class FlattenBomTask {
     }
 
     void checkBannedDependencies(Map<Gavtcs, Set<Ga>> transitivesByBomEntry) {
-
-        transitivesByBomEntry.keySet()
-                .stream()
-                .map(ga -> ga.toString())
-                .sorted()
-                .forEach(key -> System.out.println("==trnasitive key " + key));
 
         final org.w3c.dom.Document document;
         final Path path = rootModuleDirectory.resolve("pom.xml");
