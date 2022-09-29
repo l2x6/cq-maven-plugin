@@ -264,6 +264,22 @@ public class ProdInitMojo extends AbstractMojo {
 
                 });
 
+        // Force Camel community version for unsupported Maven plugins
+        final Path buildParentItPomPath = basedir.toPath().resolve("poms/build-parent-it/pom.xml");
+        new PomTransformer(buildParentItPomPath, charset, simpleElementWhitespace)
+                .transform((Document document, TransformationContext context) -> {
+                    final ContainerElement managedPlugins = context.getOrAddContainerElements("build", "pluginManagement",
+                            "plugins");
+                    managedPlugins.childElementsStream()
+                            .map(ContainerElement::asGavtcs)
+                            .filter(gavtcs -> "camel-salesforce-maven-plugin".equals(gavtcs.getArtifactId())
+                                    || "camel-servicenow-maven-plugin".equals(gavtcs.getArtifactId()))
+                            .peek(gavtcs -> getLog()
+                                    .info("Updating " + gavtcs.getArtifactId() + " version to ${camel-community.version}"))
+                            .map(PomTransformer.NodeGavtcs::getNode)
+                            .forEach(containerElement -> containerElement.setVersion("${camel-community.version}"));
+                });
+
         /*
          * Copy certain files from the older product branch
          */
