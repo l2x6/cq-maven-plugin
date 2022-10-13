@@ -204,10 +204,11 @@ public class ProdExcludesMojo extends AbstractMojo {
     }
 
     enum ModeSupportStatus {
-        community, techPreview, supported;
+        community, techPreview, supported, devSupport;
 
         public boolean hasProductDocumentationPage() {
             switch (this) {
+            case devSupport:
             case techPreview:
             case supported:
                 return true;
