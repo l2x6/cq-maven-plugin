@@ -172,3 +172,22 @@ Configured in the pom.xml :
 ----
 
 === Examples
+
+== Releasing
+
+[source,shell]
+----
+./release.sh 1.2.3 1.2.4-SNAPSHOT
+----
+
+It does the following:
+
+* Sets the `current-version` and `release-version` keys in `.github/project.yml` file to values passed via CLI parameters
+* Commits the changes
+* Pushes the branch to upstream
+
+After that, you need to do the following:
+
+* Create a pull request from the above branch
+* Merge it
+* The rest of the release will be performed by GitHub Actions
