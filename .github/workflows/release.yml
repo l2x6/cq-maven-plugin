@@ -28,7 +28,7 @@ jobs:
     name: release
 
     steps:
-      - uses: radcortez/project-metadata-action@1.0
+      - uses: radcortez/project-metadata-action@master
         name: Retrieve project metadata
         id: metadata
         with:
