@@ -17,7 +17,14 @@
 
 name: Linux & Windows CI
 
-on: [push, pull_request]
+on:
+  push:
+    paths-ignore:
+       - '.github/project.yml'
+
+  pull_request:
+    paths-ignore:
+       - '.github/project.yml'
 
 jobs:
 
