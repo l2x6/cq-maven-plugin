@@ -26,7 +26,6 @@ jobs:
   release:
     runs-on: ubuntu-latest
     name: release
-    if: ${{github.event.pull_request.merged == true}}
 
     steps:
       - uses: radcortez/project-metadata-action@1.0
