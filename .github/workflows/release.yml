@@ -18,14 +18,16 @@
 name: Release
 
 on:
-  push:
+  pull_request:
+    types: [closed]
     paths:
       - '.github/project.yml'
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    name: release
+    name: Release to Maven Central
+    if: ${{github.event.pull_request.merged == true}}
 
     steps:
       - uses: radcortez/project-metadata-action@master
