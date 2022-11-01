@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 name: CQ Maven Plugin
 release:
   current-version: "3.2.3"
