@@ -71,7 +71,7 @@ jobs:
 
       - name: mvn release:prepare release:perform -DreleaseVersion=${{steps.metadata.outputs.current-version}}
         run: |
-          ./mvnw -B release:prepare release:perform -DpushChanges=false -DreleaseVersion=${{steps.metadata.outputs.current-version}} -DdevelopmentVersion=${{steps.metadata.outputs.next-version}}
+          ./mvnw -B release:prepare release:perform -DpushChanges=false -DlocalCheckout=true -DreleaseVersion=${{steps.metadata.outputs.current-version}} -DdevelopmentVersion=${{steps.metadata.outputs.next-version}}
         env:
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
