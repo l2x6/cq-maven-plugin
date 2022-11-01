@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-# attempt 1
+# attempt 2
 name: CQ Maven Plugin
 release:
   current-version: 3.2.3
