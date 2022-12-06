@@ -47,6 +47,7 @@ import org.l2x6.pom.tuner.MavenSourceTree;
 import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
+import org.l2x6.pom.tuner.PomTransformer.NodeGavtcs;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.PomTunerUtils;
@@ -137,12 +138,36 @@ public class ProdInitMojo extends AbstractMojo {
     String camelVersion;
 
     /**
-     * The current project's version
+     * Quarkus version
      *
      * @since 3.0.0
      */
     @Parameter(defaultValue = "${quarkus.version}", readonly = true)
     String quarkusVersion;
+
+    /**
+     * Quarkiverse CXF version
+     *
+     * @since 3.3.0
+     */
+    @Parameter(defaultValue = "${quarkiverse-cxf.version}", readonly = true)
+    String quarkiverseCxfVersion;
+
+    /**
+     * GRPC version
+     *
+     * @since 3.3.0
+     */
+    @Parameter(defaultValue = "${grpc.version}", readonly = true)
+    String grpcVersion;
+
+    /**
+     * ProtoBuf version
+     *
+     * @since 3.3.0
+     */
+    @Parameter(defaultValue = "${protobuf.version}", readonly = true)
+    String protobufVersion;
 
     /** {@inheritDoc} */
     @Override
@@ -190,9 +215,21 @@ public class ProdInitMojo extends AbstractMojo {
                     props.addChildTextElementIfNeeded("quarkus-community.version", quarkusVersion,
                             Comparator.comparing(Map.Entry::getKey, Comparators.after("quarkus.version")));
 
+                    getLog().info("Adding to pom.xml: quarkiverse-cxf-community.version property");
+                    props.addChildTextElementIfNeeded("quarkiverse-cxf-community.version", quarkiverseCxfVersion,
+                            Comparator.comparing(Map.Entry::getKey, Comparators.after("quarkiverse-cxf.version")));
+
                     getLog().info("Adding to pom.xml: graalvm-community.version property");
                     props.addChildTextElementIfNeeded("graalvm-community.version", "${graalvm.version}",
                             Comparator.comparing(Map.Entry::getKey, Comparators.after("graalvm.version")));
+
+                    getLog().info("Adding to pom.xml: grpc-community.version property");
+                    props.addChildTextElementIfNeeded("grpc-community.version", grpcVersion,
+                            Comparator.comparing(Map.Entry::getKey, Comparators.after("grpc.version")));
+
+                    getLog().info("Adding to pom.xml: protobuf-community.version property");
+                    props.addChildTextElementIfNeeded("protobuf-community.version", protobufVersion,
+                            Comparator.comparing(Map.Entry::getKey, Comparators.after("protobuf.version")));
 
                     /* Set cq-plugin.version to the version of the currently executing mojo if it is newer than than the one on pom.xml */
                     final String currentCqVersion = pluginDescriptor.getVersion();
@@ -263,6 +300,44 @@ public class ProdInitMojo extends AbstractMojo {
                     goals.addChildTextElement("goal", "prod-excludes-check");
 
                 });
+
+        /* Edit poms/bom-test/pom.xml */
+        new PomTransformer(basedir.toPath().resolve("poms/bom-test/pom.xml"), charset, simpleElementWhitespace).transform(
+                (Document document, TransformationContext context) -> {
+
+                    /* Change the version of io.quarkiverse.cxf:quarkus-cxf-bom-test from ${quarkiverse-cxf.version} to ${quarkiverse-cxf-community.version} */
+                    Gavtcs qcxfBom = new Gavtcs("io.quarkiverse.cxf", "quarkus-cxf-bom-test", "${quarkiverse-cxf.version}",
+                            "pom", null, "import");
+                    final ContainerElement dependencyManagementDeps = context.getOrAddContainerElements(
+                            "dependencyManagement",
+                            "dependencies");
+                    final NodeGavtcs qcxfBomNode = dependencyManagementDeps.childElementsStream()
+                            .map(ContainerElement::asGavtcs)
+                            .filter(gavtcs -> gavtcs.equals(qcxfBom))
+                            .findFirst()
+                            .get();
+                    qcxfBomNode.getNode().setVersion("${quarkiverse-cxf-community.version}");
+                });
+
+        /* Edit integration-tests/grpc/pom.xml */
+        new PomTransformer(basedir.toPath().resolve("integration-tests/grpc/pom.xml"), charset, simpleElementWhitespace)
+                .transform(
+                        (Document document, TransformationContext context) -> {
+
+                            final ContainerElement plugins = context.getOrAddContainerElements(
+                                    "build", "plugins");
+                            final NodeGavtcs protobufPlugnNode = plugins.childElementsStream()
+                                    .map(ContainerElement::asGavtcs)
+                                    .filter(gavtcs -> gavtcs.getArtifactId().equals("protobuf-maven-plugin"))
+                                    .findFirst()
+                                    .get();
+                            ContainerElement config = protobufPlugnNode.getNode()
+                                    .getChildContainerElement("executions", "execution", "configuration").get();
+                            config.addOrSetChildTextElement("protocArtifact",
+                                    "com.google.protobuf:protoc:${protobuf-community.version}:exe:${os.detected.classifier}");
+                            config.addOrSetChildTextElement("pluginArtifact",
+                                    "io.grpc:protoc-gen-grpc-java:${grpc-community.version}:exe:${os.detected.classifier}");
+                        });
 
         // Force Camel community version for unsupported Maven plugins
         final Path buildParentItPomPath = basedir.toPath().resolve("poms/build-parent-it/pom.xml");
