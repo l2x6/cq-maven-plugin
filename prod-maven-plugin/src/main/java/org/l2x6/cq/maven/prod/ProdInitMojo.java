@@ -301,6 +301,20 @@ public class ProdInitMojo extends AbstractMojo {
 
                 });
 
+        /* Edit poms/bom/pom.xml */
+        new PomTransformer(basedir.toPath().resolve("poms/bom/pom.xml"), charset, simpleElementWhitespace).transform(
+                (Document document, TransformationContext context) -> {
+
+                    /* Change the version of org.graalvm.js:* from ${graalvm.version} to ${graalvm-community.version} */
+                    final ContainerElement dependencyManagementDeps = context.getOrAddContainerElements(
+                            "dependencyManagement",
+                            "dependencies");
+                    dependencyManagementDeps.childElementsStream()
+                            .map(ContainerElement::asGavtcs)
+                            .filter(gavtcs -> gavtcs.getGroupId().equals("org.graalvm.js"))
+                            .forEach(node -> node.getNode().setVersion("${graalvm-community.version}"));
+                });
+
         /* Edit poms/bom-test/pom.xml */
         new PomTransformer(basedir.toPath().resolve("poms/bom-test/pom.xml"), charset, simpleElementWhitespace).transform(
                 (Document document, TransformationContext context) -> {
