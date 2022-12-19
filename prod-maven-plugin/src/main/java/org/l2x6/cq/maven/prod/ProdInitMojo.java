@@ -231,6 +231,9 @@ public class ProdInitMojo extends AbstractMojo {
                     props.addChildTextElementIfNeeded("protobuf-community.version", protobufVersion,
                             Comparator.comparing(Map.Entry::getKey, Comparators.after("protobuf.version")));
 
+                    getLog().info("Setting camel-quarkus.extension.finder.strict = false in pom.xml");
+                    props.addOrSetChildTextElement("camel-quarkus.extension.finder.strict", "false");
+
                     /* Set cq-plugin.version to the version of the currently executing mojo if it is newer than than the one on pom.xml */
                     final String currentCqVersion = pluginDescriptor.getVersion();
                     final String availableCqPluginVersion = props.getChildContainerElement("cq-plugin.version")
