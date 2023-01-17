@@ -351,6 +351,14 @@ public class ProdExcludesMojo extends AbstractMojo {
     String camelQuarkusCommunityVersion;
 
     /**
+     * Where to write a list of dependency paths pulling {@code javax.*} packages.
+     *
+     * @since 3.3.0
+     */
+    @Parameter(property = "cq.jakartaReport")
+    File jakartaReport;
+
+    /**
      * Overridden by {@link ProdExcludesCheckMojo}.
      *
      * @return {@code always false}
@@ -1168,7 +1176,8 @@ public class ProdExcludesMojo extends AbstractMojo {
                 repoSystem,
                 repoSession,
                 getLog(),
-                () -> flattenAndInstallBom())
+                () -> flattenAndInstallBom(),
+                jakartaReport != null ? jakartaReport.toPath() : null)
                         .execute();
 
     }

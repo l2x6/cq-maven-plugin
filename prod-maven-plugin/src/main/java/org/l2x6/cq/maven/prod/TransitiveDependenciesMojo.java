@@ -16,14 +16,18 @@
  */
 package org.l2x6.cq.maven.prod;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +35,10 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.ModelBase;
@@ -144,6 +151,8 @@ public class TransitiveDependenciesMojo {
 
     private final Runnable bomInstaller;
 
+    private final Path jakartaReportFile;
+
     public TransitiveDependenciesMojo(
             String version, String camelQuarkusCommunityVersion,
             Path basedir, Charset charset,
@@ -152,7 +161,7 @@ public class TransitiveDependenciesMojo {
             List<RemoteRepository> repositories, RepositorySystem repoSystem,
             RepositorySystemSession repoSession,
             Log log,
-            Runnable bomInstaller) {
+            Runnable bomInstaller, Path jakartaReportFile) {
         this.version = version;
         this.camelQuarkusCommunityVersion = camelQuarkusCommunityVersion;
         this.basedir = basedir;
@@ -167,6 +176,7 @@ public class TransitiveDependenciesMojo {
         this.repoSession = repoSession;
         this.log = log;
         this.bomInstaller = bomInstaller;
+        this.jakartaReportFile = jakartaReportFile;
     }
 
     public void execute() {
@@ -187,8 +197,20 @@ public class TransitiveDependenciesMojo {
         log.info("Installing camel-quarkus-bom again, now with proper Camel constraints");
         bomInstaller.run();
 
-        final DependencyCollector collector = new DependencyCollector();
+        final BiConsumer<Artifact, Deque<Gav>> jakartaConsumer = jakartaReportFile != null ? this::analyzeJakarta
+                : ((Artifact a, Deque<Gav> stack) -> {
+                });
+        final DependencyCollector collector = new DependencyCollector(jakartaConsumer);
         collect(cqArtifactIds, collector, readConstraints());
+        if (jakartaReportFile != null) {
+            try {
+                Files.createDirectories(jakartaReportFile.getParent());
+                Files.writeString(jakartaReportFile, jakartaReport.stream().collect(Collectors.joining("\n")),
+                        StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                throw new RuntimeException("Could not write to " + jakartaReportFile, e);
+            }
+        }
 
         final Set<Ga> allTransitiveGas = toGas(collector.allTransitives);
         final Set<Ga> prodTransitiveGas = toGas(collector.prodTransitives);
@@ -430,6 +452,55 @@ public class TransitiveDependenciesMojo {
         }
     }
 
+    private final Map<String, Boolean> jarToJavax = new HashMap<>();
+    private final Set<String> jakartaReport = new TreeSet<>();
+
+    private void analyzeJakarta(Artifact artifact, Deque<Gav> stack) {
+        final String groupId = artifact.getGroupId();
+        if (!groupId.startsWith("org.apache.camel") && !groupId.startsWith("io.quarkus")) {
+            if (stack.stream().anyMatch(gav -> "org.apache.camel.quarkus".equals(gav.getGroupId()))
+                    && stack.stream().anyMatch(gav -> "org.apache.camel".equals(gav.getGroupId()))) {
+                /* We are interested only in transitives coming via Camel */
+                final File file = artifact.getFile();
+                if (file != null && file.getName().endsWith(".jar") && containsEnryStartingWith(file, "javax/")) {
+                    /* Find the last CQ item */
+                    final List<Gav> path = new ArrayList<>();
+                    stack.stream().forEach(gav -> {
+                        if (gav.getGroupId().equals("org.apache.camel.quarkus")) {
+                            path.clear();
+                            /* keep just the last CQ element of the path
+                             * We'll thus reduce some uninteresting duplications in the report */
+                        }
+                        path.add(gav);
+                    });
+                    jakartaReport.add(path.stream().map(Gav::toString).collect(Collectors.joining(" -> ")));
+                }
+            }
+        }
+    }
+
+    private boolean containsEnryStartingWith(File file, String prefix) {
+        final String absolutePath = file.getAbsolutePath();
+        final Boolean knownToHaveJavax = jarToJavax.get(absolutePath);
+        if (knownToHaveJavax != null) {
+            return knownToHaveJavax.booleanValue();
+        }
+
+        try (ZipInputStream zip = new ZipInputStream(new FileInputStream(file), StandardCharsets.UTF_8)) {
+            ZipEntry entry = null;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (entry.getName().startsWith(prefix)) {
+                    jarToJavax.put(absolutePath, true);
+                    return true;
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Could not read " + file, e);
+        }
+        jarToJavax.put(absolutePath, false);
+        return false;
+    }
+
     static abstract class ProdDependencyCollector implements DependencyVisitor {
         protected boolean isProd;
     }
@@ -457,8 +528,12 @@ public class TransitiveDependenciesMojo {
     static class DependencyCollector extends ProdDependencyCollector {
         private final Set<Gav> prodTransitives = new TreeSet<>();
         private final Set<Gav> allTransitives = new TreeSet<>();
-
         private final Deque<Gav> stack = new ArrayDeque<>();
+        private final BiConsumer<Artifact, Deque<Gav>> prodArtifactConsumer;
+
+        public DependencyCollector(BiConsumer<Artifact, Deque<Gav>> prodArtifactConsumer) {
+            this.prodArtifactConsumer = prodArtifactConsumer;
+        }
 
         @Override
         public boolean visitLeave(DependencyNode node) {
@@ -474,6 +549,7 @@ public class TransitiveDependenciesMojo {
             allTransitives.add(gav);
             if (isProd) {
                 prodTransitives.add(gav);
+                prodArtifactConsumer.accept(a, stack);
             }
             //            if (a.getGroupId().equals("io.dropwizard.metrics") && a.getArtifactId().equals("metrics-core")) {
             //                System.out.println(
