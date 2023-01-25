@@ -85,10 +85,11 @@
         <maven.plugin-tools.version>3.5</maven.plugin-tools.version>
         <maven.shared.file-management>3.0.0</maven.shared.file-management>
         <maven.shared.invoker>3.0.1</maven.shared.invoker>
-        <pom-tuner.version>3.0.0</pom-tuner.version>
+        <pom-tuner.version>3.3.0</pom-tuner.version>
         <jdom2.version>2.0.6.1</jdom2.version>
         <jgit.version>6.2.0.202206071550-r</jgit.version>
         <junit.version>5.6.0</junit.version>
+        <enforcer-api.version>3.1.0</enforcer-api.version>
         <google-client.version>1.23.0</google-client.version>
         <google-api-services-sheets.version>v4-rev493-1.23.0</google-api-services-sheets.version>
         <gson.version>2.8.9</gson.version>
@@ -160,6 +161,7 @@
         <module>prod-maven-plugin</module>
         <module>camel-prod-maven-plugin</module>
         <module>camel-spring-boot-prod-maven-plugin</module>
+        <module>filtered-external-enforcer-rules</module>
     </modules>
 
     <dependencyManagement>
@@ -258,6 +260,12 @@
                 <groupId>org.apache.maven</groupId>
                 <artifactId>maven-plugin-api</artifactId>
                 <version>${maven.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.maven.enforcer</groupId>
+                <artifactId>enforcer-api</artifactId>
+                <version>${enforcer-api.version}</version>
             </dependency>
 
             <dependency>

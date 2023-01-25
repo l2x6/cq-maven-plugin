@@ -76,6 +76,7 @@ import org.codehaus.plexus.util.xml.Xpp3Dom;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
+import org.l2x6.cq.common.BannedDependencyResource;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.common.FlattenBomTask;
 import org.l2x6.cq.common.FlattenBomTask.BomEntryTransformation;
@@ -93,6 +94,7 @@ import org.l2x6.pom.tuner.PomTunerUtils;
 import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.Expression;
 import org.l2x6.pom.tuner.model.Ga;
+import org.l2x6.pom.tuner.model.GavPattern;
 import org.l2x6.pom.tuner.model.GavSet;
 import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.model.Module;
@@ -1160,7 +1162,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         });
         /* Install the BOM */
         getLog().info("Installing preliminary camel-quarkus-bom with community-only Camel constraints");
-        flattenAndInstallBom();
+        flattenAndInstallBom(product);
 
         new TransitiveDependenciesMojo(
                 version,
@@ -1176,13 +1178,13 @@ public class ProdExcludesMojo extends AbstractMojo {
                 repoSystem,
                 repoSession,
                 getLog(),
-                () -> flattenAndInstallBom(),
+                () -> flattenAndInstallBom(product),
                 jakartaReport != null ? jakartaReport.toPath() : null)
                         .execute();
 
     }
 
-    private void flattenAndInstallBom() {
+    private void flattenAndInstallBom(Product product) {
         final Path rootDir = multiModuleProjectDirectory.toPath().toAbsolutePath().normalize();
         ProjectBuildingRequest pbr = new DefaultProjectBuildingRequest(session.getProjectBuildingRequest());
         pbr.setProcessPlugins(false);
@@ -1216,6 +1218,7 @@ public class ProdExcludesMojo extends AbstractMojo {
             if (requiredBomEntryIncludes == null) {
                 requiredBomEntryIncludes = List.of("org.apache.camel");
             }
+
             final Path flattenedBomPath = new FlattenBomTask(
                     childList(config, "resolutionEntryPointIncludes"),
                     childList(config, "resolutionEntryPointExcludes"),
@@ -1239,7 +1242,8 @@ public class ProdExcludesMojo extends AbstractMojo {
                     simpleElementWhitespace,
                     optionalChild(config, "installFlavor").map(FlattenBomTask.InstallFlavor::valueOf)
                             .orElse(FlattenBomTask.InstallFlavor.REDUCED),
-                    false)
+                    false,
+                    product.getBannedDependencies())
                             .execute();
             CqCommonUtils.installArtifact(flattenedBomPath, localRepositoryPath, p.getGroupId(), p.getArtifactId(), version,
                     "pom");
@@ -1397,6 +1401,18 @@ public class ProdExcludesMojo extends AbstractMojo {
                     }
                 }
 
+                final Set<GavPattern> bannedDeps = new LinkedHashSet<>();
+                @SuppressWarnings("unchecked")
+                final List<Map<String, Object>> rawBannedDependencyResources = (List<Map<String, Object>>) json
+                        .getOrDefault("bannedDependencyResources", Collections.emptyList());
+                for (Map<String, Object> resource : rawBannedDependencyResources) {
+                    @SuppressWarnings("unchecked")
+                    BannedDependencyResource bannedDependencyResource = new BannedDependencyResource(
+                            (String) resource.get("location"),
+                            (String) resource.get("xsltLocation"));
+                    bannedDeps.addAll(bannedDependencyResource.getBannedPatterns(charset));
+                }
+
                 return new Product(
                         Collections.unmodifiableMap(extensionsMap),
                         prodGuideUrlTemplate,
@@ -1415,7 +1431,8 @@ public class ProdExcludesMojo extends AbstractMojo {
                         productizedDependenciesFile,
                         allDependenciesFile,
                         nonProductizedDependenciesFile,
-                        Collections.unmodifiableMap(additionalDependenciesMap));
+                        Collections.unmodifiableMap(additionalDependenciesMap),
+                        bannedDeps);
             } catch (IOException e) {
                 throw new RuntimeException("Could not read " + absProdJson, e);
             }
@@ -1439,6 +1456,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         private final Path allDependenciesFile;
         private final Path nonProductizedDependenciesFile;
         private final Map<String, GavSet> additionalExtensionDependencies;
+        private final Set<GavPattern> bannedDependencies;
 
         public Product(Map<Ga, Extension> extensions, String prodGuideUrlTemplate, String majorVersion, Path docReferenceDir,
                 Map<String, String> versionTransformations, List<String> additionalProductizedArtifacts, Set<Ga> excludeTests,
@@ -1451,7 +1469,8 @@ public class ProdExcludesMojo extends AbstractMojo {
                 Path productizedDependenciesFile,
                 Path allDependenciesFile,
                 Path nonProductizedDependenciesFile,
-                Map<String, GavSet> additionalExtensionDependencies) {
+                Map<String, GavSet> additionalExtensionDependencies,
+                Set<GavPattern> bannedDependencies) {
             this.extensions = extensions;
             this.prodGuideUrlTemplate = prodGuideUrlTemplate;
             this.majorVersion = majorVersion;
@@ -1470,6 +1489,7 @@ public class ProdExcludesMojo extends AbstractMojo {
             this.allDependenciesFile = allDependenciesFile;
             this.nonProductizedDependenciesFile = nonProductizedDependenciesFile;
             this.additionalExtensionDependencies = additionalExtensionDependencies;
+            this.bannedDependencies = bannedDependencies;
         }
 
         /**
@@ -1592,6 +1612,10 @@ public class ProdExcludesMojo extends AbstractMojo {
 
         public Map<String, GavSet> getAdditionalExtensionDependencies() {
             return additionalExtensionDependencies;
+        }
+
+        public Set<GavPattern> getBannedDependencies() {
+            return bannedDependencies;
         }
     }
 

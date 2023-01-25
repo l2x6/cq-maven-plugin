@@ -17,7 +17,6 @@
 package org.l2x6.cq.common;
 
 import java.io.IOException;
-import java.io.Reader;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.Writer;
@@ -41,17 +40,6 @@ import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import javax.xml.XMLConstants;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerConfigurationException;
-import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.TransformerFactoryConfigurationError;
-import javax.xml.transform.dom.DOMResult;
-import javax.xml.transform.stream.StreamSource;
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathConstants;
-import javax.xml.xpath.XPathExpressionException;
-import javax.xml.xpath.XPathFactory;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Exclusion;
@@ -88,7 +76,6 @@ import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
 import org.l2x6.pom.tuner.PomTransformer.NodeGavtcs;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
-import org.l2x6.pom.tuner.PomTunerUtils;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gav;
 import org.l2x6.pom.tuner.model.GavPattern;
@@ -97,7 +84,6 @@ import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.model.Module;
 import org.l2x6.pom.tuner.model.Profile;
 import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 
 import static java.util.stream.Collectors.joining;
 
@@ -257,6 +243,7 @@ public class FlattenBomTask {
     private final MavenProject project;
     private final FlattenBomTask.InstallFlavor installFlavor;
     private final boolean quickly;
+    private final Set<GavPattern> bannedDependencies;
     private static final Pattern LOCATION_COMMENT_PATTERN = Pattern.compile("\\s*\\Q<!--#}\\E");
     public static final String DEFAULT_FLATTENED_REDUCED_VERBOSE_POM_FILE = "src/main/generated/flattened-reduced-verbose-pom.xml";
     public static final String DEFAULT_FLATTENED_REDUCED_POM_FILE = "src/main/generated/flattened-reduced-pom.xml";
@@ -275,7 +262,8 @@ public class FlattenBomTask {
             Path rootModuleDirectory, Path fullPomPath, Path reducedVerbosePamPath,
             Path reducedPomPath, Charset charset, Log log, List<RemoteRepository> repositories, RepositorySystem repoSystem,
             RepositorySystemSession repoSession, Predicate<Profile> profiles, boolean format,
-            SimpleElementWhitespace simpleElementWhitespace, FlattenBomTask.InstallFlavor installFlavor, boolean quickly) {
+            SimpleElementWhitespace simpleElementWhitespace, FlattenBomTask.InstallFlavor installFlavor, boolean quickly,
+            Set<GavPattern> bannedDependencies) {
         this.resolutionEntryPointIncludes = resolutionEntryPointIncludes;
         this.resolutionEntryPointExcludes = resolutionEntryPointExcludes;
         this.resolutionSuspects = resolutionSuspects;
@@ -305,6 +293,7 @@ public class FlattenBomTask {
         this.simpleElementWhitespace = simpleElementWhitespace;
         this.installFlavor = installFlavor;
         this.quickly = quickly;
+        this.bannedDependencies = bannedDependencies;
     }
 
     static List<FlattenBomTask.BomEntryTransformation> mergeTransformations(Path rootModuleDirectory,
@@ -661,82 +650,54 @@ public class FlattenBomTask {
 
     void checkBannedDependencies(Map<Gavtcs, Set<Ga>> transitivesByBomEntry) {
 
-        final org.w3c.dom.Document document;
-        final Path path = rootModuleDirectory.resolve("pom.xml");
-        try {
-            final Transformer transformer = TransformerFactory.newInstance().newTransformer();
-            final DOMResult result = new DOMResult();
-            try (Reader r = Files.newBufferedReader(path, charset)) {
-                transformer.transform(new StreamSource(r), result);
-                document = (org.w3c.dom.Document) result.getNode();
-            } catch (IOException e) {
-                throw new RuntimeException("Could not read " + path, e);
-            } catch (TransformerException e) {
-                throw new RuntimeException("Could not parse " + path, e);
+        if (!bannedDependencies.isEmpty()) {
+            log.debug("Banned patterns " + bannedDependencies);
+
+            final Map<Gavtcs, Set<Ga>> missingBannedDeps = new LinkedHashMap<>();
+            for (Entry<Gavtcs, Set<Ga>> entry : transitivesByBomEntry.entrySet()) {
+                final Set<Ga> transitives = entry.getValue();
+                final Set<Ga> bannedEntryPoints = transitives.stream()
+                        .flatMap(ga -> bannedDependencies.stream()
+                                .filter(pat -> pat.matches(ga.getGroupId(), ga.getArtifactId())))
+                        .map(gavPattern -> Ga.of(gavPattern.toString()))
+                        .collect(Collectors.toCollection(TreeSet::new));
+                if (!bannedEntryPoints.isEmpty()) {
+                    missingBannedDeps.put(entry.getKey(), bannedEntryPoints);
+                }
             }
-        } catch (TransformerConfigurationException | TransformerFactoryConfigurationError e) {
-            throw new RuntimeException(e);
-        }
 
-        final XPath xPath = XPathFactory.newInstance().newXPath();
-        final String expr = "/" + PomTunerUtils.anyNs("bannedDependencies", "excludes", "exclude");
-        final List<GavPattern> bannedPatterns = new ArrayList<>();
-        try {
-            final NodeList nodes = (NodeList) xPath.evaluate(expr, document, XPathConstants.NODESET);
-            for (int i = 0; i < nodes.getLength(); i++) {
-                final Node n = nodes.item(i);
-                final String bannedPattern = n.getTextContent();
-                bannedPatterns.add(GavPattern.of(bannedPattern));
-            }
-        } catch (XPathExpressionException e) {
-            throw new RuntimeException("Could not evaluate " + expr + " on " + path, e);
-        }
-
-        log.debug("Banned patterns " + bannedPatterns);
-
-        final Map<Gavtcs, Set<Ga>> missingBannedDeps = new LinkedHashMap<>();
-        for (Entry<Gavtcs, Set<Ga>> entry : transitivesByBomEntry.entrySet()) {
-            final Set<Ga> transitives = entry.getValue();
-            final Set<Ga> bannedEntryPoints = transitives.stream()
-                    .flatMap(ga -> bannedPatterns.stream().filter(pat -> pat.matches(ga.getGroupId(), ga.getArtifactId())))
-                    .map(gavPattern -> Ga.of(gavPattern.toString()))
-                    .collect(Collectors.toCollection(TreeSet::new));
-            if (!bannedEntryPoints.isEmpty()) {
-                missingBannedDeps.put(entry.getKey(), bannedEntryPoints);
-            }
-        }
-
-        if (!missingBannedDeps.isEmpty()) {
-            if (format) {
-                new PomTransformer(basePath.resolve("pom.xml"), charset, simpleElementWhitespace)
-                        .transform((org.w3c.dom.Document doc, TransformationContext context) -> {
-                            final Set<NodeGavtcs> deps = context.getManagedDependencies();
-                            missingBannedDeps.forEach((gavtcs, missingExclusions) -> {
-                                deps.stream()
-                                        .filter(dep -> dep.toGa().equals(gavtcs.toGa()))
-                                        .forEach(dep -> {
-                                            final ContainerElement exclusionsNode = dep.getNode()
-                                                    .getOrAddChildContainerElement("exclusions");
-                                            missingExclusions.forEach(
-                                                    missingExclusion -> FlattenBomTask.addExclusion(exclusionsNode,
-                                                            missingExclusion));
-                                        });
+            if (!missingBannedDeps.isEmpty()) {
+                if (format) {
+                    new PomTransformer(basePath.resolve("pom.xml"), charset, simpleElementWhitespace)
+                            .transform((org.w3c.dom.Document doc, TransformationContext context) -> {
+                                final Set<NodeGavtcs> deps = context.getManagedDependencies();
+                                missingBannedDeps.forEach((gavtcs, missingExclusions) -> {
+                                    deps.stream()
+                                            .filter(dep -> dep.toGa().equals(gavtcs.toGa()))
+                                            .forEach(dep -> {
+                                                final ContainerElement exclusionsNode = dep.getNode()
+                                                        .getOrAddChildContainerElement("exclusions");
+                                                missingExclusions.forEach(
+                                                        missingExclusion -> FlattenBomTask.addExclusion(exclusionsNode,
+                                                                missingExclusion));
+                                            });
+                                });
                             });
-                        });
-            }
+                }
 
-            final StringBuilder msg = new StringBuilder("Missing exclusions in ")
-                    .append(effectivePomModel.getArtifactId())
-                    .append(":\n");
-            missingBannedDeps
-                    .forEach((gavtcs, bannedEntryPoints) -> msg
-                            .append("\n    ")
-                            .append(gavtcs)
-                            .append(" pulls banned dependencies ")
-                            .append(bannedEntryPoints));
-            throw new RuntimeException(msg.append(
-                    "\n\nYou may want to consider running\n\n    mvn process-resources -Dcq.flatten-bom.format\n\nto fix the named issues in this BOM")
-                    .toString());
+                final StringBuilder msg = new StringBuilder("Missing exclusions in ")
+                        .append(effectivePomModel.getArtifactId())
+                        .append(":\n");
+                missingBannedDeps
+                        .forEach((gavtcs, bannedEntryPoints) -> msg
+                                .append("\n    ")
+                                .append(gavtcs)
+                                .append(" pulls banned dependencies ")
+                                .append(bannedEntryPoints));
+                throw new RuntimeException(msg.append(
+                        "\n\nYou may want to consider running\n\n    mvn process-resources -Dcq.flatten-bom.format\n\nto fix the named issues in this BOM")
+                        .toString());
+            }
         }
 
     }
