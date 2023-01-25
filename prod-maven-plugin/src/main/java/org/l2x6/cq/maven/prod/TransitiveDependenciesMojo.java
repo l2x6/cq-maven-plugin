@@ -53,6 +53,9 @@ import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.graph.DependencyVisitor;
 import org.eclipse.aether.repository.RemoteRepository;
+import org.eclipse.aether.resolution.ArtifactRequest;
+import org.eclipse.aether.resolution.ArtifactResolutionException;
+import org.eclipse.aether.resolution.ArtifactResult;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.maven.prod.ProdExcludesMojo.CamelEdition;
 import org.l2x6.pom.tuner.PomTransformer;
@@ -205,7 +208,7 @@ public class TransitiveDependenciesMojo {
         if (jakartaReportFile != null) {
             try {
                 Files.createDirectories(jakartaReportFile.getParent());
-                Files.writeString(jakartaReportFile, jakartaReport.stream().collect(Collectors.joining("\n")),
+                Files.writeString(jakartaReportFile, jakartaReport.stream().collect(Collectors.joining("\n\n")),
                         StandardCharsets.UTF_8);
             } catch (IOException e) {
                 throw new RuntimeException("Could not write to " + jakartaReportFile, e);
@@ -459,21 +462,34 @@ public class TransitiveDependenciesMojo {
         final String groupId = artifact.getGroupId();
         if (!groupId.startsWith("org.apache.camel") && !groupId.startsWith("io.quarkus")) {
             if (stack.stream().anyMatch(gav -> "org.apache.camel.quarkus".equals(gav.getGroupId()))
-                    && stack.stream().anyMatch(gav -> "org.apache.camel".equals(gav.getGroupId()))) {
+                    && stack.stream().noneMatch(gav -> "io.quarkus".equals(gav.getGroupId()))
+                    && stack.stream().noneMatch(gav -> "org.apache.camel".equals(gav.getGroupId()))) {
                 /* We are interested only in transitives coming via Camel */
-                final File file = artifact.getFile();
+                File file = artifact.getFile();
+                if (file == null) {
+                    final ArtifactRequest req = new ArtifactRequest().setRepositories(this.repositories).setArtifact(artifact);
+                    try {
+                        final ArtifactResult resolutionResult = this.repoSystem.resolveArtifact(this.repoSession, req);
+                        file = resolutionResult.getArtifact().getFile();
+                    } catch (ArtifactResolutionException e) {
+                        throw new RuntimeException("Could not resolve " + artifact, e);
+                    }
+                }
                 if (file != null && file.getName().endsWith(".jar") && containsEnryStartingWith(file, "javax/")) {
                     /* Find the last CQ item */
                     final List<Gav> path = new ArrayList<>();
-                    stack.stream().forEach(gav -> {
+                    for (Iterator<Gav> i = stack.descendingIterator(); i.hasNext();) {
+                        final Gav gav = i.next();
                         if (gav.getGroupId().equals("org.apache.camel.quarkus")) {
                             path.clear();
-                            /* keep just the last CQ element of the path
-                             * We'll thus reduce some uninteresting duplications in the report */
+                            /*
+                             * keep just the last CQ element of the path
+                             * We'll thus reduce some uninteresting duplications in the report
+                             */
                         }
                         path.add(gav);
-                    });
-                    jakartaReport.add(path.stream().map(Gav::toString).collect(Collectors.joining(" -> ")));
+                    }
+                    jakartaReport.add(path.stream().map(Gav::toString).collect(Collectors.joining("\n    -> ")));
                 }
             }
         }
@@ -551,10 +567,6 @@ public class TransitiveDependenciesMojo {
                 prodTransitives.add(gav);
                 prodArtifactConsumer.accept(a, stack);
             }
-            //            if (a.getGroupId().equals("io.dropwizard.metrics") && a.getArtifactId().equals("metrics-core")) {
-            //                System.out.println(
-            //                        "======= found " + stack.stream().map(Gav::toString).collect(Collectors.joining("\n      - ")));
-            //            }
             return true;
         }
 
