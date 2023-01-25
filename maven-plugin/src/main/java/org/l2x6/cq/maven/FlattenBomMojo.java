@@ -20,7 +20,9 @@ import java.io.File;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -32,6 +34,7 @@ import org.apache.maven.project.MavenProject;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
+import org.l2x6.cq.common.BannedDependencyResource;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.common.FlattenBomTask;
 import org.l2x6.cq.common.OnFailure;
@@ -277,6 +280,29 @@ public class FlattenBomMojo extends AbstractMojo {
     @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "EMPTY")
     SimpleElementWhitespace simpleElementWhitespace;
 
+    /**
+     * A list of {@link BannedDependencyResource}s. Example:
+     *
+     * <pre>
+     * {@code
+     *    <bannedDependencyResources>
+     *        <bannedDependencyResource>
+     *            <path>classpath:enforcer-rules/quarkus-banned-dependencies.xml</path>
+     *            <xPathFindExcludes>//*[local-name() = 'exclude']/text()</xPathFindExcludes>
+     *        </bannedDependencyReource>
+     *        <bannedDependencyResource>
+     *            <path>../../pom.xml</path>
+     *            <xPathFindExcludese>//*[local-name() = 'bannedDependencies']/*[local-name() = 'excludes']/*[local-name() = 'exclude']/text()</xPathFindExcludes>
+     *        </bannedDependencyReource>
+     *    </bannedDependencyResources>
+     * }
+     * </pre>
+     *
+     * @since 3.3.0
+     */
+    @Parameter
+    List<BannedDependencyResource> bannedDependencyResources;
+
     @Component
     RepositorySystem repoSystem;
 
@@ -307,6 +333,14 @@ public class FlattenBomMojo extends AbstractMojo {
             bomEntryTransformations.addAll(addExclusions);
         }
 
+        final Set<GavPattern> bannedDeps = new LinkedHashSet<>();
+        if (bannedDependencyResources != null) {
+            bannedDependencyResources.stream()
+                    .map(resource -> resource.getBannedPatterns(charset))
+                    .flatMap(Set::stream)
+                    .forEach(bannedDeps::add);
+        }
+
         new FlattenBomTask(
                 resolutionEntryPointIncludes,
                 resolutionEntryPointExcludes,
@@ -330,7 +364,8 @@ public class FlattenBomMojo extends AbstractMojo {
                 format,
                 simpleElementWhitespace,
                 installFlavor,
-                quickly)
+                quickly,
+                bannedDeps)
                         .execute();
 
     }
