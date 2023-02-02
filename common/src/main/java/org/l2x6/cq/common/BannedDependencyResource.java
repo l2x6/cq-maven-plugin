@@ -22,8 +22,6 @@ import java.io.Reader;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.LinkedHashSet;
-import java.util.Set;
 import java.util.function.Consumer;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerConfigurationException;
@@ -37,7 +35,6 @@ import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
 import javax.xml.xpath.XPathFactory;
-import org.l2x6.pom.tuner.model.GavPattern;
 import org.l2x6.pom.tuner.model.GavSet;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
@@ -51,7 +48,7 @@ public class BannedDependencyResource {
 
     private String location;
     private String xsltLocation;
-    private Set<GavPattern> bannedPatterns;
+    private GavSet bannedSet;
 
     public BannedDependencyResource() {
     }
@@ -92,8 +89,8 @@ public class BannedDependencyResource {
      *
      * @throws IllegalStateException if {@link #getLocation()} returns null or a blank string
      */
-    public Set<GavPattern> getBannedPatterns(Charset charset) {
-        if (bannedPatterns == null) {
+    public GavSet getBannedSet(Charset charset) {
+        if (bannedSet == null) {
 
             if (location == null || location.isBlank()) {
                 throw new IllegalStateException("path must be specified for " + this);
@@ -121,12 +118,13 @@ public class BannedDependencyResource {
 
             final XPath xPath = XPathFactory.newInstance().newXPath();
 
-            Set<GavPattern> includes = new LinkedHashSet<>();
-            processPatterns(location, document, xPath, "//*[local-name() = 'exclude']/text()", includes::add);
+            final GavSet.IncludeExcludeGavSet.Builder result = GavSet.builder();
+            processPatterns(location, document, xPath, "//*[local-name() = 'exclude']/text()", result::include);
+            processPatterns(location, document, xPath, "//*[local-name() = 'include']/text()", result::exclude);
 
-            bannedPatterns = includes;
+            bannedSet = result.build();
         }
-        return bannedPatterns;
+        return bannedSet;
     }
 
     static Document transform(String sourceLocation, Document sourceDocument, String xsltLocation, Charset charset) {
@@ -146,13 +144,13 @@ public class BannedDependencyResource {
     }
 
     static void processPatterns(String path, Document document, XPath xPath, String xPathExpression,
-            Consumer<GavPattern> gavPatternConsumer) {
+            Consumer<String> gavPatternConsumer) {
         try {
             final NodeList nodes = (NodeList) xPath.evaluate(xPathExpression, document, XPathConstants.NODESET);
             for (int i = 0; i < nodes.getLength(); i++) {
                 final Node n = nodes.item(i);
                 final String bannedPattern = n.getTextContent();
-                gavPatternConsumer.accept(GavPattern.of(bannedPattern));
+                gavPatternConsumer.accept(bannedPattern);
             }
         } catch (XPathExpressionException e) {
             throw new RuntimeException("Could not evaluate " + xPathExpression + " on " + path, e);

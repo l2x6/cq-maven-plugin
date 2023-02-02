@@ -20,9 +20,7 @@ import java.io.File;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -40,6 +38,8 @@ import org.l2x6.cq.common.FlattenBomTask;
 import org.l2x6.cq.common.OnFailure;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.model.GavPattern;
+import org.l2x6.pom.tuner.model.GavSet;
+import org.l2x6.pom.tuner.model.GavSet.UnionGavSet.Builder;
 
 /**
  * Flattens the dependency management section of the current pom.xml file.
@@ -333,12 +333,11 @@ public class FlattenBomMojo extends AbstractMojo {
             bomEntryTransformations.addAll(addExclusions);
         }
 
-        final Set<GavPattern> bannedDeps = new LinkedHashSet<>();
+        final Builder bannedDeps = GavSet.unionBuilder();
         if (bannedDependencyResources != null) {
             bannedDependencyResources.stream()
-                    .map(resource -> resource.getBannedPatterns(charset))
-                    .flatMap(Set::stream)
-                    .forEach(bannedDeps::add);
+                    .map(resource -> resource.getBannedSet(charset))
+                    .forEach(bannedDeps::union);
         }
 
         new FlattenBomTask(
@@ -365,7 +364,7 @@ public class FlattenBomMojo extends AbstractMojo {
                 simpleElementWhitespace,
                 installFlavor,
                 quickly,
-                bannedDeps)
+                bannedDeps.build())
                         .execute();
 
     }
