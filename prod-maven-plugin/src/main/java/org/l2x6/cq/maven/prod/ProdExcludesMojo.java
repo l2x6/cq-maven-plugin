@@ -94,8 +94,8 @@ import org.l2x6.pom.tuner.PomTunerUtils;
 import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.Expression;
 import org.l2x6.pom.tuner.model.Ga;
-import org.l2x6.pom.tuner.model.GavPattern;
 import org.l2x6.pom.tuner.model.GavSet;
+import org.l2x6.pom.tuner.model.GavSet.UnionGavSet.Builder;
 import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.model.Module;
 import org.l2x6.pom.tuner.model.Profile;
@@ -321,6 +321,15 @@ public class ProdExcludesMojo extends AbstractMojo {
      */
     @Parameter(defaultValue = "${maven.multiModuleProjectDirectory}", readonly = true)
     File multiModuleProjectDirectory;
+
+    /**
+     * Only used when {@link #format} is true: if {@code true}, remove all {@code <exclusions>} elements from the BOM
+     * before adding the missing exclusions; otherwise only add missing exclusions and leave the existing ones as they are.
+     *
+     * @since 3.4.0
+     */
+    @Parameter(defaultValue = "false", property = "cq.flatten-bom.cleanExclusions")
+    boolean cleanExclusions;
 
     @Parameter(defaultValue = "${plugin}", readonly = true)
     private PluginDescriptor pluginDescriptor;
@@ -1243,7 +1252,8 @@ public class ProdExcludesMojo extends AbstractMojo {
                     optionalChild(config, "installFlavor").map(FlattenBomTask.InstallFlavor::valueOf)
                             .orElse(FlattenBomTask.InstallFlavor.REDUCED),
                     false,
-                    product.getBannedDependencies())
+                    product.getBannedDependencies(),
+                    cleanExclusions)
                             .execute();
             CqCommonUtils.installArtifact(flattenedBomPath, localRepositoryPath, p.getGroupId(), p.getArtifactId(), version,
                     "pom");
@@ -1401,7 +1411,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                     }
                 }
 
-                final Set<GavPattern> bannedDeps = new LinkedHashSet<>();
+                final Builder bannedDeps = GavSet.unionBuilder();
                 @SuppressWarnings("unchecked")
                 final List<Map<String, Object>> rawBannedDependencyResources = (List<Map<String, Object>>) json
                         .getOrDefault("bannedDependencyResources", Collections.emptyList());
@@ -1410,7 +1420,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                     BannedDependencyResource bannedDependencyResource = new BannedDependencyResource(
                             (String) resource.get("location"),
                             (String) resource.get("xsltLocation"));
-                    bannedDeps.addAll(bannedDependencyResource.getBannedPatterns(charset));
+                    bannedDeps.union(bannedDependencyResource.getBannedSet(charset));
                 }
 
                 return new Product(
@@ -1432,7 +1442,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                         allDependenciesFile,
                         nonProductizedDependenciesFile,
                         Collections.unmodifiableMap(additionalDependenciesMap),
-                        bannedDeps);
+                        bannedDeps.build());
             } catch (IOException e) {
                 throw new RuntimeException("Could not read " + absProdJson, e);
             }
@@ -1456,7 +1466,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         private final Path allDependenciesFile;
         private final Path nonProductizedDependenciesFile;
         private final Map<String, GavSet> additionalExtensionDependencies;
-        private final Set<GavPattern> bannedDependencies;
+        private final GavSet bannedDependencies;
 
         public Product(Map<Ga, Extension> extensions, String prodGuideUrlTemplate, String majorVersion, Path docReferenceDir,
                 Map<String, String> versionTransformations, List<String> additionalProductizedArtifacts, Set<Ga> excludeTests,
@@ -1470,7 +1480,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                 Path allDependenciesFile,
                 Path nonProductizedDependenciesFile,
                 Map<String, GavSet> additionalExtensionDependencies,
-                Set<GavPattern> bannedDependencies) {
+                GavSet bannedDependencies) {
             this.extensions = extensions;
             this.prodGuideUrlTemplate = prodGuideUrlTemplate;
             this.majorVersion = majorVersion;
@@ -1614,7 +1624,7 @@ public class ProdExcludesMojo extends AbstractMojo {
             return additionalExtensionDependencies;
         }
 
-        public Set<GavPattern> getBannedDependencies() {
+        public GavSet getBannedDependencies() {
             return bannedDependencies;
         }
     }

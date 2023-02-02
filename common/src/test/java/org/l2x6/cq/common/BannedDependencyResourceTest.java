@@ -17,10 +17,9 @@
 package org.l2x6.cq.common;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Set;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.l2x6.pom.tuner.model.GavPattern;
+import org.l2x6.pom.tuner.model.GavSet.IncludeExcludeGavSet;
 
 public class BannedDependencyResourceTest {
 
@@ -30,9 +29,10 @@ public class BannedDependencyResourceTest {
                 "classpath:enforcer/test-banned-dependencies.xml",
                 null);
 
-        final Set<GavPattern> bannedPatterns = resource.getBannedPatterns(StandardCharsets.UTF_8);
-        Assertions.assertEquals(78, bannedPatterns.size());
-        Assertions.assertTrue(bannedPatterns.contains(GavPattern.of("org.javassist:javassist")));
+        final IncludeExcludeGavSet bannedPatterns = (IncludeExcludeGavSet) resource.getBannedSet(StandardCharsets.UTF_8);
+        Assertions.assertEquals(78, bannedPatterns.getIncludes().size());
+        Assertions.assertEquals(1, bannedPatterns.getExcludes().size());
+        Assertions.assertTrue(bannedPatterns.contains("org.javassist", "javassist"));
     }
 
     @Test
@@ -41,9 +41,9 @@ public class BannedDependencyResourceTest {
                 "src/test/resources/enforcer/test-banned-dependencies.xml",
                 null);
 
-        final Set<GavPattern> bannedPatterns = resource.getBannedPatterns(StandardCharsets.UTF_8);
-        Assertions.assertEquals(78, bannedPatterns.size());
-        Assertions.assertTrue(bannedPatterns.contains(GavPattern.of("org.javassist:javassist")));
+        final IncludeExcludeGavSet bannedPatterns = (IncludeExcludeGavSet) resource.getBannedSet(StandardCharsets.UTF_8);
+        Assertions.assertEquals(78, bannedPatterns.getIncludes().size());
+        Assertions.assertTrue(bannedPatterns.contains("org.javassist", "javassist"));
     }
 
     @Test
@@ -52,9 +52,9 @@ public class BannedDependencyResourceTest {
                 "src/test/resources/enforcer/test-banned-dependencies.xml",
                 "classpath:enforcer/test-filter.xsl");
 
-        final Set<GavPattern> bannedPatterns = resource.getBannedPatterns(StandardCharsets.UTF_8);
-        Assertions.assertEquals(77, bannedPatterns.size());
-        Assertions.assertFalse(bannedPatterns.contains(GavPattern.of("org.javassist:javassist")));
+        final IncludeExcludeGavSet bannedPatterns = (IncludeExcludeGavSet) resource.getBannedSet(StandardCharsets.UTF_8);
+        Assertions.assertEquals(77, bannedPatterns.getIncludes().size());
+        Assertions.assertFalse(bannedPatterns.contains("org.javassist", "javassist"));
     }
 
 }

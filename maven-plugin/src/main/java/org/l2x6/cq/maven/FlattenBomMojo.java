@@ -20,9 +20,7 @@ import java.io.File;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -40,6 +38,8 @@ import org.l2x6.cq.common.FlattenBomTask;
 import org.l2x6.cq.common.OnFailure;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.model.GavPattern;
+import org.l2x6.pom.tuner.model.GavSet;
+import org.l2x6.pom.tuner.model.GavSet.UnionGavSet.Builder;
 
 /**
  * Flattens the dependency management section of the current pom.xml file.
@@ -249,6 +249,15 @@ public class FlattenBomMojo extends AbstractMojo {
     boolean quickly;
 
     /**
+     * Only used when {@link #format} is true: if {@code true}, remove all {@code <exclusions>} elements from the BOM
+     * before adding the missing exclusions; otherwise only add missing exclusions and leave the existing ones as they are.
+     *
+     * @since 3.4.0
+     */
+    @Parameter(defaultValue = "false", property = "cq.flatten-bom.cleanExclusions")
+    boolean cleanExclusions;
+
+    /**
      * Which flavor of flattened BOM should be installed, useful for testing and debugging purposes. Possible values:
      * <ul>
      * <li>{@code FULL} - see {@link #flattenedFullPomFile}
@@ -333,12 +342,11 @@ public class FlattenBomMojo extends AbstractMojo {
             bomEntryTransformations.addAll(addExclusions);
         }
 
-        final Set<GavPattern> bannedDeps = new LinkedHashSet<>();
+        final Builder bannedDeps = GavSet.unionBuilder();
         if (bannedDependencyResources != null) {
             bannedDependencyResources.stream()
-                    .map(resource -> resource.getBannedPatterns(charset))
-                    .flatMap(Set::stream)
-                    .forEach(bannedDeps::add);
+                    .map(resource -> resource.getBannedSet(charset))
+                    .forEach(bannedDeps::union);
         }
 
         new FlattenBomTask(
@@ -365,7 +373,8 @@ public class FlattenBomMojo extends AbstractMojo {
                 simpleElementWhitespace,
                 installFlavor,
                 quickly,
-                bannedDeps)
+                bannedDeps.build(),
+                cleanExclusions)
                         .execute();
 
     }
