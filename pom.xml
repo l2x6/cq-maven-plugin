@@ -96,7 +96,7 @@
 
         <camel.version>3.3.0</camel.version>
         <freemarker.version>2.3.30</freemarker.version>
-        <assertj.version>3.15.0</assertj.version>
+        <assertj.version>3.24.2</assertj.version>
 
         <!-- Plugins and their dependencies -->
         <buildnumber-maven-plugin.version>1.4</buildnumber-maven-plugin.version>
