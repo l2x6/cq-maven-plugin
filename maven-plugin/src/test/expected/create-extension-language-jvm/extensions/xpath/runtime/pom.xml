@@ -30,7 +30,7 @@
 
     <artifactId>camel-quarkus-xpath</artifactId>
     <name>Camel Quarkus :: XPath :: Runtime</name>
-    <description>Evaluate an XPath expression against an XML payload.</description>
+    <description>Evaluates an XPath expression against an XML payload.</description>
 
     <properties>
         <firstVersion>1.0.0-M6</firstVersion>
