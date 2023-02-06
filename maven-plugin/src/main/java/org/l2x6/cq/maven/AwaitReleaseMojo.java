@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) 2020 CQ Maven Plugin
  * project contributors as indicated by the @author tags.
  *
