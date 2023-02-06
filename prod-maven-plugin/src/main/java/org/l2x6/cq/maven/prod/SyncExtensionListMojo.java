@@ -24,7 +24,7 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.JsonFactory;
-import com.google.api.client.json.jackson2.JacksonFactory;
+import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.services.sheets.v4.Sheets;
 import com.google.api.services.sheets.v4.SheetsScopes;
@@ -138,7 +138,7 @@ public class SyncExtensionListMojo extends AbstractMojo {
 
         try {
             final NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
-            final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
+            final JsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
             final List<String> SCOPES = Collections.singletonList(SheetsScopes.SPREADSHEETS);
 
             final Comparator<ArtifactModel<?>> comparator = CqCatalog.compareArtifactId()
