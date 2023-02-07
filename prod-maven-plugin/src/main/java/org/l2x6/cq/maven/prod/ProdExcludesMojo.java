@@ -1180,7 +1180,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                 getLog(),
                 () -> flattenAndInstallBom(product),
                 jakartaReport != null ? jakartaReport.toPath() : null)
-                        .execute();
+                .execute();
 
     }
 
@@ -1244,7 +1244,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                             .orElse(FlattenBomTask.InstallFlavor.REDUCED),
                     false,
                     product.getBannedDependencies())
-                            .execute();
+                    .execute();
             CqCommonUtils.installArtifact(flattenedBomPath, localRepositoryPath, p.getGroupId(), p.getArtifactId(), version,
                     "pom");
 

@@ -145,8 +145,8 @@ public class SyncExtensionListMojo extends AbstractMojo {
                     .thenComparing(BaseModel.compareTitle());
             final Sheets service = new Sheets.Builder(HTTP_TRANSPORT, JSON_FACTORY,
                     getCredentials(HTTP_TRANSPORT, JSON_FACTORY, SCOPES))
-                            .setApplicationName(APPLICATION_NAME)
-                            .build();
+                    .setApplicationName(APPLICATION_NAME)
+                    .build();
             try (GavCqCatalog camelCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camel, camelVersion, repositories,
                     repoSystem, repoSession);
                     GavCqCatalog camelQuarkusCatalog = GavCqCatalog.open(localRepositoryPath, Flavor.camelQuarkus,
@@ -306,9 +306,9 @@ public class SyncExtensionListMojo extends AbstractMojo {
             // Build flow and trigger user authorization request.
             GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
                     transport, jsonFactory, clientSecrets, scopes)
-                            .setDataStoreFactory(new FileDataStoreFactory(googleTokensDir))
-                            .setAccessType("offline")
-                            .build();
+                    .setDataStoreFactory(new FileDataStoreFactory(googleTokensDir))
+                    .setAccessType("offline")
+                    .build();
             LocalServerReceiver receiver = new LocalServerReceiver.Builder().setPort(8888).build();
             return new AuthorizationCodeInstalledApp(flow, receiver).authorize("user");
         } catch (FileNotFoundException e) {
