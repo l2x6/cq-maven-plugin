@@ -324,8 +324,8 @@ public class CamelProdExcludesMojo extends AbstractMojo {
         /* Remove non-prod components from camel-allcomponents in the copy */
         new PomTransformer(allComponents, charset,
                 simpleElementWhitespace)
-                        .transform(
-                                Transformation.removeDependency(true, true, gavtcs -> !includes.contains(gavtcs.toGa())));
+                .transform(
+                        Transformation.removeDependency(true, true, gavtcs -> !includes.contains(gavtcs.toGa())));
 
         /* Remove own plugins from the copy */
         Stream.of("dsl/camel-yaml-dsl/camel-yaml-dsl/pom.xml").forEach(relPath -> {

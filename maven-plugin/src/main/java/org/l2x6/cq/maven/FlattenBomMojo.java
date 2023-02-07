@@ -365,7 +365,7 @@ public class FlattenBomMojo extends AbstractMojo {
                 installFlavor,
                 quickly,
                 bannedDeps.build())
-                        .execute();
+                .execute();
 
     }
 
