@@ -84,7 +84,7 @@
         <maven-project.version>3.0-alpha-2</maven-project.version>
         <maven.plugin-tools.version>3.5</maven.plugin-tools.version>
         <maven.shared.file-management>3.1.0</maven.shared.file-management>
-        <maven.shared.invoker>3.0.1</maven.shared.invoker>
+        <maven.shared.invoker>3.2.0</maven.shared.invoker>
         <pom-tuner.version>4.1.1</pom-tuner.version>
         <jdom2.version>2.0.6.1</jdom2.version>
         <jgit.version>6.2.0.202206071550-r</jgit.version>
