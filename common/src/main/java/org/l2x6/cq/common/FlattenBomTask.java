@@ -738,23 +738,23 @@ public class FlattenBomTask {
     }
 
     void checkRequiredConstraints(Set<Ga> allTransitives, List<Dependency> originalConstrains) {
-        final List<String> requiredCamelArtifacts = allTransitives.stream()
+        final List<String> expectedRequiredBomEntries = allTransitives.stream()
                 .filter(ga -> requiredBomEntries.contains(ga))
                 .filter(ga -> !bannedDependencies.contains(ga))
                 .map(Ga::toString)
                 .sorted()
                 .collect(Collectors.toList());
 
-        final List<String> managedCamelArtifacts = originalConstrains.stream()
+        final List<String> actualRequiredBomEntries = originalConstrains.stream()
                 .filter(dep -> requiredBomEntries.contains(dep.getGroupId(), dep.getArtifactId()))
                 .map(dep -> dep.getGroupId() + ":" + dep.getArtifactId())
                 .distinct()
                 .sorted()
                 .collect(Collectors.toList());
 
-        final List<Delta<String>> diffs = DiffUtils.diff(requiredCamelArtifacts, managedCamelArtifacts).getDeltas();
+        final List<Delta<String>> diffs = DiffUtils.diff(expectedRequiredBomEntries, actualRequiredBomEntries).getDeltas();
         if (!diffs.isEmpty()) {
-            String msg = "Too little or too much required constraints in camel-quarkus-bom:\n\n    "
+            String msg = "Too little or too much required constraints in " + project.getArtifactId() + ":\n\n    "
                     + diffs.stream().map(Delta::toString).collect(joining("\n    "))
                     + "\n\nConsider adding, removing or excluding them in the BOM\n\n";
             reportFailure(msg);

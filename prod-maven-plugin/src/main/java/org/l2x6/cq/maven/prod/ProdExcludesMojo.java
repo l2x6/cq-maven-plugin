@@ -1401,7 +1401,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                     }
                 }
 
-                final Builder bannedDeps = GavSet.unionBuilder();
+                final Builder bannedDeps = GavSet.unionBuilder().defaultResult(GavSet.excludeAll());
                 @SuppressWarnings("unchecked")
                 final List<Map<String, Object>> rawBannedDependencyResources = (List<Map<String, Object>>) json
                         .getOrDefault("bannedDependencyResources", Collections.emptyList());

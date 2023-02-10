@@ -118,7 +118,7 @@ public class BannedDependencyResource {
 
             final XPath xPath = XPathFactory.newInstance().newXPath();
 
-            final GavSet.IncludeExcludeGavSet.Builder result = GavSet.builder();
+            final GavSet.IncludeExcludeGavSet.Builder result = GavSet.builder().defaultResult(GavSet.excludeAll());
             processPatterns(location, document, xPath, "//*[local-name() = 'exclude']/text()", result::include);
             processPatterns(location, document, xPath, "//*[local-name() = 'include']/text()", result::exclude);
 
