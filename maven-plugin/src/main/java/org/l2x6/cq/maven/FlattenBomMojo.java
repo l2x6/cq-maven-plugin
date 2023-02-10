@@ -333,7 +333,7 @@ public class FlattenBomMojo extends AbstractMojo {
             bomEntryTransformations.addAll(addExclusions);
         }
 
-        final Builder bannedDeps = GavSet.unionBuilder();
+        final Builder bannedDeps = GavSet.unionBuilder().defaultResult(GavSet.excludeAll());
         if (bannedDependencyResources != null) {
             bannedDependencyResources.stream()
                     .map(resource -> resource.getBannedSet(charset))
