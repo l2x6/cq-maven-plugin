@@ -506,7 +506,7 @@ public class FlattenBomTask {
             GavSet resolveSet) {
 
         final MavenSourceTree t = MavenSourceTree.of(rootModuleDirectory.resolve("pom.xml"), charset);
-        final Set<Gavtcs> depsToResolve = collectDependenciesToResolve(originalFlattenedConstrains, resolveSet, t);
+        final Set<Gavtcs> requiredDepsToResolve = collectDependenciesToResolve(originalFlattenedConstrains, resolveSet, t);
 
         /* Assume that the current BOM's parent is both installed already and that it has no dependencies */
         final Parent parent = effectivePomModel.getParent();
@@ -544,8 +544,9 @@ public class FlattenBomTask {
                 .build();
         final Set<Ga> allTransitives = new TreeSet<>();
         final Map<Ga, BomEntryData> transitivesByBomEntry = new LinkedHashMap<>();
-        for (Dependency bomEntry : ownManagedDependencies) {
-            final Gavtcs entry = toGavtcs(bomEntry);
+        final Set<Gavtcs> requiredDepsToResolvePlusOwnGavs = new LinkedHashSet<>(requiredDepsToResolve);
+        ownManagedDependencies.stream().map(FlattenBomTask::toGavtcs).forEach(requiredDepsToResolvePlusOwnGavs::add);
+        for (Gavtcs entry : requiredDepsToResolvePlusOwnGavs) {
 
             final FlattenBomTask.DependencyCollector collector = new DependencyCollector(collectorExcludes);
             final CollectRequest request = new CollectRequest()
@@ -577,7 +578,7 @@ public class FlattenBomTask {
                     }
                 }
             }
-            final boolean isResolutionEntryPoint = depsToResolve.contains(entry);
+            final boolean isResolutionEntryPoint = requiredDepsToResolve.contains(entry);
             transitivesByBomEntry.put(entry.toGa(),
                     new BomEntryData(isResolutionEntryPoint, collector.allTransitives, entry.getExclusions()));
             if (isResolutionEntryPoint) {
