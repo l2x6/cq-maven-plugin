@@ -195,7 +195,7 @@ public class CreateTestMojo extends AbstractExtensionListMojo {
      *
      * @since 0.0.1
      */
-    @Parameter(property = "cq.itestParentPath", defaultValue = CQ_INTEGRATION_TESTS_PATH)
+    @Parameter(property = "cq.itestParentPath")
     File itestParent;
 
     @Parameter(defaultValue = "${project}", readonly = true)
