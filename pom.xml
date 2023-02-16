@@ -524,7 +524,7 @@ limitations under the License.</inlineHeader>
                     <version>${buildnumber-maven-plugin.version}</version>
                     <configuration>
                         <locale>en_US</locale>
-                        <timestampFormat>{0,date,yyyy-MM-dd'T'HH:mm:ssX}</timestampFormat>
+                        <timestampFormat>yyyy-MM-dd'T'HH:mm:ssX</timestampFormat>
                     </configuration>
                     <executions>
                         <execution>
