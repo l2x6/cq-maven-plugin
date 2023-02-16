@@ -139,6 +139,7 @@ public class FlattenBomTask {
          * @param      exclusions items to exclude
          * @deprecated            use {@link #setAddExclusions(String)}
          */
+        @Deprecated
         public void setExclusions(String exclusions) {
             setAddExclusions(exclusions);
         }

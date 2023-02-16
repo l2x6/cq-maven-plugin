@@ -210,6 +210,7 @@ public class FlattenBomMojo extends AbstractMojo {
      * @since      2.24.0
      * @deprecated use the more general {@link #bomEntryTransformations}
      */
+    @Deprecated
     @Parameter
     List<FlattenBomTask.BomEntryTransformation> addExclusions;
 
