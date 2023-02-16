@@ -101,7 +101,7 @@ public class CreateTestMojo extends AbstractExtensionListMojo {
 
     /**
      * A prefix common to all extension names in the current source tree. If you set {@link #namePrefix}, set also
-     * {@link #nameBase}, but do not set {@link #name}.
+     * {@link #nameBase}.
      *
      * @since 0.0.1
      */
@@ -109,11 +109,7 @@ public class CreateTestMojo extends AbstractExtensionListMojo {
     String namePrefix;
 
     /**
-     * The unique part of the {@link #name}. If you set {@link #nameBase}, set also {@link #namePrefix}, but do not set
-     * {@link #name}.
-     * <p>
-     * If neither {@link #name} nor @{link #nameBase} is set, @{link #nameBase} will be derived from
-     * {@link #artifactIdBase}.
+     * The unique part of the name. If you set {@link #nameBase}, set also {@link #namePrefix}.
      *
      * @since 0.0.1
      */
@@ -121,7 +117,7 @@ public class CreateTestMojo extends AbstractExtensionListMojo {
     String nameBase;
 
     /**
-     * A string that will delimit {@link #name} from {@code Parent}, {@code Runtime} and {@code Deployment} tokens in
+     * A string that will delimit Maven module name from {@code Parent}, {@code Runtime} and {@code Deployment} tokens in
      * the respective modules.
      *
      * @since 0.0.1
@@ -163,7 +159,7 @@ public class CreateTestMojo extends AbstractExtensionListMojo {
      * The following URI schemes are supported:
      * <ul>
      * <li>{@code classpath:}</li>
-     * <li>{@code file:} (relative to {@link #basedir})</li>
+     * <li>{@code file:} (relative to {@code project.basedir})</li>
      * </ul>
      * These are the template files you may want to provide under your custom {@link #templatesUriBase}:
      * <ul>
