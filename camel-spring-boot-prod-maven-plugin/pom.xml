@@ -30,6 +30,11 @@
     <name>CQ Camel Spring Boot Prod Maven Plugin</name>
     <description>A Maven plugin to perform various tasks related to productized Camel Spring Boot</description>
 
+    <properties>
+        <!-- maven-plugin-plugin -->
+        <plugin.goalPrefix>cq-sb-prod</plugin.goalPrefix>
+    </properties>
+
     <dependencies>
 
         <dependency>

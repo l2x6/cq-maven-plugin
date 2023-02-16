@@ -145,6 +145,8 @@
         <releases.repo.url>${oss.nexus.base.url}/service/local/staging/deploy/maven2/</releases.repo.url>
         <snapshots.repo.url>${oss.nexus.base.url}/content/repositories/snapshots/</snapshots.repo.url>
 
+        <!-- maven-plugin-plugin -->
+        <plugin.goalPrefix></plugin.goalPrefix><!-- this needs to be overriden in every plugin submodule -->
         <!-- maven-surefire-plugin -->
         <surefire.useFile>false</surefire.useFile>
         <trimStackTrace>false</trimStackTrace>
@@ -442,7 +444,7 @@ limitations under the License.</inlineHeader>
                     <artifactId>maven-plugin-plugin</artifactId>
                     <version>${maven-plugin-plugin.version}</version>
                     <configuration>
-                        <goalPrefix>cq</goalPrefix>
+                        <goalPrefix>${plugin.goalPrefix}</goalPrefix>
                     </configuration>
                 </plugin>
 

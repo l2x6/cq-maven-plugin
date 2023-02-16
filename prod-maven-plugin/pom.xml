@@ -30,6 +30,11 @@
     <name>CQ Prod Maven Plugin</name>
     <description>A Maven plugin to perform various tasks related to productized Camel Quarkus</description>
 
+    <properties>
+        <!-- maven-plugin-plugin -->
+        <plugin.goalPrefix>cq-prod</plugin.goalPrefix>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>com.google.api-client</groupId>
