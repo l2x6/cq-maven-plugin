@@ -30,6 +30,11 @@
     <name>CQ Maven Plugin</name>
     <description>A Maven plugin to perform various tasks related to Camel Quarkus</description>
 
+    <properties>
+        <!-- maven-plugin-plugin -->
+        <plugin.goalPrefix>cq</plugin.goalPrefix>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.assertj</groupId>

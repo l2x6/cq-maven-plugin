@@ -30,6 +30,11 @@
     <name>CQ Camel Prod Maven Plugin</name>
     <description>A Maven plugin to perform various tasks related to productized Camel</description>
 
+    <properties>
+        <!-- maven-plugin-plugin -->
+        <plugin.goalPrefix>cq-camel-prod</plugin.goalPrefix>
+    </properties>
+
     <dependencies>
 
         <dependency>
