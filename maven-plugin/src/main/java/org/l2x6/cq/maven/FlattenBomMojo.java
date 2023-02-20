@@ -19,6 +19,7 @@ package org.l2x6.cq.maven;
 import java.io.File;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.maven.execution.MavenSession;
@@ -316,6 +317,10 @@ public class FlattenBomMojo extends AbstractMojo {
     @Parameter(defaultValue = "${session}", readonly = true, required = true)
     MavenSession session;
 
+    @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
+    String localRepository;
+    Path localRepositoryPath;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         if (skip) {
@@ -323,6 +328,7 @@ public class FlattenBomMojo extends AbstractMojo {
             return;
         }
         charset = Charset.forName(encoding);
+        localRepositoryPath = Paths.get(localRepository);
         rootModuleDirectory = multiModuleProjectDirectory.toPath().toAbsolutePath().normalize();
         final Path fullPomPath = basedir.toPath().resolve(flattenedFullPomFile.toPath());
         final Path reducedVerbosePamPath = basedir.toPath().resolve(flattenedReducedVerbosePomFile.toPath());
@@ -365,7 +371,8 @@ public class FlattenBomMojo extends AbstractMojo {
                 simpleElementWhitespace,
                 installFlavor,
                 quickly,
-                bannedDeps.build())
+                bannedDeps.build(),
+                localRepositoryPath)
                 .execute();
 
     }
