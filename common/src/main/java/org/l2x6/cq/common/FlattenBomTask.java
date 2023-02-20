@@ -24,6 +24,7 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -812,139 +813,162 @@ public class FlattenBomTask {
         }
 
         if (!missingBannedDeps.isEmpty()) {
+            final Path originalPomPath;
+            final Path transformedPomPath;
             if (format) {
-                new PomTransformer(basePath.resolve("pom.xml"), charset, simpleElementWhitespace)
-                        .transform((org.w3c.dom.Document doc, TransformationContext context) -> {
+                originalPomPath = basePath.resolve("target/original-pom.xml");
+                copyPom(basePath.resolve("pom.xml"), originalPomPath);
+                transformedPomPath = basePath.resolve("pom.xml");
+            } else {
+                originalPomPath = basePath.resolve("pom.xml");
+                transformedPomPath = basePath.resolve("target/transformed-pom.xml");
+                copyPom(basePath.resolve("pom.xml"), transformedPomPath);
+            }
+            new PomTransformer(transformedPomPath, charset, simpleElementWhitespace)
+                    .transform((org.w3c.dom.Document doc, TransformationContext context) -> {
 
-                            final Set<NodeGavtcs> deps = context.getManagedDependencies();
-                            final Set<Ga> doneMissingBannedDeps = new TreeSet<>();
-                            missingBannedDeps.forEach((bomEntry, missingExclusions) -> {
-                                deps.stream()
-                                        .filter(dep -> dep.toGa().equals(bomEntry))
-                                        .forEach(dep -> {
-                                            doneMissingBannedDeps.add(bomEntry);
-                                            final ContainerElement exclusionsNode = dep.getNode()
-                                                    .getOrAddChildContainerElement("exclusions");
-                                            missingExclusions.forEach(
-                                                    missingExclusion -> FlattenBomTask.addExclusion(exclusionsNode,
-                                                            missingExclusion));
-                                        });
-                            });
-
-                            final ContainerElement cqMavenPluginNode = context
-                                    .getContainerElement("project", "build", "plugins")
-                                    .orElseThrow()
-                                    .childElementsStream()
-                                    .map(ContainerElement::asGavtcs)
-                                    .filter(pluginNode -> pluginNode.getGroupId().equals("org.l2x6.cq")
-                                            && pluginNode.getArtifactId().equals("cq-maven-plugin"))
-                                    .findFirst()
-                                    .orElseThrow(() -> new IllegalStateException(
-                                            "Could not find org.l2x6.cq:cq-maven-plugin in " + context.getXPath()))
-                                    .getNode();
-
-                            final ContainerElement flattenBomExecutionNode = cqMavenPluginNode
-                                    .getChildContainerElement("executions")
-                                    .orElseThrow(() -> new IllegalStateException(
-                                            "Could not find org.l2x6.cq:cq-maven-plugin/executions in "
-                                                    + context.getXPath()))
-                                    .childElementsStream()
-                                    .filter(executionNode -> {
-                                        Optional<ContainerElement> idNode = executionNode.getChildContainerElement("id");
-                                        return idNode.isPresent()
-                                                && idNode.get().getNode().getTextContent().equals("flatten-bom");
-                                    })
-                                    .findFirst()
-                                    .orElseThrow(() -> new IllegalStateException(
-                                            "Could not find flatten-bom execution of org.l2x6.cq:cq-maven-plugin in "
-                                                    + context.getXPath()));
-                            final ContainerElement bomEntryTransformationsNode = flattenBomExecutionNode
-                                    .getOrAddChildContainerElement("configuration")
-                                    .getOrAddChildContainerElement("bomEntryTransformations");
-                            List<Entry<Ga, Set<Ga>>> missingTransformations = missingBannedDeps.entrySet().stream()
-                                    .filter(en -> !doneMissingBannedDeps.contains(en.getKey()))
-                                    .collect(Collectors.toList());
-
-                            if (!missingTransformations.isEmpty()) {
-                                final Map<GavPattern, BomEntryTransformationData> transformations = new TreeMap<>();
-
-                                bomEntryTransformationsNode
-                                        .childElementsStream()
-                                        .map(bomEntryTransformationNode -> new BomEntryTransformationData(
-                                                new BomEntryTransformation(
-                                                        bomEntryTransformationNode.getChildContainerElement("gavPattern")
-                                                                .get()
-                                                                .getNode().getTextContent(),
-                                                        bomEntryTransformationNode
-                                                                .getChildContainerElement("versionReplacement")
-                                                                .map(node -> node.getNode().getTextContent())
-                                                                .orElse(null),
-                                                        bomEntryTransformationNode.getChildContainerElement("exclusions")
-                                                                .map(node -> node.getNode().getTextContent())
-                                                                .orElse(null),
-                                                        bomEntryTransformationNode.getChildContainerElement("addExclusions")
-                                                                .map(node -> node.getNode().getTextContent())
-                                                                .orElse(null)),
-                                                bomEntryTransformationNode)
-
-                                        )
-                                        .forEach(bomEntryTransformationData -> {
-                                            BomEntryTransformationData oldEntry = transformations
-                                                    .get(bomEntryTransformationData.bomEntryTransformation.getGavPattern());
-                                            if (oldEntry != null) {
-                                                throw new IllegalStateException(
-                                                        "Cannot handle bomEntryTransformations with the same gavPattern: "
-                                                                + oldEntry.bomEntryTransformation + " vs. "
-                                                                + bomEntryTransformationData.bomEntryTransformation
-                                                                + "; please merge them manually");
-                                            } else {
-                                                transformations.put(
-                                                        bomEntryTransformationData.bomEntryTransformation.getGavPattern(),
-                                                        bomEntryTransformationData);
-                                            }
-                                        });
-
-                                missingTransformations.stream()
-                                        .forEach(en -> {
-                                            final GavPattern pattern = GavPattern.of(en.getKey().toString());
-                                            final Set<Ga> missingExclusions = en.getValue();
-                                            final BomEntryTransformationData oldTransformation = transformations
-                                                    .get(pattern);
-                                            if (oldTransformation != null) {
-                                                /*
-                                                 * Add the missing exclusions to an existing bomEntryTransformation
-                                                 * node
-                                                 */
-                                                oldTransformation.addExclusions(missingExclusions);
-                                            } else {
-                                                /* Create a new bomEntryTransformation node */
-                                                final BomEntryTransformationData bomEntryTransformationData = BomEntryTransformationData
-                                                        .create(
-                                                                pattern,
-                                                                missingExclusions,
-                                                                bomEntryTransformationsNode);
-                                                transformations.put(pattern, bomEntryTransformationData);
-                                            }
-                                        });
-                            }
+                        final Set<NodeGavtcs> deps = context.getManagedDependencies();
+                        final Set<Ga> doneMissingBannedDeps = new TreeSet<>();
+                        missingBannedDeps.forEach((bomEntry, missingExclusions) -> {
+                            deps.stream()
+                                    .filter(dep -> dep.toGa().equals(bomEntry))
+                                    .forEach(dep -> {
+                                        doneMissingBannedDeps.add(bomEntry);
+                                        final ContainerElement exclusionsNode = dep.getNode()
+                                                .getOrAddChildContainerElement("exclusions");
+                                        missingExclusions.forEach(
+                                                missingExclusion -> FlattenBomTask.addExclusion(exclusionsNode,
+                                                        missingExclusion));
+                                    });
                         });
-            }
 
-            if (!missingBannedDeps.isEmpty()) {
+                        final ContainerElement cqMavenPluginNode = context
+                                .getContainerElement("project", "build", "plugins")
+                                .orElseThrow()
+                                .childElementsStream()
+                                .map(ContainerElement::asGavtcs)
+                                .filter(pluginNode -> pluginNode.getGroupId().equals("org.l2x6.cq")
+                                        && pluginNode.getArtifactId().equals("cq-maven-plugin"))
+                                .findFirst()
+                                .orElseThrow(() -> new IllegalStateException(
+                                        "Could not find org.l2x6.cq:cq-maven-plugin in " + context.getXPath()))
+                                .getNode();
 
-                final StringBuilder msg = new StringBuilder("Missing exclusions in ")
-                        .append(effectivePomModel.getArtifactId())
-                        .append(":\n");
-                missingBannedDeps
-                        .forEach((gavtcs, missingExclusions) -> msg
-                                .append("\n    ")
-                                .append(gavtcs)
-                                .append(" pulls banned dependencies ")
-                                .append(missingExclusions));
-                throw new RuntimeException(msg.append(
-                        "\n\nYou may want to consider running\n\n    mvn process-resources -Dcq.flatten-bom.format\n\nto fix the named issues in this BOM")
-                        .toString());
+                        final ContainerElement flattenBomExecutionNode = cqMavenPluginNode
+                                .getChildContainerElement("executions")
+                                .orElseThrow(() -> new IllegalStateException(
+                                        "Could not find org.l2x6.cq:cq-maven-plugin/executions in "
+                                                + context.getXPath()))
+                                .childElementsStream()
+                                .filter(executionNode -> {
+                                    Optional<ContainerElement> idNode = executionNode.getChildContainerElement("id");
+                                    return idNode.isPresent()
+                                            && idNode.get().getNode().getTextContent().equals("flatten-bom");
+                                })
+                                .findFirst()
+                                .orElseThrow(() -> new IllegalStateException(
+                                        "Could not find flatten-bom execution of org.l2x6.cq:cq-maven-plugin in "
+                                                + context.getXPath()));
+                        final ContainerElement bomEntryTransformationsNode = flattenBomExecutionNode
+                                .getOrAddChildContainerElement("configuration")
+                                .getOrAddChildContainerElement("bomEntryTransformations");
+                        List<Entry<Ga, Set<Ga>>> missingTransformations = missingBannedDeps.entrySet().stream()
+                                .filter(en -> !doneMissingBannedDeps.contains(en.getKey()))
+                                .collect(Collectors.toList());
+
+                        if (!missingTransformations.isEmpty()) {
+                            final Map<GavPattern, BomEntryTransformationData> transformations = new TreeMap<>();
+
+                            bomEntryTransformationsNode
+                                    .childElementsStream()
+                                    .map(bomEntryTransformationNode -> new BomEntryTransformationData(
+                                            new BomEntryTransformation(
+                                                    bomEntryTransformationNode.getChildContainerElement("gavPattern")
+                                                            .get()
+                                                            .getNode().getTextContent(),
+                                                    bomEntryTransformationNode
+                                                            .getChildContainerElement("versionReplacement")
+                                                            .map(node -> node.getNode().getTextContent())
+                                                            .orElse(null),
+                                                    bomEntryTransformationNode.getChildContainerElement("exclusions")
+                                                            .map(node -> node.getNode().getTextContent())
+                                                            .orElse(null),
+                                                    bomEntryTransformationNode.getChildContainerElement("addExclusions")
+                                                            .map(node -> node.getNode().getTextContent())
+                                                            .orElse(null)),
+                                            bomEntryTransformationNode)
+
+                                    )
+                                    .forEach(bomEntryTransformationData -> {
+                                        BomEntryTransformationData oldEntry = transformations
+                                                .get(bomEntryTransformationData.bomEntryTransformation.getGavPattern());
+                                        if (oldEntry != null) {
+                                            throw new IllegalStateException(
+                                                    "Cannot handle bomEntryTransformations with the same gavPattern: "
+                                                            + oldEntry.bomEntryTransformation + " vs. "
+                                                            + bomEntryTransformationData.bomEntryTransformation
+                                                            + "; please merge them manually");
+                                        } else {
+                                            transformations.put(
+                                                    bomEntryTransformationData.bomEntryTransformation.getGavPattern(),
+                                                    bomEntryTransformationData);
+                                        }
+                                    });
+
+                            missingTransformations.stream()
+                                    .forEach(en -> {
+                                        final GavPattern pattern = GavPattern.of(en.getKey().toString());
+                                        final Set<Ga> missingExclusions = en.getValue();
+                                        final BomEntryTransformationData oldTransformation = transformations
+                                                .get(pattern);
+                                        if (oldTransformation != null) {
+                                            /*
+                                             * Add the missing exclusions to an existing bomEntryTransformation
+                                             * node
+                                             */
+                                            oldTransformation.addExclusions(missingExclusions);
+                                        } else {
+                                            /* Create a new bomEntryTransformation node */
+                                            final BomEntryTransformationData bomEntryTransformationData = BomEntryTransformationData
+                                                    .create(
+                                                            pattern,
+                                                            missingExclusions,
+                                                            bomEntryTransformationsNode);
+                                            transformations.put(pattern, bomEntryTransformationData);
+                                        }
+                                    });
+                        }
+                    });
+
+            try {
+                final List<Delta<String>> diffs = DiffUtils
+                        .diff(Files.readAllLines(transformedPomPath, charset), Files.readAllLines(originalPomPath, charset))
+                        .getDeltas();
+                if (!diffs.isEmpty()) {
+                    final StringBuilder msg = new StringBuilder("Missing exclusions in ")
+                            .append(effectivePomModel.getArtifactId())
+                            .append(":\n");
+                    diffs.stream().map(Delta::toString).forEach(str -> msg.append(str).append('\n'));
+                    msg.append(
+                            "\n\nYou may want to consider running\n\n    mvn process-resources -Dcq.flatten-bom.format\n\nto fix the named issues in this BOM");
+                    reportFailure(msg.toString());
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Could not read " + transformedPomPath + " or " + originalPomPath, e);
             }
+        }
+    }
+
+    static void copyPom(Path sourcePomPath, Path destinationPomPath) {
+        try {
+            Files.createDirectories(destinationPomPath.getParent());
+        } catch (IOException e) {
+            throw new RuntimeException("Could not create " + destinationPomPath.getParent(), e);
+        }
+        try {
+            Files.copy(sourcePomPath, destinationPomPath, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new RuntimeException("Could not copy " + sourcePomPath + " to " + destinationPomPath, e);
         }
     }
 
