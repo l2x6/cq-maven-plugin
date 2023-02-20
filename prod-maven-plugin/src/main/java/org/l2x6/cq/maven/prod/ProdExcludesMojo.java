@@ -1243,7 +1243,8 @@ public class ProdExcludesMojo extends AbstractMojo {
                     optionalChild(config, "installFlavor").map(FlattenBomTask.InstallFlavor::valueOf)
                             .orElse(FlattenBomTask.InstallFlavor.REDUCED),
                     false,
-                    product.getBannedDependencies())
+                    product.getBannedDependencies(),
+                    localRepositoryPath)
                     .execute();
             CqCommonUtils.installArtifact(flattenedBomPath, localRepositoryPath, p.getGroupId(), p.getArtifactId(), version,
                     "pom");

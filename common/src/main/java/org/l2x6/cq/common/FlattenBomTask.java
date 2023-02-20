@@ -322,6 +322,7 @@ public class FlattenBomTask {
     private final boolean quickly;
     private final GavSet bannedDependencies;
     private final List<Dependency> ownManagedDependencies;
+    private final Path localRepositoryPath;
     private static final Pattern LOCATION_COMMENT_PATTERN = Pattern.compile("\\s*\\Q<!--#}\\E");
     public static final String DEFAULT_FLATTENED_REDUCED_VERBOSE_POM_FILE = "src/main/generated/flattened-reduced-verbose-pom.xml";
     public static final String DEFAULT_FLATTENED_REDUCED_POM_FILE = "src/main/generated/flattened-reduced-pom.xml";
@@ -343,7 +344,7 @@ public class FlattenBomTask {
             Path reducedPomPath, Charset charset, Log log, List<RemoteRepository> repositories, RepositorySystem repoSystem,
             RepositorySystemSession repoSession, Predicate<Profile> profiles, boolean format,
             SimpleElementWhitespace simpleElementWhitespace, FlattenBomTask.InstallFlavor installFlavor, boolean quickly,
-            GavSet bannedDependencies) {
+            GavSet bannedDependencies, Path localRepositoryPath) {
         this.resolutionEntryPointIncludes = resolutionEntryPointIncludes;
         this.resolutionEntryPointExcludes = resolutionEntryPointExcludes;
         this.resolutionSuspects = resolutionSuspects;
@@ -379,6 +380,7 @@ public class FlattenBomTask {
         this.installFlavor = installFlavor;
         this.quickly = quickly;
         this.bannedDependencies = bannedDependencies;
+        this.localRepositoryPath = localRepositoryPath;
     }
 
     static List<FlattenBomTask.BomEntryTransformation> mergeTransformations(Path rootModuleDirectory,
@@ -509,6 +511,19 @@ public class FlattenBomTask {
 
         final MavenSourceTree t = MavenSourceTree.of(rootModuleDirectory.resolve("pom.xml"), charset);
         final Set<Gavtcs> requiredDepsToResolve = collectDependenciesToResolve(originalFlattenedConstrains, resolveSet, t);
+
+        final Set<Ga> installPoms = t
+                .findRequiredModules(ownManagedDependencies.stream().map(dep -> new Ga(dep.getGroupId(), dep.getArtifactId()))
+                        .filter(ga -> t.getModulesByGa().containsKey(ga)).collect(Collectors.toSet()), profiles);
+        /* Install the poms from the current source tree so that resolver can find them */
+        installPoms
+                .forEach(ga -> {
+                    Module module = t.getModulesByGa().get(ga);
+                    final String relPath = module.getPomPath();
+                    final Path absPath = t.getRootDirectory().resolve(relPath);
+                    CqCommonUtils.installArtifact(absPath, localRepositoryPath, ga.getGroupId(), ga.getArtifactId(), version,
+                            "pom");
+                });
 
         /* Assume that the current BOM's parent is both installed already and that it has no dependencies */
         final Parent parent = effectivePomModel.getParent();
