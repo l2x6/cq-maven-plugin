@@ -94,6 +94,7 @@ import org.l2x6.pom.tuner.PomTunerUtils;
 import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.Expression;
 import org.l2x6.pom.tuner.model.Ga;
+import org.l2x6.pom.tuner.model.Gav;
 import org.l2x6.pom.tuner.model.GavSet;
 import org.l2x6.pom.tuner.model.GavSet.UnionGavSet.Builder;
 import org.l2x6.pom.tuner.model.Gavtcs;
@@ -1244,7 +1245,8 @@ public class ProdExcludesMojo extends AbstractMojo {
                             .orElse(FlattenBomTask.InstallFlavor.REDUCED),
                     false,
                     product.getBannedDependencies(),
-                    localRepositoryPath)
+                    localRepositoryPath,
+                    childList(config, "additionalBoms").stream().map(Gav::of).collect(Collectors.toList()))
                     .execute();
             CqCommonUtils.installArtifact(flattenedBomPath, localRepositoryPath, p.getGroupId(), p.getArtifactId(), version,
                     "pom");

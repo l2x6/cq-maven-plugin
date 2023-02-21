@@ -21,7 +21,9 @@ import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -38,6 +40,7 @@ import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.common.FlattenBomTask;
 import org.l2x6.cq.common.OnFailure;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.model.Gav;
 import org.l2x6.pom.tuner.model.GavPattern;
 import org.l2x6.pom.tuner.model.GavSet;
 import org.l2x6.pom.tuner.model.GavSet.UnionGavSet.Builder;
@@ -305,6 +308,23 @@ public class FlattenBomMojo extends AbstractMojo {
     @Parameter
     List<BannedDependencyResource> bannedDependencyResources;
 
+    /**
+     * A list of {@code groupId:artifactid:version} tripples whose managed dependencies should be honored when resolving
+     * transitives of the current BOM. Example:
+     *
+     * <pre>
+     * {@code
+     *    <additionalBoms>
+     *        <additionalBom>io.quarkus:quarkus-bom:${quarkus.version}</additionalBom>
+     *    </additionalBoms>
+     * }
+     * </pre>
+     *
+     * @since 3.5.0
+     */
+    @Parameter
+    List<String> additionalBoms;
+
     @Component
     RepositorySystem repoSystem;
 
@@ -372,7 +392,9 @@ public class FlattenBomMojo extends AbstractMojo {
                 installFlavor,
                 quickly,
                 bannedDeps.build(),
-                localRepositoryPath)
+                localRepositoryPath,
+                additionalBoms == null ? Collections.emptyList()
+                        : additionalBoms.stream().map(Gav::of).collect(Collectors.toList()))
                 .execute();
 
     }
