@@ -38,7 +38,6 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -46,21 +45,27 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.camel.catalog.Kind;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.lifecycle.internal.MojoDescriptorCreator;
-import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
+import org.apache.maven.plugin.InvalidPluginDescriptorException;
 import org.apache.maven.plugin.MojoExecution;
+import org.apache.maven.plugin.MojoNotFoundException;
+import org.apache.maven.plugin.PluginDescriptorParsingException;
+import org.apache.maven.plugin.PluginNotFoundException;
 import org.apache.maven.plugin.PluginParameterExpressionEvaluator;
+import org.apache.maven.plugin.PluginResolutionException;
 import org.apache.maven.plugin.descriptor.MojoDescriptor;
 import org.apache.maven.plugin.logging.Log;
+import org.apache.maven.plugin.prefix.NoPluginFoundForPrefixException;
+import org.apache.maven.plugin.version.PluginVersionResolutionException;
 import org.apache.maven.project.MavenProject;
 import org.assertj.core.util.diff.Delta;
 import org.codehaus.plexus.component.configurator.expression.ExpressionEvaluationException;
@@ -72,6 +77,9 @@ import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.ArtifactRequest;
 import org.eclipse.aether.resolution.ArtifactResolutionException;
 import org.eclipse.aether.resolution.ArtifactResult;
+import org.l2x6.cq.common.sync.SyncExpression;
+import org.l2x6.cq.common.sync.SyncExpressions;
+import org.l2x6.cq.common.sync.SyncExpressions.Builder;
 import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
@@ -97,9 +105,6 @@ public class CqCommonUtils {
     private static final boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
 
     private static final Pattern SIMPLE_XML_ELEMENT_PATTERN = Pattern.compile("\\s+/>");
-    static final Pattern SYNC_INSTRUCTION_PATTERN = Pattern
-            .compile(
-                    "\\s*@sync (?<groupId>[^:]*):(?<artifactId>[^:]*):(?<version>[^:]*) (?<method>[^:]+):(?<element>[^ ]+)\\s*");
 
     private CqCommonUtils() {
     }
@@ -497,16 +502,15 @@ public class CqCommonUtils {
             RepositorySystemSession repoSession,
             RepositorySystem repoSystem) {
         try {
-            MojoDescriptor mojoDescriptor = mojoDescriptorCreator.getMojoDescriptor("help:evaluate", session, project);
-            PluginParameterExpressionEvaluator evaluator = new PluginParameterExpressionEvaluator(session,
-                    new MojoExecution(mojoDescriptor));
-
             new PomTransformer(pomXml, charset, simpleElementWhitespace)
-                    .transform(new UpdateVersionsTransformation(
-                            new PomModelCache(localRepositoryPath, repositories, repoSystem, repoSession, project.getModel()),
-                            evaluator,
-                            log,
-                            versionTransformations));
+                    .transform(
+                            new UpdateVersionsTransformation(
+                                    new PomModelCache(localRepositoryPath, repositories, repoSystem, repoSession,
+                                            project.getModel()),
+                                    session,
+                                    mojoDescriptorCreator,
+                                    log,
+                                    versionTransformations));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -515,14 +519,17 @@ public class CqCommonUtils {
     static class UpdateVersionsTransformation implements Transformation {
 
         private final PomModelCache pomModels;
-        private final PluginParameterExpressionEvaluator evaluator;
+        private final MavenSession session;
         private final Log log;
         private final Map<String, String> versionTransformations;
+        private final MojoDescriptorCreator mojoDescriptorCreator;
 
-        public UpdateVersionsTransformation(PomModelCache pomModels, PluginParameterExpressionEvaluator evaluator, Log log,
+        public UpdateVersionsTransformation(PomModelCache pomModels, MavenSession session,
+                MojoDescriptorCreator mojoDescriptorCreator, Log log,
                 Map<String, String> versionTransformations) {
             this.pomModels = pomModels;
-            this.evaluator = evaluator;
+            this.session = session;
+            this.mojoDescriptorCreator = mojoDescriptorCreator;
             this.log = log;
             this.versionTransformations = versionTransformations;
         }
@@ -530,99 +537,73 @@ public class CqCommonUtils {
         @Override
         public void perform(Document document, TransformationContext context) {
             context.getContainerElement("project", "properties").ifPresent(props -> {
+                final Builder expressionsBuilder = SyncExpressions.builder();
                 for (ContainerElement prop : props.childElements()) {
                     Comment nextComment = prop.nextSiblingCommentNode();
                     if (nextComment != null) {
                         final String commentText = nextComment.getNodeValue();
-                        final Matcher m = SYNC_INSTRUCTION_PATTERN.matcher(commentText);
-                        if (m.matches()) {
-                            final String groupId = m.group("groupId");
-                            final String artifactId = m.group("artifactId");
-                            final String rawVersion = m.group("version");
-                            final String element = m.group("element");
-                            final String method = m.group("method");
-                            try {
-                                final String resolvedVersion = (String) evaluator.evaluate(rawVersion, String.class);
-                                log.debug("Resolved version " + rawVersion + " -> " + resolvedVersion);
-                                final Model sourceModel = pomModels.get(groupId, artifactId, resolvedVersion);
-
-                                final String newValue;
-
-                                switch (method) {
-                                case "prop":
-                                    final Properties sourceProps = sourceModel.getProperties();
-                                    final String sourceProperty = element;
-                                    newValue = sourceProps.getProperty(sourceProperty);
-                                    break;
-                                case "dep":
-                                    newValue = dependencyVersion(sourceModel, element, groupId, artifactId, resolvedVersion);
-                                    break;
-                                default:
-                                    throw new IllegalStateException(
-                                            "Unexpected method " + method + "; expected property or dependency");
-                                }
-
-                                final StringWriter out = new StringWriter();
-                                final String transformedValue;
-                                final String versionTransformation = versionTransformations.get(prop.getNode().getLocalName());
-                                if (versionTransformation != null) {
-                                    final Configuration templateCfg = new Configuration(Configuration.VERSION_2_3_28);
-                                    templateCfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
-
-                                    try {
-                                        final Template t = new Template(
-                                                versionTransformation,
-                                                new StringReader(versionTransformation),
-                                                templateCfg);
-                                        final Map<String, Object> model = Collections.singletonMap("version", newValue);
-                                        t.process(model, out);
-                                        transformedValue = out.toString();
-                                    } catch (IOException e) {
-                                        throw new RuntimeException("Could not parse " + versionTransformation, e);
-                                    } catch (TemplateException e) {
-                                        throw new RuntimeException("Could not process " + versionTransformation, e);
-                                    }
-                                } else {
-                                    transformedValue = newValue;
-                                }
-
-                                final Element propNode = prop.getNode();
-                                final String key = propNode.getNodeName();
-                                final String oldValue = propNode.getTextContent();
-                                if (oldValue.equals(transformedValue)) {
-                                    log.info(" - Property " + key + " up to date");
-                                } else {
-                                    log.info(" - Property " + key + " updated: " + oldValue + " -> " + transformedValue);
-                                    propNode.setTextContent(transformedValue);
-                                }
-                            } catch (ExpressionEvaluationException e) {
-                                throw new RuntimeException("Could not resolve " + rawVersion, e);
-                            }
-                        }
+                        SyncExpression.parse(prop.getNode(), commentText)
+                                .ifPresent(expr -> expressionsBuilder.expression(expr));
                     }
                 }
+                final SyncExpressions expressions = expressionsBuilder.build();
+                final Function<String, String> mavenExpressionEvaluator = expr -> {
+                    try {
+                        final MojoDescriptor mojoDescriptor = mojoDescriptorCreator.getMojoDescriptor("help:evaluate", session,
+                                session.getCurrentProject());
+                        return (String) new PluginParameterExpressionEvaluator(
+                                session,
+                                new MojoExecution(mojoDescriptor))
+                                .evaluate(expr, String.class);
+                    } catch (ExpressionEvaluationException | PluginNotFoundException | PluginResolutionException
+                            | PluginDescriptorParsingException | MojoNotFoundException | NoPluginFoundForPrefixException
+                            | InvalidPluginDescriptorException | PluginVersionResolutionException e) {
+                        throw new RuntimeException("Could not evaluate " + expr, e);
+                    }
+                };
+                expressions.evaluate(mavenExpressionEvaluator, pomModels,
+                        (SyncExpression syncExpression, String newValue) -> {
+                            final Element propertyNode = syncExpression.getPropertyNode();
+                            final String propertyName = propertyNode.getLocalName();
+
+                            final StringWriter out = new StringWriter();
+                            final String transformedValue;
+                            final String versionTransformation = versionTransformations.get(propertyName);
+                            if (versionTransformation != null) {
+                                final Configuration templateCfg = new Configuration(Configuration.VERSION_2_3_28);
+                                templateCfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
+
+                                try {
+                                    final Template t = new Template(
+                                            versionTransformation,
+                                            new StringReader(versionTransformation),
+                                            templateCfg);
+                                    final Map<String, Object> model = Collections.singletonMap("version", newValue);
+                                    t.process(model, out);
+                                    transformedValue = out.toString();
+                                } catch (IOException e) {
+                                    throw new RuntimeException("Could not parse " + versionTransformation, e);
+                                } catch (TemplateException e) {
+                                    throw new RuntimeException("Could not process " + versionTransformation, e);
+                                }
+                            } else {
+                                transformedValue = newValue;
+                            }
+
+                            final String oldValue = propertyNode.getTextContent();
+                            if (oldValue.equals(transformedValue)) {
+                                log.info(" - " + propertyName + ": " + oldValue);
+                            } else {
+                                log.info(" - " + propertyName + ": " + oldValue + " -> " + transformedValue);
+                            }
+
+                            propertyNode.setTextContent(transformedValue);
+                            session.getCurrentProject().getProperties().setProperty(propertyName, transformedValue);
+                        });
+
             });
         }
 
-        private String dependencyVersion(Model model, String element, String groupId, String artifactId,
-                String resolvedVersion) {
-            final String[] ga = element.split(":");
-            final List<List<Dependency>> depStreams = new ArrayList<>();
-            if (model.getDependencyManagement() != null && model.getDependencyManagement().getDependencies() != null) {
-                depStreams.add(model.getDependencyManagement().getDependencies());
-            }
-            if (model.getDependencies() != null) {
-                depStreams.add(model.getDependencies());
-            }
-            return depStreams.stream()
-                    .flatMap(List::stream)
-                    .filter(d -> ga[0].equals(d.getGroupId()) && ga[1].equals(d.getArtifactId())
-                            && d.getVersion() != null)
-                    .map(Dependency::getVersion)
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalStateException("No such dependency " + element
-                            + " in " + groupId + ":" + artifactId + ":" + resolvedVersion + ":pom"));
-        }
     }
 
     public static Predicate<Profile> getProfiles(MavenSession session) {

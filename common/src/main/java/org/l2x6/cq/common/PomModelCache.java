@@ -21,14 +21,16 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import org.apache.maven.model.Model;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
+import org.l2x6.pom.tuner.model.Gav;
 
-public class PomModelCache {
+public class PomModelCache implements Function<Gav, Model> {
 
-    private final Map<String, Model> items = new HashMap<>();
+    private final Map<Gav, Model> items = new HashMap<>();
     private final Path localRepositoryPath;
     private final List<RemoteRepository> remoteRepositories;
     private final RepositorySystem repoSystem;
@@ -44,13 +46,14 @@ public class PomModelCache {
         this.self = self;
     }
 
-    public Model get(String groupId, String artifactId, String version) {
-        final String key = groupId + ":" + artifactId + ":" + version;
-        if (key == "::") {
+    @Override
+    public Model apply(Gav key) {
+        if ("::".equals(key.toString())) {
             return self;
         }
         return items.computeIfAbsent(key, k -> {
-            final Path cqPomPath = CqCommonUtils.resolveArtifact(localRepositoryPath, groupId, artifactId, version,
+            final Path cqPomPath = CqCommonUtils.resolveArtifact(localRepositoryPath, k.getGroupId(), k.getArtifactId(),
+                    k.getVersion(),
                     "pom", remoteRepositories, repoSystem, repoSession);
             final Model model = CqCommonUtils.readPom(cqPomPath, StandardCharsets.UTF_8);
             return model;
