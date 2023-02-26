@@ -25,6 +25,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -187,17 +188,28 @@ public class FlattenBomTask {
         private final Predicate<Ga> isCurrentBomOrIncludedEntry;
         private final GavSet suspects;
         private final Consumer<Deque<Ga>> suspectConsumer;
+        private final Map<Ga, Set<Gav>> additionalBomConstraits;
+        private final Log log;
 
-        public DependencyCollector(GavSet excludes, BiConsumer<Ga, Ga> exclusionConsumer, GavSet bannedDependencies,
-                Predicate<Ga> isCurrentBomEntry, Predicate<Ga> isCurrentBomIncludedEntry,
-                GavSet suspects, Consumer<Deque<Ga>> suspectConsumer) {
+        public DependencyCollector(
+                GavSet excludes,
+                BiConsumer<Ga, Ga> exclusionConsumer,
+                GavSet bannedDependencies,
+                Predicate<Ga> isCurrentBomEntry,
+                Predicate<Ga> isCurrentBomIncludedEntry,
+                Map<Ga, Set<Gav>> additionalBomConstraits,
+                GavSet suspects,
+                Consumer<Deque<Ga>> suspectConsumer,
+                Log log) {
             this.excludes = excludes;
             this.exclusionConsumer = exclusionConsumer;
             this.bannedDependencies = bannedDependencies;
             this.isCurrentBomEntry = isCurrentBomEntry;
             this.isCurrentBomOrIncludedEntry = isCurrentBomIncludedEntry;
+            this.additionalBomConstraits = additionalBomConstraits;
             this.suspects = suspects;
             this.suspectConsumer = suspectConsumer;
+            this.log = log;
         }
 
         @Override
@@ -228,10 +240,32 @@ public class FlattenBomTask {
                             .findFirst();
                     if (includedDependent.isPresent() && !Objects.equals(includedDependent.get(), dependent.orElse(null))) {
                         exclusionConsumer.accept(includedDependent.get(), ga);
-                    } else if (!dependent.isPresent() && !includedDependent.isPresent()) {
-                        new IllegalStateException(
-                                "Cannot link banned dependency to any own or included BOM entry:\n    " + ga + "\n    -> "
-                                        + stack.stream().map(Ga::toString).collect(Collectors.joining("\n    -> ")));
+                    } else if (!dependent.isPresent()
+                            && !includedDependent.isPresent()) {
+                        /* Look if this banned dependency comes via some additional BOM, such as Quarkus BOM */
+
+                        final Map<Gav /* additional BOM */, Map.Entry<Ga /* additional BOM entry */, Ga /*
+                                                                                                         * the missing
+                                                                                                         * exclusion
+                                                                                                         */>> missingAddionalBomExclusions = new TreeMap<Gav, Map.Entry<Ga, Ga>>();
+                        stack.stream()
+                                .forEach(stackEntry -> Optional.ofNullable(additionalBomConstraits.get(stackEntry))
+                                        .ifPresent(additionalBomGavs -> additionalBomGavs.stream()
+                                                .forEach(bomGav -> missingAddionalBomExclusions.put(bomGav,
+                                                        new SimpleImmutableEntry<>(stackEntry, ga)))));
+                        if (!missingAddionalBomExclusions.isEmpty()) {
+                            missingAddionalBomExclusions.forEach((Gav additionalBomGav, Map.Entry<Ga, Ga> entry) -> log.warn(
+                                    additionalBomGav + " is possibly missing an exclusion on " + entry.getKey() + ":\n\n"
+                                            + "    <exclusion>\n"
+                                            + "        <groupId>" + entry.getValue().getGroupId() + "</groupId>\n"
+                                            + "        <artifactId>" + entry.getValue().getArtifactId() + "</artifactId>\n"
+                                            + "    </exclusion>\n"));
+                        } else {
+                            throw new IllegalStateException(
+                                    "Cannot link banned dependency to any own or included BOM entry:\n    " + ga + "\n    -> "
+                                            + stack.stream().map(Ga::toString).collect(Collectors.joining("\n    -> ")));
+                        }
+
                     }
                 }
                 allTransitives.add(ga);
@@ -507,14 +541,24 @@ public class FlattenBomTask {
                     })
                     .collect(Collectors.toList()));
 
-            final List<Dependency> constraintsFilteredByOriginPlusAdditionalBoms = addAdditionalBoms(
-                    constraintsFilteredByOrigin, additionalBoms);
+            final List<Dependency> constraintsFilteredByOriginPlusAdditionalBoms = new ArrayList<>(constraintsFilteredByOrigin);
+            final Map<Ga, Set<Gav>> additionalBomConstraits = new TreeMap<>();
+            addAdditionalBoms(
+                    additionalBoms,
+                    (Gav gav, Dependency dep) -> {
+                        constraintsFilteredByOriginPlusAdditionalBoms.add(dep);
+                        additionalBomConstraits.compute(new Ga(dep.getGroupId(), dep.getArtifactId()), (Ga k, Set<Gav> v) -> {
+                            (v == null ? v = new TreeSet<Gav>() : v).add(gav);
+                            return v;
+                        });
+                    });
 
             /* Collect the GAs required by our extensions */
             final RequiredGas requiredGas = collectRequiredGas(
                     constraintsFilteredByOriginPlusAdditionalBoms,
                     constraintsFilteredByOrigin,
                     ownManagedDependencies,
+                    additionalBomConstraits,
                     resolveSet);
 
             /* Exclude non-required constraints */
@@ -554,8 +598,7 @@ public class FlattenBomTask {
 
     }
 
-    List<Dependency> addAdditionalBoms(List<Dependency> constraintsFilteredByOrigin, List<Gav> additionalBoms) {
-        final List<Dependency> result = new ArrayList<Dependency>(constraintsFilteredByOrigin);
+    void addAdditionalBoms(List<Gav> additionalBoms, BiConsumer<Gav, Dependency> additionalBomEntryConsumer) {
 
         for (Gav gav : additionalBoms) {
             final Path path = CqCommonUtils.resolveArtifact(localRepositoryPath, gav.getGroupId(), gav.getArtifactId(),
@@ -564,15 +607,14 @@ public class FlattenBomTask {
             final Model pom = CqCommonUtils.readPom(path, charset);
             final List<Dependency> deps = pom.getDependencyManagement().getDependencies();
             final String msg = deps.stream()
+                    .peek(dep -> additionalBomEntryConsumer.accept(gav, dep))
                     .filter(dep -> dep.getVersion().contains("${"))
                     .map(dep -> dep.getGroupId() + ":" + dep.getArtifactId() + ":" + dep.getVersion())
                     .collect(Collectors.joining("\n    - "));
             if (!msg.isEmpty()) {
-                throw new IllegalStateException("Additional BOM " + gav + " contains an unresolved versions:\n    - " + msg);
+                throw new IllegalStateException("Additional BOM " + gav + " contains unresolved versions:\n    - " + msg);
             }
-            result.addAll(deps);
         }
-        return Collections.unmodifiableList(result);
     }
 
     static void applyTransformations(Ga bomEntry, List<FlattenBomTask.BomEntryTransformation> bomEntryTransformations,
@@ -589,6 +631,7 @@ public class FlattenBomTask {
             List<Dependency> constraintsFilteredByOriginPlusAdditionalBoms,
             List<Dependency> constraintsFilteredByOrigin,
             List<Dependency> ownManagedDependencies,
+            Map<Ga, Set<Gav>> additionalBomConstraits,
             GavSet resolveSet) {
 
         final Set<Ga> ownManagedDependencyGas = ownManagedDependencies.stream()
@@ -666,9 +709,11 @@ public class FlattenBomTask {
                     bannedDependencies,
                     ownManagedDependencyGas::contains,
                     constraintsFilteredByOriginGas::contains,
+                    additionalBomConstraits,
                     suspects,
                     (Deque<Ga> stack) -> log.warn("Suspect pulled via\n    - "
-                            + stack.stream().map(Ga::toString).collect(Collectors.joining("\n    - "))));
+                            + stack.stream().map(Ga::toString).collect(Collectors.joining("\n    - "))),
+                    log);
 
             final CollectRequest request = new CollectRequest()
                     .setRoot(new org.eclipse.aether.graph.Dependency(emptyInstalledArtifact, null))
@@ -683,11 +728,16 @@ public class FlattenBomTask {
                                                     entry.getType(),
                                                     entry.getVersion()),
                                             null)));
+
             try {
                 final DependencyNode rootNode = repoSystem.collectDependencies(repoSession, request).getRoot();
                 rootNode.accept(collector);
             } catch (DependencyCollectionException | IllegalArgumentException e) {
-                throw new RuntimeException("Could not resolve dependencies of " + entry, e);
+                throw new RuntimeException(
+                        "Could not resolve dependencies of " + entry.getGroupId() + ":" + entry.getArtifactId() + ":" +
+                                entry.getType() + ":" +
+                                entry.getVersion(),
+                        e);
             }
 
             final boolean isResolutionEntryPoint = requiredDepsToResolve.contains(entry);
@@ -1173,5 +1223,4 @@ public class FlattenBomTask {
             }
         }
     }
-
 }
