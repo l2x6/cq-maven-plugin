@@ -79,10 +79,10 @@
         <!-- Dependency versions in alphabectic order -->
         <camel-community.version>3.20.2</camel-community.version>
         <maven.version>3.9.0</maven.version>
-        <maven-aether-provider.version>3.3.9</maven-aether-provider.version>
         <maven-artifact-transfer.version>0.13.1</maven-artifact-transfer.version>
         <maven-project.version>3.0-alpha-2</maven-project.version>
         <maven.plugin-tools.version>3.7.1</maven.plugin-tools.version>
+        <maven-resolver.version>1.9.4</maven-resolver.version>
         <maven.shared.file-management>3.1.0</maven.shared.file-management>
         <maven.shared.invoker>3.2.0</maven.shared.invoker>
         <pom-tuner.version>4.2.0</pom-tuner.version>
@@ -243,11 +243,6 @@
                 <version>${maven.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.apache.maven</groupId>
-                <artifactId>maven-aether-provider</artifactId>
-                <version>${maven-aether-provider.version}</version>
-            </dependency>
-            <dependency>
                 <groupId>org.apache.maven.shared</groupId>
                 <artifactId>maven-artifact-transfer</artifactId>
                 <version>${maven-artifact-transfer.version}</version>
@@ -274,6 +269,12 @@
                 <groupId>org.apache.maven.plugin-tools</groupId>
                 <artifactId>maven-plugin-annotations</artifactId>
                 <version>${maven.plugin-tools.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.maven.resolver</groupId>
+                <artifactId>maven-resolver-api</artifactId>
+                <version>${maven-resolver.version}</version>
             </dependency>
 
             <dependency>
