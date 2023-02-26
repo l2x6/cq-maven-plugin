@@ -32,6 +32,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -64,6 +65,7 @@ import org.apache.maven.project.MavenProject;
 import org.assertj.core.util.diff.Delta;
 import org.assertj.core.util.diff.DiffUtils;
 import org.codehaus.plexus.util.StringUtils;
+import org.eclipse.aether.DefaultRepositorySystemSession;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
@@ -73,6 +75,7 @@ import org.eclipse.aether.collection.DependencyCollectionException;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.graph.DependencyVisitor;
 import org.eclipse.aether.repository.RemoteRepository;
+import org.eclipse.aether.util.graph.transformer.ConflictResolver;
 import org.jdom2.Document;
 import org.jdom2.JDOMException;
 import org.jdom2.input.SAXBuilder;
@@ -214,7 +217,10 @@ public class FlattenBomTask {
 
         @Override
         public boolean visitLeave(DependencyNode node) {
-            stack.pop();
+            final DependencyNode winner = (DependencyNode) node.getData().get(ConflictResolver.NODE_DATA_WINNER);
+            if (winner == null) {
+                stack.pop();
+            }
             return true;
         }
 
@@ -222,12 +228,25 @@ public class FlattenBomTask {
         public boolean visitEnter(DependencyNode node) {
             final Artifact a = node.getArtifact();
             final Ga ga = new Ga(a.getGroupId(), a.getArtifactId());
+            final DependencyNode winner = (DependencyNode) node.getData().get(ConflictResolver.NODE_DATA_WINNER);
+            if (winner != null) {
+                /* Recurse the winner instead of the current looser */
+                if (!stack.contains(ga)) {
+                    winner.accept(this);
+                }
+                return false; // should have empty children anyway
+            }
+
+            boolean result = true;
             if (!excludes.contains(a.getGroupId(), a.getArtifactId())) {
                 if (bannedDependencies.contains(ga)) {
-                    /* Find the closest own managed dependent and register an exclusion there
+                    result = false;
+                    /*
+                     * Find the closest own managed dependent and register an exclusion there
                      * This is to make the enforcer happy when the BOM is taken from the reactor.
                      * The reactor BOM is not flattened and the bomEntryTransformations are thus not applied there.
-                     * Hence adding an exclusion on our own entry may help */
+                     * Hence adding an exclusion on our own entry may help
+                     */
                     final Optional<Ga> dependent = stack.stream()
                             .filter(isCurrentBomEntry)
                             .findFirst();
@@ -275,7 +294,7 @@ public class FlattenBomTask {
             if (suspects.contains(ga)) {
                 suspectConsumer.accept(stack);
             }
-            return true;
+            return result;
         }
 
     }
@@ -701,6 +720,11 @@ public class FlattenBomTask {
 
         final Set<Ga> constraintsFilteredByOriginGas = constraintsFilteredByOrigin.stream()
                 .map(FlattenBomTask::toGa).collect(Collectors.toSet());
+
+        final DefaultRepositorySystemSession verboseRepoSession = new DefaultRepositorySystemSession(repoSession);
+        final Map<String, Object> configProps = new HashMap<>(repoSession.getConfigProperties());
+        configProps.put(ConflictResolver.CONFIG_PROP_VERBOSE, true);
+        verboseRepoSession.setConfigProperties(configProps);
         for (Gavtcs entry : requiredDepsToResolvePlusOwnGavs) {
 
             final FlattenBomTask.DependencyCollector collector = new DependencyCollector(
@@ -730,7 +754,7 @@ public class FlattenBomTask {
                                             null)));
 
             try {
-                final DependencyNode rootNode = repoSystem.collectDependencies(repoSession, request).getRoot();
+                final DependencyNode rootNode = repoSystem.collectDependencies(verboseRepoSession, request).getRoot();
                 rootNode.accept(collector);
             } catch (DependencyCollectionException | IllegalArgumentException e) {
                 throw new RuntimeException(
