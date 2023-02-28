@@ -661,8 +661,11 @@ public class FlattenBomTask {
                 .map(FlattenBomTask::toGa)
                 .collect(Collectors.toSet());
         final MavenSourceTree t = MavenSourceTree.of(rootModuleDirectory.resolve("pom.xml"), charset);
-        final Set<Gavtcs> requiredDepsToResolve = collectDependenciesToResolve(constraintsFilteredByOrigin,
-                resolveSet, t);
+        final Set<Gavtcs> requiredDepsToResolve = collectDependenciesToResolve(
+                constraintsFilteredByOrigin,
+                resolveSet,
+                t,
+                additionalBomConstraits);
 
         /* Assume that the current BOM's parent is both installed already and that it has no dependencies */
         final Parent parent = effectivePomModel.getParent();
@@ -789,7 +792,71 @@ public class FlattenBomTask {
         return Collections.unmodifiableMap(map);
     }
 
-    Set<Gavtcs> collectDependenciesToResolve(List<Dependency> originalConstrains, GavSet entryPoints, MavenSourceTree t) {
+    /**
+     * The background is a bit complicated, but the implementation is rather easy to understand.
+     * <p>
+     * So first, why we do this:
+     * <p>
+     * When flattening the BOM, the modules from our own source tree are not installed yet. Hence we have to avoid
+     * resolving them using Maven resolver, a.k.a Aether. But their transitive dependency tree is what we need to
+     * flatten and minimize the BOM. So what we have to do is to collect their direct and transitive external (not
+     * available in the current source tree) dependencies using {@code pom-tuner} library and its
+     * {@link MavenSourceTree}, which operates solely on {@code pom.xml} files available in the source tree. That works
+     * quite well.
+     * <p>
+     * Second, how we do this:
+     * <p>
+     * For the given {@link Ga}, we collect its direct direct dependencies available in its own module and in its parent
+     * hierarchy. If we hit a dependency from the current source tree, we descend into it recursively. Otherwise we pass
+     * the found external dependency to the given {@code dependencyConsumer}.
+     *
+     * @param t                  the source tree we operate on
+     * @param evaluator          the evaluator to resolve the version place holders
+     * @param ga                 the {@link Ga} for which we are collecting own transitive external dependencies
+     * @param profiles           the the active profiles
+     * @param wantedScopes       Maven scopes we are interested in
+     * @param dependencyConsumer where to send the discovered
+     */
+    static void collectTransitiveExternalDependencies(
+            MavenSourceTree t,
+            ExpressionEvaluator evaluator,
+            Ga ga,
+            Predicate<Profile> profiles,
+            Set<String> wantedScopes,
+            Consumer<Gavtcs> dependencyConsumer) {
+
+        t.collectOwnDependencies(ga, profiles).stream()
+                .filter(dep -> wantedScopes.contains(dep.getScope()))
+                .map(dep -> {
+
+                    final String groupId = evaluator.evaluate(dep.getGroupId());
+                    final String artifactId = evaluator.evaluate(dep.getArtifactId());
+                    final String type = dep.getType() == null ? "jar" : dep.getType();
+                    final String classifier = dep.getClassifier() == null ? null : evaluator.evaluate(dep.getClassifier());
+                    return new Gavtcs(
+                            groupId,
+                            artifactId,
+                            null,
+                            type,
+                            classifier, null);
+                })
+                .filter(dep -> {
+                    if (t.getModulesByGa().containsKey(dep.toGa())) {
+                        collectTransitiveExternalDependencies(t, evaluator, dep.toGa(), profiles, wantedScopes,
+                                dependencyConsumer);
+                        return false;
+                    }
+                    return true;
+                })
+                .forEach(dependencyConsumer);
+
+    }
+
+    Set<Gavtcs> collectDependenciesToResolve(
+            List<Dependency> originalConstrains,
+            GavSet entryPoints,
+            MavenSourceTree t,
+            Map<Ga, Set<Gav>> additionalBomConstraits) {
         final ExpressionEvaluator evaluator = t.getExpressionEvaluator(profiles);
         final Map<Ga, Module> modulesByGa = t.getModulesByGa();
         final Set<Gavtcs> result = new LinkedHashSet<>();
@@ -808,50 +875,46 @@ public class FlattenBomTask {
                         result.add(toGavtcs(mvnDep));
                     } else {
                         /* Our own module */
-                        t.collectOwnDependencies(ga, profiles).stream()
-                                .filter(dep -> wantedScopes.contains(dep.getScope()))
-                                .map(dep -> {
-
-                                    final String groupId = evaluator.evaluate(dep.getGroupId());
-                                    final String artifactId = evaluator.evaluate(dep.getArtifactId());
-                                    final String type = dep.getType() == null ? "jar" : dep.getType();
-                                    final String classifier = dep.getClassifier() == null ? null
-                                            : evaluator.evaluate(dep.getClassifier());
-                                    return new Gavtcs(
-                                            groupId,
-                                            artifactId,
-                                            null,
-                                            type,
-                                            classifier, null);
-                                })
-                                .map(gavtcs -> {
-                                    final String version = originalConstrains.stream()
+                        collectTransitiveExternalDependencies(
+                                t,
+                                evaluator,
+                                ga,
+                                profiles,
+                                wantedScopes,
+                                (Gavtcs gavtcs) -> {
+                                    final Optional<String> version = originalConstrains.stream()
                                             .filter(d -> gavtcs.getGroupId().equals(d.getGroupId())
                                                     && gavtcs.getArtifactId().equals(d.getArtifactId())
                                                     && compare(gavtcs.getType(), d.getType(), "jar")
                                                     && compare(gavtcs.getClassifier(), d.getClassifier(), ""))
                                             .map(Dependency::getVersion)
-                                            .findFirst()
-                                            /*
-                                             * If the given gavtc is not found in the set of original constraints,
-                                             * it is an artifact managed in a BOM distinct from ours (e.g. in
-                                             * quarkus-bom).
-                                             * Transitives of artifacts managed in quarkus might matter in some cases.
-                                             * Maybe we should resolve using all available BOMs
-                                             */
-                                            .orElse(null);
-                                    final SortedSet<Ga> exclusions = getExclusions(mvnDep);
-                                    return new Gavtcs(
-                                            gavtcs.getGroupId(),
-                                            gavtcs.getArtifactId(),
-                                            version,
-                                            gavtcs.getType(),
-                                            gavtcs.getClassifier(),
-                                            null,
-                                            exclusions);
-                                })
-                                .filter(gavtcs -> gavtcs.getVersion() != null)
-                                .forEach(result::add);
+                                            .findFirst();
+                                    if (version.isPresent()) {
+                                        final SortedSet<Ga> exclusions = getExclusions(mvnDep);
+                                        result.add(new Gavtcs(
+                                                gavtcs.getGroupId(),
+                                                gavtcs.getArtifactId(),
+                                                version.get(),
+                                                gavtcs.getType(),
+                                                gavtcs.getClassifier(),
+                                                null,
+                                                exclusions));
+                                    } else {
+                                        /*
+                                         * If the given gavtc is not found in the set of original constraints,
+                                         * it is an artifact managed in a BOM distinct from ours (e.g. in
+                                         * quarkus-bom).
+                                         * Transitives of artifacts managed in quarkus might matter in some cases.
+                                         * Maybe we should resolve using all available BOMs
+                                         */
+                                        if (additionalBomConstraits.containsKey(gavtcs.toGa())) {
+                                            // ignore
+                                        } else {
+                                            log.warn("Could not assign version to " + gavtcs.toGa()
+                                                    + ". Perhaps a missing BOM entry?");
+                                        }
+                                    }
+                                });
                     }
                 });
         return result;
