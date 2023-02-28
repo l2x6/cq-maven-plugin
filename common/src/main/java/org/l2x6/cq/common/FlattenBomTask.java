@@ -222,7 +222,8 @@ public class FlattenBomTask {
         public boolean visitLeave(DependencyNode node) {
             if (!format || node.getData().get(ConflictResolver.NODE_DATA_WINNER) == null) {
                 /*
-                 * We always push in non-format mode, so we have to always pop, thus saving some node.getData() map lookups
+                 * We always push in non-format mode, so we have to always pop, thus saving some node.getData() map
+                 * lookups
                  */
                 stack.pop();
             }
@@ -434,9 +435,6 @@ public class FlattenBomTask {
     public static final String DEFAULT_FLATTENED_REDUCED_POM_FILE = "src/main/generated/flattened-reduced-pom.xml";
     public static final String DEFAULT_FLATTENED_FULL_POM_FILE = "src/main/generated/flattened-full-pom.xml";
     public static final String ORG_APACHE_CAMEL_QUARKUS_GROUP_ID = "org.apache.camel.quarkus";
-    private static final GavSet toResolveDependencies = GavSet.builder()
-            .excludes(FlattenBomTask.ORG_APACHE_CAMEL_QUARKUS_GROUP_ID, "io.quarkus")
-            .build();
     private static final Comparator<? super Exclusion> EXCLUSION_COMPARATOR = Comparator.comparing(Exclusion::getGroupId)
             .thenComparing(Exclusion::getArtifactId);
 
@@ -663,21 +661,8 @@ public class FlattenBomTask {
                 .map(FlattenBomTask::toGa)
                 .collect(Collectors.toSet());
         final MavenSourceTree t = MavenSourceTree.of(rootModuleDirectory.resolve("pom.xml"), charset);
-        final Set<Gavtcs> requiredDepsToResolve = collectDependenciesToResolve(constraintsFilteredByOriginPlusAdditionalBoms,
+        final Set<Gavtcs> requiredDepsToResolve = collectDependenciesToResolve(constraintsFilteredByOrigin,
                 resolveSet, t);
-
-        final Set<Ga> installPoms = t
-                .findRequiredModules(ownManagedDependencyGas.stream()
-                        .filter(ga -> t.getModulesByGa().containsKey(ga)).collect(Collectors.toSet()), profiles);
-        /* Install the poms from the current source tree so that resolver can find them */
-        installPoms
-                .forEach(ga -> {
-                    Module module = t.getModulesByGa().get(ga);
-                    final String relPath = module.getPomPath();
-                    final Path absPath = t.getRootDirectory().resolve(relPath);
-                    CqCommonUtils.installArtifact(absPath, localRepositoryPath, ga.getGroupId(), ga.getArtifactId(), version,
-                            "pom");
-                });
 
         /* Assume that the current BOM's parent is both installed already and that it has no dependencies */
         final Parent parent = effectivePomModel.getParent();
@@ -715,22 +700,18 @@ public class FlattenBomTask {
         final GavSet collectorExcludes = GavSet.builder().include(parent.getGroupId() + ":" + parent.getArtifactId())
                 .build();
         final Set<Ga> allTransitives = new TreeSet<>();
-        final Set<Gavtcs> requiredDepsToResolvePlusOwnGavs = new LinkedHashSet<>(requiredDepsToResolve);
-        ownManagedDependencies.stream().map(FlattenBomTask::toGavtcs).forEach(requiredDepsToResolvePlusOwnGavs::add);
 
         final ExpectedExclusions expectedExclusions = new ExpectedExclusions();
-        constraintsFilteredByOriginPlusAdditionalBoms.stream()
-                .map(FlattenBomTask::toGa)
-                .forEach(bomEntry -> applyTransformations(bomEntry, bomEntryTransformations, expectedExclusions::add));
-        ;
 
         final Set<Ga> constraintsFilteredByOriginGas = constraintsFilteredByOrigin.stream()
                 .map(FlattenBomTask::toGa).collect(Collectors.toSet());
 
         final RepositorySystemSession useRepoSession;
         if (format) {
-            /* ConflictResolver.CONFIG_PROP_VERBOSE = true causes a much thorough and more expensive dependency
-             * resolution so we use it only in format mode */
+            /*
+             * ConflictResolver.CONFIG_PROP_VERBOSE = true causes a much thorough and more expensive dependency
+             * resolution so we use it only in format mode
+             */
             useRepoSession = new DefaultRepositorySystemSession(repoSession);
             final Map<String, Object> configProps = new HashMap<>(repoSession.getConfigProperties());
             configProps.put(ConflictResolver.CONFIG_PROP_VERBOSE, true);
@@ -739,7 +720,7 @@ public class FlattenBomTask {
             useRepoSession = repoSession;
         }
 
-        for (Gavtcs entry : requiredDepsToResolvePlusOwnGavs) {
+        for (Gavtcs entry : requiredDepsToResolve) {
 
             final FlattenBomTask.DependencyCollector collector = new DependencyCollector(
                     collectorExcludes,
@@ -785,7 +766,18 @@ public class FlattenBomTask {
             }
         }
 
-        checkManagedCamelQuarkusArtifacts(t, constraintsFilteredByOriginPlusAdditionalBoms);
+        checkManagedCamelQuarkusArtifacts(t, constraintsFilteredByOrigin);
+
+        /*
+         * Make sure that all bomEntryTransformations are honored
+         * most of them are already there after the resolution done above
+         * but because we do not resolve our own artifacts, the exclusions
+         * defined for those are still missing at this point
+         */
+        constraintsFilteredByOrigin.stream()
+                .map(FlattenBomTask::toGa)
+                .forEach(bomEntry -> applyTransformations(bomEntry, bomEntryTransformations, expectedExclusions::add));
+        ;
 
         allTransitives.addAll(t.getModulesByGa().keySet());
         return new RequiredGas(Collections.unmodifiableSet(allTransitives),
@@ -832,8 +824,6 @@ public class FlattenBomTask {
                                             type,
                                             classifier, null);
                                 })
-                                .filter(dep -> FlattenBomTask.toResolveDependencies.contains(dep.getGroupId(),
-                                        dep.getArtifactId()))
                                 .map(gavtcs -> {
                                     final String version = originalConstrains.stream()
                                             .filter(d -> gavtcs.getGroupId().equals(d.getGroupId())
@@ -843,7 +833,7 @@ public class FlattenBomTask {
                                             .map(Dependency::getVersion)
                                             .findFirst()
                                             /*
-                                             * If the given gatc is not found in the set of original constraints,
+                                             * If the given gavtc is not found in the set of original constraints,
                                              * it is an artifact managed in a BOM distinct from ours (e.g. in
                                              * quarkus-bom).
                                              * Transitives of artifacts managed in quarkus might matter in some cases.
