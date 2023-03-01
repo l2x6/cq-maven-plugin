@@ -68,6 +68,10 @@
             </exclusions>
         </dependency>
         <dependency>
+            <groupId>org.apache.maven.shared</groupId>
+            <artifactId>maven-shared-utils</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.apache.maven.plugin-tools</groupId>
             <artifactId>maven-plugin-annotations</artifactId>
             <scope>provided</scope>
