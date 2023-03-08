@@ -37,8 +37,17 @@ public class PomSorterTest {
         final Path root = TestUtils.createProjectFromTemplate("pom-sorter", "pom-sorter-dependency-management");
         final Path baseDir = root.resolve("dependency-management");
         PomSorter.sortDependencyManagement(baseDir, Arrays.asList("pom1.xml"));
-        final Path expected = Paths.get("src/test/expected/pom-sorter/dependency-management");
-        TestUtils.assertTreesMatch(expected, baseDir);
+        final Path expected = Paths.get("src/test/expected/pom-sorter/dependency-management/pom1.xml");
+        TestUtils.assertTreesMatch(expected, baseDir.resolve("pom1.xml"));
+    }
+
+    @Test
+    void sortDepenendencyManagementWithComments() throws IOException {
+        final Path root = TestUtils.createProjectFromTemplate("pom-sorter", "pom-sorter-dependency-management-comments");
+        final Path baseDir = root.resolve("dependency-management");
+        PomSorter.sortDependencyManagement(baseDir, Arrays.asList("pom-comments1.xml"));
+        final Path expected = Paths.get("src/test/expected/pom-sorter/dependency-management/pom-comments1.xml");
+        TestUtils.assertTreesMatch(expected, baseDir.resolve("pom-comments1.xml"));
     }
 
     @Test
