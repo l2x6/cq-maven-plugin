@@ -90,9 +90,19 @@ public class PomSorter {
             final String[] dependenciesArray = dependenciesString.split("</dependency>");
             /* Sort by adding to a TreeMap */
             final Map<String, Map<String, String>> sortedDeps = new TreeMap<>();
+            boolean inComment = false;
             for (String dep : dependenciesArray) {
                 dep = dep.trim();
                 if (!dep.isEmpty()) {
+                    if (dep.startsWith("-->")) {
+                        dep = dep.replaceAll("-->[ \n\r\t]+", "");
+                        inComment = false;
+                    }
+                    if (dep.matches("<!--[ \n\r\t]*<dependency>(?s).*")) {
+                        inComment = true;
+                    } else if (inComment) {
+                        dep = "<!--" + dep;
+                    }
                     String key = dep
                             .replaceAll(">[ \n\r\t]+", ">")
                             .replaceAll("[ \n\r\t]+<", "<");
@@ -273,10 +283,35 @@ public class PomSorter {
             if (isComment) {
                 comment(groupId);
             }
-            for (String dep : deps.values()) {
+
+            String[] depArray = new String[deps.values().size()];
+            deps.values().toArray(depArray);
+            boolean inComment = false;
+            for (int i = 0; i < depArray.length; i++) {
+                String dep = depArray[i];
+
+                if (dep.matches("<!--[ \n\r\t]*<dependency>(?s).*")) {
+                    if (inComment) {
+                        // Remove opening comment if already in comment block
+                        dep = dep.replace("<!--", "");
+                    } else {
+                        inComment = true;
+                    }
+                }
+
+                // Write out dependency
                 result.append(eol)
                         .append(indent).append(indent).append(indent).append(dep)
                         .append(eol).append(indent).append(indent).append(indent).append("</dependency>");
+
+                if (inComment) {
+                    String nextDep = i < depArray.length - 1 ? depArray[i + 1] : null;
+                    // Close the comment when we reach the last dependency or one not commented out.
+                    if (nextDep == null || !nextDep.matches("<!--[ \n\r\t]*<dependency>(?s).*")) {
+                        result.append("-->");
+                        inComment = false;
+                    }
+                }
             }
         }
 
