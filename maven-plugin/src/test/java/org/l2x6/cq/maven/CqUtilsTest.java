@@ -17,7 +17,11 @@
 package org.l2x6.cq.maven;
 
 import java.io.IOException;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.l2x6.pom.tuner.model.Ga;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -36,6 +40,17 @@ public class CqUtilsTest {
     @Test
     void toKebabCase() throws IOException {
         assertEquals("foo-bar-baz", CqUtils.toKebabCase("foo+-BAR.baZ"));
+    }
+
+    @Test
+    void findExtensionArtifactIds() {
+        Set<Ga> set = Stream.of("foo", "foo-deployment", "bar-deployment")
+                .map(a -> new Ga("org.foo", a))
+                .collect(Collectors.toSet());
+        assertEquals(
+                Set.of("foo"),
+                CqUtils.findExtensionArtifactIds(set)
+                        .collect(Collectors.toSet()));
     }
 
 }

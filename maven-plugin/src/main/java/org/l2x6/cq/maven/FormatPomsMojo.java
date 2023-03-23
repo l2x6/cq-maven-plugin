@@ -58,26 +58,27 @@ import org.w3c.dom.Document;
  */
 @Mojo(name = "format", requiresProject = true, inheritByDefault = false)
 public class FormatPomsMojo extends AbstractExtensionListMojo {
-    public static final String CQ_SORT_MODULES_PATHS = "extensions/pom.xml,integration-tests/pom.xml";
-    public static final String CQ_SORT_DEPENDENCY_MANAGEMENT_PATHS = "poms/bom/pom.xml,poms/bom-deployment/pom.xml";
-    public static final String CQ_UPDATE_VIRTUAL_DEPENDENCIES_DIRS = "examples,integration-tests";
 
     /**
      * A list of {@code pom.xml} file paths relative to the current module's {@code baseDir} in which the
      * {@code <module>} elements should be sorted.
+     * <p>
+     * Note that since 4.0.0 there is no default value for this property.
      *
      * @since 0.0.1
      */
-    @Parameter(property = "cq.sortModulesPaths", defaultValue = CQ_SORT_MODULES_PATHS)
+    @Parameter(property = "cq.sortModulesPaths")
     List<String> sortModulesPaths;
 
     /**
      * A list of {@code pom.xml} file paths relative to the current module's {@code baseDir} in which the
      * {@code <dependencyManagement>} entries should be sorted.
+     * <p>
+     * Note that since 4.0.0 there is no default value for this property.
      *
      * @since 0.0.1
      */
-    @Parameter(property = "cq.sortDependencyManagementPaths", defaultValue = CQ_SORT_DEPENDENCY_MANAGEMENT_PATHS)
+    @Parameter(property = "cq.sortDependencyManagementPaths")
     List<String> sortDependencyManagementPaths;
 
     /**
@@ -201,9 +202,8 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
             }
         }
 
-        final Set<Gavtcs> allExtensions = findExtensions()
-                .map(extensionModule -> new Gavtcs("org.apache.camel.quarkus",
-                        "camel-quarkus-" + extensionModule.getArtifactIdBase(), null))
+        final Set<Gavtcs> allExtensions = CqUtils.findExtensionArtifactIds(getTree().getModulesByGa().keySet())
+                .map(artifactId -> new Gavtcs(getTree().getRootModule().getGav().getGroupId().asConstant(), artifactId, null))
                 .collect(Collectors.toSet());
         final MavenSourceTree tree = getTree();
         for (DirectoryScanner scanner : updateVirtualDependencies) {
@@ -225,7 +225,7 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
         updateVirtualDependenciesAllExtensions(updateVirtualDependenciesAllExtensions, allExtensions, getCharset(),
                 simpleElementWhitespace);
 
-        if (removeEmptyApplicationProperties != null) {
+        if (removeEmptyApplicationProperties != null && removeEmptyApplicationProperties.getDirectory() != null) {
             final FileSetManager fileSetManager = new FileSetManager();
             final Path dir = Paths.get(removeEmptyApplicationProperties.getDirectory());
             final String[] includedFiles = fileSetManager.getIncludedFiles(removeEmptyApplicationProperties);
