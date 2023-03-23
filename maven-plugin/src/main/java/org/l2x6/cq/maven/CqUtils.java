@@ -44,6 +44,7 @@ import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.logging.Log;
 import org.l2x6.cq.maven.TemplateParams.ExtensionStatus;
+import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Module;
 
 public class CqUtils {
@@ -100,6 +101,16 @@ public class CqUtils {
                     return new ExtensionModule(extensionDir, artifactIdBase);
                 })
                 .filter(e -> artifactIdBaseFilter.test(e.getArtifactIdBase()))
+                .sorted();
+    }
+
+    public static Stream<String> findExtensionArtifactIds(Set<Ga> artifactIds) {
+        return artifactIds.stream()
+                .filter(ga -> ga.getArtifactId().endsWith("-deployment"))
+                .map(ga -> new Ga(ga.getGroupId(),
+                        ga.getArtifactId().substring(0, ga.getArtifactId().length() - "-deployment".length())))
+                .filter(artifactIds::contains)
+                .map(Ga::getArtifactId)
                 .sorted();
     }
 
