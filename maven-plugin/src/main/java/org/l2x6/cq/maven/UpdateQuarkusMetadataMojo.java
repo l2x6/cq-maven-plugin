@@ -33,7 +33,7 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.l2x6.cq.common.CqCatalog;
 import org.l2x6.cq.common.CqCatalog.Flavor;
 import org.l2x6.cq.common.CqCommonUtils;
-import org.l2x6.cq.maven.TemplateParams.ExtensionStatus;
+import org.l2x6.cq.common.ExtensionStatus;
 
 /**
  * Updates {@code quarkus-extension.yaml} files in extension modules based on the info from Camel Catalog.

@@ -26,16 +26,10 @@ import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.camel.tooling.model.ArtifactModel;
+import org.l2x6.cq.common.ExtensionStatus;
 import org.l2x6.pom.tuner.model.Gavtcs;
 
 public class TemplateParams {
-    public enum ExtensionStatus {
-        preview, stable, experimental;
-
-        static ExtensionStatus of(boolean nativeSupported) {
-            return nativeSupported ? stable : preview;
-        }
-    }
 
     private final boolean nativeSupported;
     private final boolean unlisted;
