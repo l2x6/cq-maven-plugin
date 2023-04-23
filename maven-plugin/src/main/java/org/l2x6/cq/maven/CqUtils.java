@@ -43,7 +43,7 @@ import javax.lang.model.SourceVersion;
 import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.logging.Log;
-import org.l2x6.cq.maven.TemplateParams.ExtensionStatus;
+import org.l2x6.cq.common.ExtensionStatus;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Module;
 

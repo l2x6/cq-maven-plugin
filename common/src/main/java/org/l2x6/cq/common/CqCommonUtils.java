@@ -106,6 +106,10 @@ public class CqCommonUtils {
 
     private static final Pattern SIMPLE_XML_ELEMENT_PATTERN = Pattern.compile("\\s+/>");
 
+    /** Module name delimiters used throughout Quarkus ecosystem */
+    private static final List<String> MAVEN_MODULE_NAME_DELIMITERS = List.of(
+            Pattern.quote(" :: "), Pattern.quote(" : "), Pattern.quote(" - "));
+
     private CqCommonUtils() {
     }
 
@@ -612,6 +616,16 @@ public class CqCommonUtils {
                         .map(org.apache.maven.model.Profile::getId)
                         .toArray(String[]::new));
         return profiles;
+    }
+
+    public static String getNameBase(final String name) {
+        String[] nameParts = MAVEN_MODULE_NAME_DELIMITERS.stream()
+                .map(delim -> name.split(delim))
+                .filter(parts -> parts.length >= 2)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Could not split Maven module name '" + name
+                        + "' using any of delimiters " + MAVEN_MODULE_NAME_DELIMITERS + " expecting 3 parts"));
+        return nameParts[1];
     }
 
 }

@@ -82,6 +82,11 @@
         </dependency>
 
         <dependency>
+            <groupId>org.freemarker</groupId>
+            <artifactId>freemarker</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>org.l2x6.pom-tuner</groupId>
             <artifactId>pom-tuner</artifactId>
         </dependency>
