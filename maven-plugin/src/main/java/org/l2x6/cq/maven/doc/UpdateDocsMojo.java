@@ -22,6 +22,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -31,6 +32,7 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.l2x6.cq.common.CqCommonUtils;
+import org.l2x6.cq.common.ExtensionStatus;
 import org.l2x6.pom.tuner.ExpressionEvaluator;
 import org.l2x6.pom.tuner.MavenSourceTree;
 import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
@@ -111,26 +113,30 @@ public class UpdateDocsMojo extends AbstractDocGeneratorMojo {
                 .forEach(runtimeModule -> {
                     final String artifactId = runtimeModule.getGav().getArtifactId().asConstant();
                     artifactIds.add(artifactId);
-                    final Expression expr = runtimeModule.getProfiles().get(0).getProperties().get("cq.name");
-                    final String name = expr != null ? eval.evaluate(expr) : CqCommonUtils.getNameBase(runtimeModule.getName());
-                    extLinks.append("** xref:reference/extensions/" + artifactId + ".adoc[" + name + "]\n");
+                    final String shortName = getProperty(runtimeModule, eval, "cq.name",
+                            () -> CqCommonUtils.getNameBase(runtimeModule.getName()));
+                    extLinks.append("** xref:reference/extensions/" + artifactId + ".adoc[" + shortName + "]\n");
                     final Path standardsFile = getMultiModuleProjectDirectoryPath().resolve(runtimeModule.getPomPath())
                             .getParent().resolve("src/main/doc/standards.adoc");
+                    final String name = shortName.startsWith("Quarkus CXF") ? shortName : ("Quarkus CXF " + shortName);
+                    standards.append("\n| xref:reference/extensions/" + artifactId + ".adoc[" + name + "] +\n`"
+                            + artifactId + "`\n|");
+                    final String status = getProperty(runtimeModule, eval, "quarkus.metadata.status", () -> "stable");
+                    standards.append(ExtensionStatus.valueOf(status).getCapitalized()).append("\n|");
+                    final String since = getProperty(runtimeModule, eval, "cq.since", () -> "");
+                    standards.append(since).append("\n|");
                     if (Files.isRegularFile(standardsFile)) {
-                        standards.append("\n| xref:reference/extensions/" + artifactId + ".adoc[" + name + "] +\n`"
-                                + artifactId + "`\n|");
                         try (Stream<String> lines = Files.lines(standardsFile, getCharset())) {
                             standards.append(lines
                                     .filter(line -> line.startsWith("* "))
                                     .filter(line -> line.indexOf(']') >= 0)
                                     .map(line -> line.substring("* ".length(), line.indexOf(']') + 1))
-                                    .collect(Collectors.joining(", ")))
-                                    .append('\n');
+                                    .collect(Collectors.joining(", ")));
                         } catch (IOException e) {
                             throw new RuntimeException("Could not read " + standardsFile);
                         }
                     }
-
+                    standards.append('\n');
                 });
 
         replace(navFile.toPath(), "extensions", extLinks.toString());
@@ -193,5 +199,10 @@ public class UpdateDocsMojo extends AbstractDocGeneratorMojo {
         } catch (IOException e) {
             throw new RuntimeException("Could not read " + pomPath);
         }
+    }
+
+    static String getProperty(Module runtimeModule, ExpressionEvaluator eval, String key, Supplier<String> defaultValue) {
+        final Expression expr = runtimeModule.getProfiles().get(0).getProperties().get(key);
+        return expr != null ? eval.evaluate(expr) : defaultValue.get();
     }
 }
