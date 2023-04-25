@@ -165,10 +165,7 @@ public class PomSorter {
         for (String module : modulesArray) {
             module = module.trim();
             if (!module.isEmpty()) {
-                String key = module
-                        .replaceAll(">[ \n\r\t]+", ">")
-                        .replaceAll("[ \n\r\t]+<", "<");
-                key = key.replaceAll("<[^>]+>", "");
+                String key = module.replaceAll("^.*<module>([^<]+)</module>.*$", "$1");
                 if (!key.isEmpty()) {
                     sortedModules.put(key, module);
                 }
