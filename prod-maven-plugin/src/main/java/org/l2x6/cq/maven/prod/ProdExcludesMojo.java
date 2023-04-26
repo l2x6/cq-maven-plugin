@@ -1174,16 +1174,16 @@ public class ProdExcludesMojo extends AbstractMojo {
                 workRoot.resolve(productizedDependenciesPath),
                 workRoot.resolve(allDependenciesPath),
                 workRoot.resolve(nonProductizedDependenciesPath),
-                product.getAdditionalExtensionDependencies(),
+                product,
                 simpleElementWhitespace,
                 repositories,
                 repoSystem,
                 repoSession,
+                mavenProjectBuilder,
                 getLog(),
                 () -> flattenAndInstallBom(product),
-                jakartaReport != null ? jakartaReport.toPath() : null)
+                session)
                 .execute();
-
     }
 
     private void flattenAndInstallBom(Product product) {
@@ -1520,8 +1520,14 @@ public class ProdExcludesMojo extends AbstractMojo {
                 result.add(new Ga("org.apache.camel.quarkus", ga.getArtifactId() + "-deployment"));
             }
             if (additionalProductizedArtifacts != null) {
-                for (String artifactId : additionalProductizedArtifacts) {
-                    result.add(new Ga("org.apache.camel.quarkus", artifactId));
+                for (String maybeGa : additionalProductizedArtifacts) {
+                    /* groupId is optional so that we stay backwards compatible */
+                    final int colonPos = maybeGa.indexOf(':');
+                    if (colonPos >= 0) {
+                        result.add(new Ga(maybeGa.substring(0, colonPos), maybeGa.substring(colonPos + 1)));
+                    } else {
+                        result.add(new Ga("org.apache.camel.quarkus", maybeGa));
+                    }
                 }
             }
             return Collections.unmodifiableSortedSet(result);
