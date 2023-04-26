@@ -179,6 +179,11 @@ public class PromoteExtensionMojo extends AbstractMojo {
                 .transform(Transformation.addModule(artifactIdBase));
         PomSorter.sortModules(destExtensionsPomPath);
 
+        /* Update the extension's parent */
+        final Path extensionPomPath = destParentDir.resolve("pom.xml");
+        new PomTransformer(extensionPomPath, charset, simpleElementWhitespace)
+                .transform(Transformation.setParent("camel-quarkus-extensions", "../pom.xml"));
+
         /* Set the camel.quarkus.nativeSince property in the runtime POM */
         final Path runtimePomPath = destParentDir.resolve("runtime/pom.xml");
         final String camelQuarkusNativeSinceVersion = camelQuarkusVersion.replaceAll("-SNAPSHOT", "");
