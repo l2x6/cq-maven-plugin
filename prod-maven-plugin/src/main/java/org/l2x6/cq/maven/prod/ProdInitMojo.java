@@ -234,7 +234,10 @@ public class ProdInitMojo extends AbstractMojo {
                     getLog().info("Setting camel-quarkus.extension.finder.strict = false in pom.xml");
                     props.addOrSetChildTextElement("camel-quarkus.extension.finder.strict", "false");
 
-                    /* Set cq-plugin.version to the version of the currently executing mojo if it is newer than than the one on pom.xml */
+                    /*
+                     * Set cq-plugin.version to the version of the currently executing mojo if it is newer than than the
+                     * one on pom.xml
+                     */
                     final String currentCqVersion = pluginDescriptor.getVersion();
                     final String availableCqPluginVersion = props.getChildContainerElement("cq-plugin.version")
                             .orElseThrow(() -> new IllegalStateException(
@@ -304,6 +307,38 @@ public class ProdInitMojo extends AbstractMojo {
 
                 });
 
+        /* Edit catalog/pom.xml */
+        new PomTransformer(basedir.toPath().resolve("catalog/pom.xml"), charset, simpleElementWhitespace).transform(
+                (Document document, TransformationContext context) -> {
+
+                    final ContainerElement plugins = context.getOrAddContainerElements(
+                            "build", "plugins");
+                    final NodeGavtcs camelQuarkusPluginNode = plugins.childElementsStream()
+                            .map(ContainerElement::asGavtcs)
+                            .filter(gavtcs -> gavtcs.getArtifactId().equals("camel-quarkus-maven-plugin"))
+                            .findFirst()
+                            .get();
+
+                    /* Replace the org.apache.camel:camel-catalog dependency with org.apache.camel.quarkus:camel-quarkus-catalog */
+                    final ContainerElement deps = camelQuarkusPluginNode.getNode()
+                            .getOrAddChildContainerElement("dependencies");
+                    final ContainerElement camelCatalogDependency = deps.childElementsStream()
+                            .map(ContainerElement::asGavtcs)
+                            .filter(gavtcs -> "org.apache.camel".equals(gavtcs.getGroupId())
+                                    && "camel-catalog".equals(gavtcs.getArtifactId()))
+                            .findFirst()
+                            .map(NodeGavtcs::getNode)
+                            .orElseGet(() -> deps.addChildContainerElement("dependency"));
+                    camelCatalogDependency.addOrSetChildTextElement("groupId", "org.apache.camel.quarkus");
+                    camelCatalogDependency.addOrSetChildTextElement("artifactId", "camel-quarkus-catalog");
+                    camelCatalogDependency.addOrSetChildTextElement("version", "${camel-quarkus-community.version}");
+
+                    /* Set extendClassPathCatalog to true */
+                    ContainerElement config = camelQuarkusPluginNode.getNode()
+                            .getChildContainerElement("executions", "execution", "configuration").get();
+                    config.addOrSetChildTextElement("extendClassPathCatalog", "true");
+                });
+
         /* Edit poms/bom/pom.xml */
         new PomTransformer(basedir.toPath().resolve("poms/bom/pom.xml"), charset, simpleElementWhitespace).transform(
                 (Document document, TransformationContext context) -> {
@@ -322,7 +357,10 @@ public class ProdInitMojo extends AbstractMojo {
         new PomTransformer(basedir.toPath().resolve("poms/bom-test/pom.xml"), charset, simpleElementWhitespace).transform(
                 (Document document, TransformationContext context) -> {
 
-                    /* Change the version of io.quarkiverse.cxf:quarkus-cxf-bom-test from ${quarkiverse-cxf.version} to ${quarkiverse-cxf-community.version} */
+                    /*
+                     * Change the version of io.quarkiverse.cxf:quarkus-cxf-bom-test from ${quarkiverse-cxf.version} to
+                     * ${quarkiverse-cxf-community.version}
+                     */
                     Gavtcs qcxfBom = new Gavtcs("io.quarkiverse.cxf", "quarkus-cxf-bom-test", "${quarkiverse-cxf.version}",
                             "pom", null, "import");
                     final ContainerElement dependencyManagementDeps = context.getOrAddContainerElements(
