@@ -367,6 +367,21 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
                                         dep.getVersion().getRawExpression())
                                         .ifPresent(transformations::add);
                             });
+
+                    /* We do not productize camel test-infra - we need to set these to ${camel-community.version} */
+                    profile.getDependencies().stream()
+                            .filter(dep -> "org.apache.camel".equals(dep.getGroupId().asConstant())
+                                    && "test-jar".equals(dep.getType())
+                                    && "test".equals(dep.getScope())
+                                    && dep.getArtifactId().asConstant().contains("test-infra")
+                                    && profile != null)
+                            .forEach(dep -> {
+                                final Ga ga = new Ga(dep.getGroupId().asConstant(), dep.getArtifactId().asConstant());
+                                final VersionStyle vs = versionStylesByPath.get(module.getPomPath());
+
+                                transformations.add(Transformation.setDependencyVersion(profile.getId(),
+                                        "${camel.community-version}", Collections.singletonList(ga)));
+                            });
                 }
 
                 if (!profile.getDependencyManagement().isEmpty()) {
