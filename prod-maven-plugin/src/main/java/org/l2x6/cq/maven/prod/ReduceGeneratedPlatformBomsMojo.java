@@ -185,8 +185,13 @@ public class ReduceGeneratedPlatformBomsMojo extends AbstractMojo {
                     .filter(member -> member.isHidden() || member.getMemberBom() != null)
                     .forEach(member -> {
 
+                        /* Honor the overrides */
+                        final Set<Ga> gasToStripSuffixesFrom = new TreeSet<>(prodGasNotRequiredBySupportedMembers);
+                        getLog().info("Honoring overrides for member " + member.name + ": " + member.getDependencyOverrides());
+                        gasToStripSuffixesFrom.removeAll(member.getDependencyOverrides());
+
                         new PomTransformer(member.getGeneratedBomPath(), charset, simpleElementWhitespace)
-                                .transform(removeSuffix(prodGasNotRequiredBySupportedMembers, PROD_VERSION_PATTERN));
+                                .transform(removeSuffix(gasToStripSuffixesFrom, PROD_VERSION_PATTERN));
 
                     });
 
@@ -284,6 +289,7 @@ public class ReduceGeneratedPlatformBomsMojo extends AbstractMojo {
         private final Path basePath;
         private final Charset charset;
         private final MemberConfig memberConfig;
+        private final Set<Ga> dependencyOverrides;
 
         public Member(Map<String, Member> mainContextMembers, Map<String, MemberConfig> memberConfigs, ContainerElement node,
                 Path basePath, Charset charset) {
@@ -309,6 +315,36 @@ public class ReduceGeneratedPlatformBomsMojo extends AbstractMojo {
                     .getTextContent().split(":")[1].replace("-bom", "").replace("quarkus-hazelcast-client",
                             "quarkus-hazelcast");
             this.memberConfig = memberConfigs == null ? null : memberConfigs.get(name);
+
+            /* Get the dependency overrides from the BOM generator config */
+            final Set<Ga> ownDependencyOverrides = node.getChildContainerElement("dependencyManagement")
+                    .map(n -> n.childElementsStream()).orElseGet(() -> Stream.of())
+                    .map(child -> {
+                        final Element domNode = child.getNode();
+                        switch (domNode.getLocalName()) {
+                        case "dependency":
+                            return Gav.of(domNode.getTextContent()).toGa();
+                        case "dependencySpec":
+                            return Gav.of(child.getChildContainerElement("artifact").get().getNode().getTextContent()).toGa();
+                        default:
+                            throw new IllegalStateException(
+                                    "Only dependency or dependencySpec expected under <dependencyManagement> of member " + name
+                                            + "; found " + domNode.getLocalName());
+                        }
+                    })
+                    .collect(Collectors.toCollection(TreeSet::new));
+            if (parent != null) {
+                /* Respect the config in the main profile-less context */
+                this.dependencyOverrides = new TreeSet<>();
+                this.dependencyOverrides.addAll(parent.getDependencyOverrides());
+                this.dependencyOverrides.addAll(ownDependencyOverrides);
+            } else {
+                this.dependencyOverrides = ownDependencyOverrides;
+            }
+        }
+
+        public Set<Ga> getDependencyOverrides() {
+            return dependencyOverrides;
         }
 
         public boolean isHidden() {
