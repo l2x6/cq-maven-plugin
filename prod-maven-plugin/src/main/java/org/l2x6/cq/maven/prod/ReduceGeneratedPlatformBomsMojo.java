@@ -174,6 +174,7 @@ public class ReduceGeneratedPlatformBomsMojo extends AbstractMojo {
                             .flatMap(Set::stream))
                     .forEach(prodGasRequiredBySupportedMembers::add);
             final Set<Ga> prodGasNotRequiredBySupportedMembers = new TreeSet<>();
+            final Set<Ga> universeDependencyOverrides = new TreeSet<>();
             final Path universeBomPath = basedir.toPath().resolve("generated-platform-project/quarkus-universe/bom/pom.xml");
             new MemberBom(universeBomPath, charset)
                     .getProdConstraints().stream()
@@ -189,14 +190,19 @@ public class ReduceGeneratedPlatformBomsMojo extends AbstractMojo {
                         final Set<Ga> gasToStripSuffixesFrom = new TreeSet<>(prodGasNotRequiredBySupportedMembers);
                         getLog().info("Honoring overrides for member " + member.name + ": " + member.getDependencyOverrides());
                         gasToStripSuffixesFrom.removeAll(member.getDependencyOverrides());
+                        universeDependencyOverrides.addAll(member.getDependencyOverrides());
 
                         new PomTransformer(member.getGeneratedBomPath(), charset, simpleElementWhitespace)
                                 .transform(removeSuffix(gasToStripSuffixesFrom, PROD_VERSION_PATTERN));
 
                     });
 
+            /* Honor the overrides */
+            final Set<Ga> gasToStripSuffixesFrom = new TreeSet<>(prodGasNotRequiredBySupportedMembers);
+            gasToStripSuffixesFrom.removeAll(universeDependencyOverrides);
+
             new PomTransformer(universeBomPath, charset, simpleElementWhitespace)
-                    .transform(removeSuffix(prodGasNotRequiredBySupportedMembers, PROD_VERSION_PATTERN));
+                    .transform(removeSuffix(gasToStripSuffixesFrom, PROD_VERSION_PATTERN));
 
         };
     }
