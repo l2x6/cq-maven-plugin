@@ -380,7 +380,7 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
                                 final VersionStyle vs = versionStylesByPath.get(module.getPomPath());
 
                                 transformations.add(Transformation.setDependencyVersion(profile.getId(),
-                                        "${camel.community-version}", Collections.singletonList(ga)));
+                                        "${camel-community.version}", Collections.singletonList(ga)));
                             });
                 }
 
@@ -481,7 +481,7 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
         final Module rootModule = fullTree.getRootModule();
         final String expectedVersion = rootModule.getGav().getVersion().asConstant();
         for (Module module : fullTree.getModulesByGa().values()) {
-            if (!module.getPomPath().equals("pom.xml")) {
+            if ((!module.getPomPath().equals("pom.xml")) && (module.getParentGav() != null)) {
                 final String moduleVersion = module.getParentGav().getVersion().asConstant();
                 if (!expectedVersion.equals(moduleVersion)) {
                     final Path pomPath = fullTree.getRootDirectory().resolve(module.getPomPath());
