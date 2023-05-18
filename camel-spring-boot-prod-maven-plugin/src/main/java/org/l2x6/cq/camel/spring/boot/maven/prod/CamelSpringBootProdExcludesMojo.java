@@ -266,8 +266,17 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
         final Path basePath = basedir.toPath();
         try {
             includes = Files.lines(basePath.resolve(requiredProductizedCamelArtifacts.toPath()), charset)
+                    .filter(line -> !line.contains(":"))
                     .map(line -> new Ga("org.apache.camel.springboot", line.strip()))
                     .collect(Collectors.toCollection(TreeSet::new));
+            Files.lines(basePath.resolve(requiredProductizedCamelArtifacts.toPath()), charset)
+                    .filter(line -> line.contains(":"))
+                    .forEach(
+                            line -> {
+                                int groupLength = line.indexOf(":");
+                                Ga ga = new Ga(line.substring(0, groupLength), line.substring(groupLength + 1));
+                                includes.add(ga);
+                            });
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -276,6 +285,7 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
                 .map(artifactId -> (artifactId.contains(":") ? Ga.of(artifactId)
                         : new Ga("org.apache.camel.springboot", artifactId)))
                 .forEach(includes::add);
+
         /*
          * Let's edit the pom.xml files out of the real source tree if we are just checking or pom editing is not
          * desired
