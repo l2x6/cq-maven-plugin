@@ -528,7 +528,9 @@ public class CamelProdExcludesMojo extends AbstractMojo {
         for (Module module : fullTree.getModulesByGa().values()) {
             if (!module.getPomPath().equals("pom.xml")) {
                 final String moduleVersion = module.getParentGav().getVersion().asConstant();
-                if (!expectedVersion.equals(moduleVersion)) {
+                final String parentGroupId = module.getParentGav().getGroupId().asConstant();
+                final String moduleGroupId = module.getGav().getGroupId().asConstant();
+                if (!expectedVersion.equals(moduleVersion) && parentGroupId.equals(moduleGroupId)) {
                     final Path pomPath = fullTree.getRootDirectory().resolve(module.getPomPath());
                     new PomTransformer(pomPath, charset, simpleElementWhitespace)
                             .transform(
