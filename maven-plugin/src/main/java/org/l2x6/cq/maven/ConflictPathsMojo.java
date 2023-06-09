@@ -30,12 +30,14 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Dependency;
@@ -147,7 +149,7 @@ public class ConflictPathsMojo extends AbstractMojo {
      *
      * @since 4.2.0
      */
-    @Parameter
+    @Parameter(property = "cq.bomFile")
     String bomFile;
 
     /**
@@ -155,7 +157,7 @@ public class ConflictPathsMojo extends AbstractMojo {
      *
      * @since 4.2.0
      */
-    @Parameter(defaultValue = "${project.build.directory}/conflict-paths-report-short.yaml")
+    @Parameter(defaultValue = "${project.build.directory}/conflict-paths-report-short.yaml", property = "cq.shortReportFile")
     String shortReportFile;
 
     /**
@@ -163,8 +165,24 @@ public class ConflictPathsMojo extends AbstractMojo {
      *
      * @since 4.2.0
      */
-    @Parameter(defaultValue = "${project.build.directory}/conflict-paths-report-verbose.yaml")
+    @Parameter(defaultValue = "${project.build.directory}/conflict-paths-report-verbose.yaml", property = "cq.verboseReportFile")
     String verboseReportFile;
+
+    /**
+     * Where to store the versions report
+     *
+     * @since 4.2.1
+     */
+    @Parameter(defaultValue = "${project.build.directory}/versions-report.yaml", property = "cq.versionsReportFile")
+    String versionsReportFile;
+
+    /**
+     * Where to store the versions report
+     *
+     * @since 4.2.1
+     */
+    @Parameter(defaultValue = "${project.build.directory}/dependency-paths-report.txt", property = "cq.dependencyPathsReportFile")
+    String dependencyPathsReportFile;
 
     /**
      * Primary dependency projects such as Camel and Quarkus
@@ -230,31 +248,32 @@ public class ConflictPathsMojo extends AbstractMojo {
         final List<Gav> additionalBomGavs = additionalBoms == null ? Collections.emptyList()
                 : additionalBoms.stream().map(Gav::of).collect(Collectors.toList());
 
-        final Map<Gav, Set<Ga>> boms = new TreeMap<>();
+        final Map<Gav, Map<Ga, String>> boms = new TreeMap<>();
         /* Add Quarkus BOM entries first */
         addAdditionalBoms(
                 additionalBomGavs.stream()
                         .filter(gav -> "io.quarkus".equals(gav.getGroupId()))
-                        .peek(gav -> boms.put(gav, new TreeSet<>()))
+                        .peek(gav -> boms.put(gav, new TreeMap<>()))
                         .collect(Collectors.toList()),
                 (Gav gav, Dependency dep) -> {
                     constraintsFilteredByOriginPlusAdditionalBoms.add(dep);
-                    boms.get(gav).add(toGa(dep));
+                    boms.get(gav).put(toGa(dep), dep.getVersion());
                 });
         constraintsFilteredByOriginPlusAdditionalBoms.addAll(originalConstrains);
+        final Map<Ga, String> ownBomConstraints = new TreeMap<>();
+        originalConstrains.stream()
+                .forEach(dep -> ownBomConstraints.put(toGa(dep), dep.getVersion()));
         boms.put(
                 new Gav(bom.getGroupId(), bom.getArtifactId(), bom.getVersion()),
-                originalConstrains.stream()
-                        .map(ConflictPathsMojo::toGa)
-                        .collect(Collectors.toCollection(TreeSet::new)));
+                ownBomConstraints);
         addAdditionalBoms(
                 additionalBomGavs.stream()
                         .filter(gav -> !"io.quarkus".equals(gav.getGroupId()))
-                        .peek(gav -> boms.put(gav, new TreeSet<>()))
+                        .peek(gav -> boms.put(gav, new TreeMap<>()))
                         .collect(Collectors.toList()),
                 (Gav gav, Dependency dep) -> {
                     constraintsFilteredByOriginPlusAdditionalBoms.add(dep);
-                    boms.get(gav).add(toGa(dep));
+                    boms.get(gav).put(toGa(dep), dep.getVersion());
                 });
 
         final MavenSourceTree t = MavenSourceTree.of(rootModuleDirectory.resolve("pom.xml"), charset);
@@ -277,12 +296,15 @@ public class ConflictPathsMojo extends AbstractMojo {
                                         "*"))
                                 .collect(Collectors.toList())))
                 .collect(Collectors.toList());
+
+        final Map<Ga, Set<String>> camelVersions = camelVersions(ownBomConstraints, emptyInstalledArtifact, useRepoSession);
         final DependencyCollector collector = new DependencyCollector(
                 primaryDependencyProjectSets,
-                new GavSetMapper(Collections.emptyMap()),
+                new ProjectMapper(transitiveProjects),
                 ownGas,
                 new Ga(emptyInstalledArtifact.getGroupId(), emptyInstalledArtifact.getArtifactId()),
-                boms);
+                boms,
+                camelVersions);
         originalConstrains.stream()
                 .filter(dep -> entryPoints.contains(dep.getGroupId(), dep.getArtifactId(), dep.getVersion()))
                 .forEach(entry -> {
@@ -320,7 +342,9 @@ public class ConflictPathsMojo extends AbstractMojo {
 
         Map.<String, Consumer<Consumer<String>>> of(
                 shortReportFile, collector::renderShort,
-                verboseReportFile, collector::renderVerbose)
+                verboseReportFile, collector::renderVerbose,
+                versionsReportFile, collector::renderVersions,
+                dependencyPathsReportFile, collector::renderAllDependencyPaths)
                 .entrySet().stream()
                 .forEach(en -> {
                     Path reportPath = basedir.toPath().resolve(en.getKey());
@@ -342,6 +366,47 @@ public class ConflictPathsMojo extends AbstractMojo {
                         throw new RuntimeException("Could not write to " + reportPath);
                     }
                 });
+    }
+
+    private Map<Ga, Set<String>> camelVersions(Map<Ga, String> ownBomConstraints, Artifact emptyInstalledArtifact,
+            RepositorySystemSession useRepoSession) {
+
+        final CamelCollector collector = new CamelCollector();
+
+        ownBomConstraints.entrySet().stream()
+                .filter(en -> en.getKey().getGroupId().equals("org.apache.camel"))
+                .forEach(en -> {
+                    final Ga entry = en.getKey();
+                    final String version = en.getValue();
+                    getLog().info("Resolving " + entry.getGroupId() + ":" + entry.getArtifactId() + ":jar:" +
+                            version);
+
+                    final CollectRequest request = new CollectRequest()
+                            .setRoot(new org.eclipse.aether.graph.Dependency(emptyInstalledArtifact, null))
+                            .setRepositories(repositories)
+                            .setDependencies(
+                                    Collections.singletonList(
+                                            new org.eclipse.aether.graph.Dependency(
+                                                    new DefaultArtifact(
+                                                            entry.getGroupId(),
+                                                            entry.getArtifactId(),
+                                                            "jar",
+                                                            version),
+                                                    null)));
+
+                    try {
+                        final DependencyNode rootNode = repoSystem.collectDependencies(useRepoSession, request).getRoot();
+                        rootNode.accept(collector);
+                    } catch (DependencyCollectionException | IllegalArgumentException e) {
+                        throw new RuntimeException(
+                                "Could not resolve dependencies of " + entry.getGroupId() + ":" + entry.getArtifactId()
+                                        + ":jar:" +
+                                        version,
+                                e);
+                    }
+                });
+
+        return collector.artifactVersions;
     }
 
     private DefaultArtifact emptyInstalledArtifact() {
@@ -406,98 +471,10 @@ public class ConflictPathsMojo extends AbstractMojo {
         return new Ga(dep.getGroupId(), dep.getArtifactId());
     }
 
-    static class DependencyCollector implements DependencyVisitor {
-        private final Deque<Ga> stack = new ArrayDeque<>();
-        private final Map<String, GavSet> primaryDependencyProjectSets;
-
-        /** Artifacts reachable through the project with the given ID */
-        private final Map<String, Map<String, Set<String>>> transitiveProjectsByPrimaryDependencyProject;
-        private final GavSetMapper gavSetMapper;
-        private final Set<Ga> ownGas;
-        private final Ga emptyArtifact;
-        private final Map<Gav, Set<Ga>> boms;
-
-        public DependencyCollector(
-                Map<String, GavSet> primaryDependencyProjectSets,
-                GavSetMapper gavSetMapper,
-                Set<Ga> ownGas,
-                Ga emptyArtifact, Map<Gav, Set<Ga>> boms) {
-            this.primaryDependencyProjectSets = primaryDependencyProjectSets;
-            this.gavSetMapper = gavSetMapper;
-            this.ownGas = ownGas;
-            this.emptyArtifact = emptyArtifact;
-            Map<String, Map<String, Set<String>>> map = new TreeMap<>();
-            primaryDependencyProjectSets.keySet().stream()
-                    .forEach(k -> map.put(k, new TreeMap<>()));
-            this.transitiveProjectsByPrimaryDependencyProject = Collections.unmodifiableMap(map);
-            this.boms = boms;
-        }
-
-        public void renderShort(Consumer<String> log) {
-            log.accept("#");
-            log.accept("# Potential inter-project conflicts");
-            log.accept("#");
-
-            final Map<String, Set<String>> shortProjects = new TreeMap<>();
-            transitiveProjectsByPrimaryDependencyProject.entrySet()
-                    .forEach(en -> {
-                        shortProjects.put(
-                                en.getKey(),
-                                en.getValue().keySet().stream()
-                                        .map(Ga::of)
-                                        .map(gavSetMapper::map)
-                                        .collect(Collectors.toCollection(TreeSet::new)));
-                    });
-
-            final List<String> projectIds = new ArrayList<>(shortProjects.keySet());
-            for (int i = 0; i < projectIds.size(); i++) {
-                final String id1 = projectIds.get(i);
-                final Set<String> gas1 = shortProjects.get(id1);
-                for (int j = i + 1; j < projectIds.size(); j++) {
-                    final String id2 = projectIds.get(j);
-                    final Set<String> gas2 = shortProjects.get(id2);
-                    log.accept("- \"" + id1 + ".." + id2 + "\":");
-                    gas1.stream()
-                            .filter(ga -> gas2.contains(ga))
-                            .forEach(ga -> {
-                                log.accept("  - \"" + ga + "\"");
-                                boms.entrySet().stream()
-                                        .filter(en -> en.getValue().contains(ga))
-                                        .forEach(en -> log.accept("  # managed by " + en.getKey()));
-                            });
-                }
-            }
-        }
-
-        public void renderVerbose(Consumer<String> log) {
-            log.accept("#");
-            log.accept("# Potential inter-project conflicts");
-            log.accept("#");
-            final List<String> projectIds = new ArrayList<>(transitiveProjectsByPrimaryDependencyProject.keySet());
-            for (int i = 0; i < projectIds.size(); i++) {
-                final String id1 = projectIds.get(i);
-                final Map<String, Set<String>> gas1 = transitiveProjectsByPrimaryDependencyProject.get(id1);
-                for (int j = i + 1; j < projectIds.size(); j++) {
-                    final String id2 = projectIds.get(j);
-                    final Map<String, Set<String>> gas2 = transitiveProjectsByPrimaryDependencyProject.get(id2);
-                    log.accept("- \"" + id1 + ".." + id2 + "\":");
-                    gas1.keySet().stream()
-                            .filter(ga -> gas2.keySet().contains(ga))
-                            .forEach(ga -> {
-                                log.accept("  - \"" + ga + "\"");
-                                boms.entrySet().stream()
-                                        .filter(en -> en.getValue().contains(ga))
-                                        .forEach(en -> log.accept("  # managed by " + en.getKey()));
-                                gas1.get(ga).stream()
-                                        .map(path -> "    - \"" + path + "\"")
-                                        .forEach(log);
-                                gas2.get(ga).stream()
-                                        .map(path -> "    - \"" + path + "\"")
-                                        .forEach(log);
-                            });
-                }
-            }
-        }
+    static abstract class BaseCollector implements DependencyVisitor {
+        protected final Deque<Ga> stack = new ArrayDeque<>();
+        /** From Ga to a Set of versions */
+        protected final Map<Ga, Set<String>> artifactVersions = new TreeMap<>();
 
         @Override
         public boolean visitLeave(DependencyNode node) {
@@ -520,24 +497,191 @@ public class ConflictPathsMojo extends AbstractMojo {
                 return false; // should have empty children anyway as stated in class level JavaDoc of ConflictResolver
             }
 
-            primaryDependencyProjectSets.entrySet().stream()
-                    /* If any stack element belongs to a project */
-                    .filter(en -> stack.stream().anyMatch(stackGa -> en.getValue().contains(stackGa)))
-                    /* then add the current ga as being reachable through that project */
-                    .map(Map.Entry::getKey)
-                    .forEach(
-                            projectId -> transitiveProjectsByPrimaryDependencyProject
-                                    .get(projectId)
-                                    .compute(ga.toString(), (k, v) -> {
-                                        final String path = projectId + ": " + a.getVersion() + " "
-                                                + toPath(stack, ownGas, emptyArtifact);
-                                        (v == null ? (v = new TreeSet<>()) : v).add(path);
-                                        return v;
-                                    }));
-
+            doVisitEnter(ga, a.getVersion());
             stack.push(ga);
 
             return true;
+        }
+
+        protected abstract void doVisitEnter(Ga ga, String version);
+
+    }
+
+    static class CamelCollector extends BaseCollector {
+        @Override
+        protected void doVisitEnter(Ga ga, String version) {
+            artifactVersions.compute(ga, (k, v) -> {
+                (v == null ? (v = new TreeSet<String>()) : v).add(version);
+                return v;
+            });
+        }
+    }
+
+    static class DependencyCollector extends BaseCollector {
+        private final Map<String, GavSet> primaryDependencyProjectSets;
+
+        /**
+         * Artifacts reachable through the project with the given ID.
+         * A map from primary dependency projectId to a map from Ga reachable through that project
+         * to paths through it is reachanle.
+         */
+        private final Map<String, Map<Ga, Set<String>>> transitivesByPrimaryDependencyProject;
+        private final ProjectMapper gavSetMapper;
+        private final Set<Ga> ownGas;
+        private final Set<String> allDependencyPaths = new TreeSet<>();
+        private final Ga emptyArtifact;
+        private final Map<Gav, Map<Ga, String>> boms;
+        private final Map<Ga, Set<String>> camelVersions;
+
+        public DependencyCollector(
+                Map<String, GavSet> primaryDependencyProjectSets,
+                ProjectMapper gavSetMapper,
+                Set<Ga> ownGas,
+                Ga emptyArtifact,
+                Map<Gav, Map<Ga, String>> boms,
+                Map<Ga, Set<String>> camelVersions) {
+            this.primaryDependencyProjectSets = primaryDependencyProjectSets;
+            this.gavSetMapper = gavSetMapper;
+            this.ownGas = ownGas;
+            this.emptyArtifact = emptyArtifact;
+            Map<String, Map<Ga, Set<String>>> map = new TreeMap<>();
+            primaryDependencyProjectSets.keySet().stream()
+                    .forEach(k -> map.put(k, new TreeMap<>()));
+            this.transitivesByPrimaryDependencyProject = Collections.unmodifiableMap(map);
+            this.boms = boms;
+            this.camelVersions = camelVersions;
+        }
+
+        public void renderShort(Consumer<String> log) {
+            log.accept("#");
+            log.accept("# Potential inter-project conflicts");
+            log.accept("#");
+
+            /* From projectId, to artifact groups */
+            final Map<String, Set<String>> shortProjects = new TreeMap<>();
+            transitivesByPrimaryDependencyProject.entrySet()
+                    .forEach(en -> {
+                        shortProjects.put(
+                                en.getKey(),
+                                en.getValue().keySet().stream()
+                                        .map(gavSetMapper::toProjectId)
+                                        .collect(Collectors.toCollection(TreeSet::new)));
+                    });
+
+            final List<String> projectIds = new ArrayList<>(shortProjects.keySet());
+            for (int i = 0; i < projectIds.size(); i++) {
+                final String id1 = projectIds.get(i);
+                final Set<String> gas1 = shortProjects.get(id1);
+                for (int j = i + 1; j < projectIds.size(); j++) {
+                    final String id2 = projectIds.get(j);
+                    final Set<String> gas2 = shortProjects.get(id2);
+                    log.accept("- \"" + id1 + ".." + id2 + "\":");
+                    gas1.stream()
+                            .filter(ga -> gas2.contains(ga))
+                            .forEach(ga -> {
+                                final Predicate<Ga> projectPredicate = gavSetMapper.findProjectPredicate(ga);
+                                log.accept("  - \"" + ga + "\"");
+                                final Set<Ga> projectArtifacts = new TreeSet<>();
+                                final Set<String> versions = artifactVersions.entrySet().stream()
+                                        .filter(versionEntry -> projectPredicate.test(versionEntry.getKey()))
+                                        .peek(en -> projectArtifacts.add(en.getKey()))
+                                        .map(Entry::getValue)
+                                        .flatMap(Set::stream)
+                                        .collect(Collectors.toCollection(TreeSet::new));
+
+                                final Set<Ga> camelGas = new TreeSet<>();
+                                final Set<String> camelArtifactVersions = camelVersions.entrySet().stream()
+                                        .filter(versionEntry -> projectPredicate.test(versionEntry.getKey()))
+                                        .peek(en -> camelGas.add(en.getKey()))
+                                        .map(Entry::getValue)
+                                        .flatMap(Set::stream)
+                                        .collect(Collectors.toCollection(TreeSet::new));
+
+                                if (versions.size() == 1) {
+                                    log.accept("    # same version throughout CQ dependency graph: " + versions);
+                                } else {
+                                    log.accept("    # various versions throughout CQ dependency graph: " + versions);
+                                }
+
+                                final AtomicBoolean managed = new AtomicBoolean(false);
+                                boms.forEach((bomGav, bomConstraints) -> {
+                                    final Set<String> managedVersions = bomConstraints.entrySet().stream()
+                                            .filter(en -> projectArtifacts.contains(en.getKey()))
+                                            .map(Entry::getValue)
+                                            .collect(Collectors.toCollection(TreeSet::new));
+                                    if (managedVersions.size() > 0) {
+                                        managed.set(true);
+                                        String fullyOrPartly = managedVersions.size() == projectArtifacts.size() ? "fully"
+                                                : "partly";
+                                        log.accept("    # managed " + fullyOrPartly + " (" + managedVersions.size()
+                                                + "/" + projectArtifacts.size() + ") in " + bomGav + " at version(s) "
+                                                + managedVersions);
+                                    }
+                                });
+                                if (!managed.get()) {
+                                    log.accept("    # not managed in any of the listed BOMs");
+                                }
+                                if (versions.equals(camelArtifactVersions)) {
+                                    log.accept("    # Camel uses " + camelGas.size()
+                                            + "/" + projectArtifacts.size() + " artifacts with the same versions: "
+                                            + camelArtifactVersions);
+                                } else {
+                                    log.accept("    # Camel uses " + camelGas.size()
+                                            + "/" + projectArtifacts.size() + " artifacts with different versions: "
+                                            + camelArtifactVersions);
+                                }
+                            });
+                }
+            }
+        }
+
+        public void renderVerbose(Consumer<String> log) {
+            log.accept("#");
+            log.accept("# Potential inter-project conflicts");
+            log.accept("#");
+            final List<String> projectIds = new ArrayList<>(transitivesByPrimaryDependencyProject.keySet());
+            for (int i = 0; i < projectIds.size(); i++) {
+                final String id1 = projectIds.get(i);
+                final Map<Ga, Set<String>> gas1 = transitivesByPrimaryDependencyProject.get(id1);
+                for (int j = i + 1; j < projectIds.size(); j++) {
+                    final String id2 = projectIds.get(j);
+                    final Map<Ga, Set<String>> gas2 = transitivesByPrimaryDependencyProject.get(id2);
+                    log.accept("- \"" + id1 + ".." + id2 + "\":");
+                    gas1.keySet().stream()
+                            .filter(ga -> gas2.keySet().contains(ga))
+                            .forEach(ga -> {
+                                log.accept("  - \"" + ga + "\"");
+                                final AtomicBoolean managed = new AtomicBoolean(false);
+                                boms.entrySet().stream()
+                                        .filter(en -> en.getValue().containsKey(ga))
+                                        .peek(en -> managed.set(true))
+                                        .forEach(en -> log.accept("    # managed by " + en.getKey()));
+                                if (!managed.get()) {
+                                    log.accept("    # not managed by any listed BOM");
+                                }
+                                gas1.get(ga).stream()
+                                        .map(path -> "    - \"" + path + "\"")
+                                        .forEach(log);
+                                gas2.get(ga).stream()
+                                        .map(path -> "    - \"" + path + "\"")
+                                        .forEach(log);
+                            });
+                }
+            }
+        }
+
+        public void renderVersions(Consumer<String> log) {
+            artifactVersions.forEach((ga, versions) -> {
+                log.accept("- " + ga);
+                versions.stream()
+                        .map(v -> "  - \"" + v + "\"")
+                        .forEach(log::accept);
+            });
+        }
+
+        public void renderAllDependencyPaths(Consumer<String> log) {
+            log.accept("# Legend: a <- b ... b depends on a");
+            allDependencyPaths.forEach(log::accept);
         }
 
         static String toPath(Deque<Ga> stack, Set<Ga> ownGas, Ga emptyArtifact) {
@@ -558,25 +702,75 @@ public class ConflictPathsMojo extends AbstractMojo {
                         return true;
                     })
                     .map(Ga::toString)
-                    .collect(Collectors.joining(" -> "));
+                    .collect(Collectors.joining(" <- "));
+        }
+
+        @Override
+        protected void doVisitEnter(Ga ga, String version) {
+            final AtomicBoolean reachableThroughAPrimaryProject = new AtomicBoolean(false);
+            primaryDependencyProjectSets.entrySet().stream()
+                    /* If any stack element belongs to a project */
+                    .filter(en -> stack.stream().anyMatch(stackGa -> en.getValue().contains(stackGa)))
+                    /* then add the current ga as being reachable through that project */
+                    .map(Map.Entry::getKey)
+                    .forEach(
+                            projectId -> transitivesByPrimaryDependencyProject
+                                    .get(projectId)
+                                    .compute(ga, (k, v) -> {
+                                        final String path = projectId + ": " + version + " "
+                                                + toPath(stack, ownGas, emptyArtifact);
+                                        (v == null ? (v = new TreeSet<>()) : v).add(path);
+                                        reachableThroughAPrimaryProject.set(true);
+                                        return v;
+                                    }));
+
+            if (reachableThroughAPrimaryProject.get()) {
+                artifactVersions.compute(ga, (k, v) -> {
+                    (v == null ? (v = new TreeSet<String>()) : v).add(version);
+                    return v;
+                });
+            }
+
+            allDependencyPaths.add(ga + ":" + version + " <- " + toPath(stack, ownGas, emptyArtifact));
+
         }
 
     }
 
-    public static class GavSetMapper {
+    public static class ProjectMapper {
 
         private final Map<String, GavSet> customGavSets;
 
-        private GavSetMapper(Map<String, GavSet> customGavSets) {
-            this.customGavSets = customGavSets;
+        private ProjectMapper(List<IdGavSet> transitiveProjects) {
+            this.customGavSets = new TreeMap<String, GavSet>();
+            if (transitiveProjects != null) {
+                transitiveProjects.stream()
+                        .forEach(p -> customGavSets.put(p.getId(), p.toGavSet()));
+            }
         }
 
-        public String map(Ga ga) {
+        /**
+         * @param  ga the {@link Ga} to find a project for
+         * @return    a projectId of the project the given {@code ga} belongs to
+         */
+        public String toProjectId(Ga ga) {
             return customGavSets.entrySet().stream()
                     .filter(en -> en.getValue().contains(ga))
                     .map(Map.Entry::getKey)
                     .findFirst()
                     .orElse(ga.getGroupId());
+        }
+
+        /**
+         * @param  projectId the ID of a project whose {@link Predicate} is to be found
+         * @return           a {@link Predicate} able to select artifacts of the given project
+         */
+        public Predicate<Ga> findProjectPredicate(String projectId) {
+            GavSet result = customGavSets.get(projectId);
+            if (result != null) {
+                return result::contains;
+            }
+            return ga -> ga.getGroupId().equals(projectId);
         }
     }
 
