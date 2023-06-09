@@ -71,8 +71,8 @@ import org.l2x6.pom.tuner.model.GavSet;
  *
  * @since 4.2.0
  */
-@Mojo(name = "conflict-paths", threadSafe = true, requiresProject = true)
-public class ConflictPathsMojo extends AbstractMojo {
+@Mojo(name = "da", threadSafe = true, requiresProject = true)
+public class DependencyAnalysisMojo extends AbstractMojo {
 
     /**
      * The base directory of the current project
