@@ -230,14 +230,32 @@ public class ConflictPathsMojo extends AbstractMojo {
         final List<Gav> additionalBomGavs = additionalBoms == null ? Collections.emptyList()
                 : additionalBoms.stream().map(Gav::of).collect(Collectors.toList());
 
+        final Map<Gav, Set<Ga>> boms = new TreeMap<>();
         /* Add Quarkus BOM entries first */
         addAdditionalBoms(
-                additionalBomGavs.stream().filter(gav -> "io.quarkus".equals(gav.getGroupId())).collect(Collectors.toList()),
-                (Gav gav, Dependency dep) -> constraintsFilteredByOriginPlusAdditionalBoms.add(dep));
+                additionalBomGavs.stream()
+                        .filter(gav -> "io.quarkus".equals(gav.getGroupId()))
+                        .peek(gav -> boms.put(gav, new TreeSet<>()))
+                        .collect(Collectors.toList()),
+                (Gav gav, Dependency dep) -> {
+                    constraintsFilteredByOriginPlusAdditionalBoms.add(dep);
+                    boms.get(gav).add(toGa(dep));
+                });
         constraintsFilteredByOriginPlusAdditionalBoms.addAll(originalConstrains);
+        boms.put(
+                new Gav(bom.getGroupId(), bom.getArtifactId(), bom.getVersion()),
+                originalConstrains.stream()
+                        .map(ConflictPathsMojo::toGa)
+                        .collect(Collectors.toCollection(TreeSet::new)));
         addAdditionalBoms(
-                additionalBomGavs.stream().filter(gav -> !"io.quarkus".equals(gav.getGroupId())).collect(Collectors.toList()),
-                (Gav gav, Dependency dep) -> constraintsFilteredByOriginPlusAdditionalBoms.add(dep));
+                additionalBomGavs.stream()
+                        .filter(gav -> !"io.quarkus".equals(gav.getGroupId()))
+                        .peek(gav -> boms.put(gav, new TreeSet<>()))
+                        .collect(Collectors.toList()),
+                (Gav gav, Dependency dep) -> {
+                    constraintsFilteredByOriginPlusAdditionalBoms.add(dep);
+                    boms.get(gav).add(toGa(dep));
+                });
 
         final MavenSourceTree t = MavenSourceTree.of(rootModuleDirectory.resolve("pom.xml"), charset);
         final Set<Ga> ownGas = t.getModulesByGa().keySet();
@@ -263,7 +281,8 @@ public class ConflictPathsMojo extends AbstractMojo {
                 primaryDependencyProjectSets,
                 new GavSetMapper(Collections.emptyMap()),
                 ownGas,
-                new Ga(emptyInstalledArtifact.getGroupId(), emptyInstalledArtifact.getArtifactId()));
+                new Ga(emptyInstalledArtifact.getGroupId(), emptyInstalledArtifact.getArtifactId()),
+                boms);
         originalConstrains.stream()
                 .filter(dep -> entryPoints.contains(dep.getGroupId(), dep.getArtifactId(), dep.getVersion()))
                 .forEach(entry -> {
@@ -396,12 +415,13 @@ public class ConflictPathsMojo extends AbstractMojo {
         private final GavSetMapper gavSetMapper;
         private final Set<Ga> ownGas;
         private final Ga emptyArtifact;
+        private final Map<Gav, Set<Ga>> boms;
 
         public DependencyCollector(
                 Map<String, GavSet> primaryDependencyProjectSets,
                 GavSetMapper gavSetMapper,
                 Set<Ga> ownGas,
-                Ga emptyArtifact) {
+                Ga emptyArtifact, Map<Gav, Set<Ga>> boms) {
             this.primaryDependencyProjectSets = primaryDependencyProjectSets;
             this.gavSetMapper = gavSetMapper;
             this.ownGas = ownGas;
@@ -410,6 +430,7 @@ public class ConflictPathsMojo extends AbstractMojo {
             primaryDependencyProjectSets.keySet().stream()
                     .forEach(k -> map.put(k, new TreeMap<>()));
             this.transitiveProjectsByPrimaryDependencyProject = Collections.unmodifiableMap(map);
+            this.boms = boms;
         }
 
         public void renderShort(Consumer<String> log) {
@@ -438,7 +459,12 @@ public class ConflictPathsMojo extends AbstractMojo {
                     log.accept("- \"" + id1 + ".." + id2 + "\":");
                     gas1.stream()
                             .filter(ga -> gas2.contains(ga))
-                            .forEach(ga -> log.accept("  - \"" + ga + "\""));
+                            .forEach(ga -> {
+                                log.accept("  - \"" + ga + "\"");
+                                boms.entrySet().stream()
+                                        .filter(en -> en.getValue().contains(ga))
+                                        .forEach(en -> log.accept("  # managed by " + en.getKey()));
+                            });
                 }
             }
         }
@@ -459,6 +485,9 @@ public class ConflictPathsMojo extends AbstractMojo {
                             .filter(ga -> gas2.keySet().contains(ga))
                             .forEach(ga -> {
                                 log.accept("  - \"" + ga + "\"");
+                                boms.entrySet().stream()
+                                        .filter(en -> en.getValue().contains(ga))
+                                        .forEach(en -> log.accept("  # managed by " + en.getKey()));
                                 gas1.get(ga).stream()
                                         .map(path -> "    - \"" + path + "\"")
                                         .forEach(log);
@@ -500,7 +529,7 @@ public class ConflictPathsMojo extends AbstractMojo {
                             projectId -> transitiveProjectsByPrimaryDependencyProject
                                     .get(projectId)
                                     .compute(ga.toString(), (k, v) -> {
-                                        final String path = projectId + ": "
+                                        final String path = projectId + ": " + a.getVersion() + " "
                                                 + toPath(stack, ownGas, emptyArtifact);
                                         (v == null ? (v = new TreeSet<>()) : v).add(path);
                                         return v;
