@@ -165,6 +165,7 @@
         <module>camel-prod-maven-plugin</module>
         <module>camel-spring-boot-prod-maven-plugin</module>
         <module>filtered-external-enforcer-rules</module>
+        <module>alias-fastinstall-quickly-extension</module>
     </modules>
 
     <dependencyManagement>
