@@ -48,6 +48,7 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
+import org.apache.maven.project.ProjectBuilder;
 import org.eclipse.aether.DefaultRepositorySystemSession;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
@@ -143,6 +144,9 @@ public class DependencyAnalysisMojo extends AbstractMojo {
     @Parameter
     List<String> additionalBoms;
 
+    @Parameter(property = "camel.version", defaultValue = "${camel.version}")
+    String camelVersion;
+
     /**
      * A path to the pom.xml whose constraints will be used as a universe for {@link #resolutionEntryPointIncludes} and
      * {@link #resolutionEntryPointExcludes}
@@ -202,6 +206,9 @@ public class DependencyAnalysisMojo extends AbstractMojo {
 
     @Component
     RepositorySystem repoSystem;
+
+    @Component
+    private ProjectBuilder mavenProjectBuilder;
 
     @Parameter(defaultValue = "${repositorySystemSession}", readonly = true, required = true)
     RepositorySystemSession repoSession;
@@ -282,22 +289,11 @@ public class DependencyAnalysisMojo extends AbstractMojo {
         final List<org.eclipse.aether.graph.Dependency> aetherConstraints = constraintsFilteredByOriginPlusAdditionalBoms
                 .stream()
                 .filter(dep -> !ownGas.contains(toGa(dep)))
-                .map(dep -> new org.eclipse.aether.graph.Dependency(
-                        new DefaultArtifact(
-                                dep.getGroupId(),
-                                dep.getArtifactId(),
-                                dep.getClassifier(),
-                                dep.getType(),
-                                dep.getVersion()),
-                        null,
-                        false,
-                        dep.getExclusions().stream()
-                                .map(e -> new org.eclipse.aether.graph.Exclusion(e.getGroupId(), e.getArtifactId(), "*",
-                                        "*"))
-                                .collect(Collectors.toList())))
+                .map(DependencyAnalysisMojo::toAetherDependency)
                 .collect(Collectors.toList());
 
-        final Map<Ga, Set<String>> camelVersions = camelVersions(ownBomConstraints, emptyInstalledArtifact, useRepoSession);
+        final Map<Ga, Set<String>> camelVersions = camelVersions(ownBomConstraints, emptyInstalledArtifact, useRepoSession,
+                camelVersion);
         final DependencyCollector collector = new DependencyCollector(
                 primaryDependencyProjectSets,
                 new ProjectMapper(transitiveProjects),
@@ -369,9 +365,23 @@ public class DependencyAnalysisMojo extends AbstractMojo {
     }
 
     private Map<Ga, Set<String>> camelVersions(Map<Ga, String> ownBomConstraints, Artifact emptyInstalledArtifact,
-            RepositorySystemSession useRepoSession) {
+            RepositorySystemSession useRepoSession, String camelVersion) {
 
         final CamelCollector collector = new CamelCollector();
+
+        final Path camelParentPath = CqCommonUtils.resolveArtifact(
+                localRepositoryPath,
+                "org.apache.camel",
+                "camel-parent",
+                camelVersion,
+                "pom",
+                repositories, repoSystem, useRepoSession);
+        final Model camelParentModel = CqCommonUtils.resolveEffectiveModel(camelParentPath, mavenProjectBuilder, session);
+        final List<org.eclipse.aether.graph.Dependency> aetherConstraints = camelParentModel.getDependencyManagement()
+                .getDependencies()
+                .stream()
+                .map(DependencyAnalysisMojo::toAetherDependency)
+                .collect(Collectors.toList());
 
         ownBomConstraints.entrySet().stream()
                 .filter(en -> en.getKey().getGroupId().equals("org.apache.camel"))
@@ -384,6 +394,7 @@ public class DependencyAnalysisMojo extends AbstractMojo {
                     final CollectRequest request = new CollectRequest()
                             .setRoot(new org.eclipse.aether.graph.Dependency(emptyInstalledArtifact, null))
                             .setRepositories(repositories)
+                            .setManagedDependencies(aetherConstraints)
                             .setDependencies(
                                     Collections.singletonList(
                                             new org.eclipse.aether.graph.Dependency(
@@ -806,6 +817,22 @@ public class DependencyAnalysisMojo extends AbstractMojo {
         public GavSet toGavSet() {
             return GavSet.builder().includes(includeGas).excludes(excludeGas).build();
         }
+    }
+
+    private static org.eclipse.aether.graph.Dependency toAetherDependency(Dependency dep) {
+        return new org.eclipse.aether.graph.Dependency(
+                new DefaultArtifact(
+                        dep.getGroupId(),
+                        dep.getArtifactId(),
+                        dep.getClassifier(),
+                        dep.getType(),
+                        dep.getVersion()),
+                null,
+                false,
+                dep.getExclusions().stream()
+                        .map(e -> new org.eclipse.aether.graph.Exclusion(e.getGroupId(), e.getArtifactId(), "*",
+                                "*"))
+                        .collect(Collectors.toList()));
     }
 
 }

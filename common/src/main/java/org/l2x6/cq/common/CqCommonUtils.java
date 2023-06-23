@@ -66,7 +66,11 @@ import org.apache.maven.plugin.descriptor.MojoDescriptor;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.plugin.prefix.NoPluginFoundForPrefixException;
 import org.apache.maven.plugin.version.PluginVersionResolutionException;
+import org.apache.maven.project.DefaultProjectBuildingRequest;
 import org.apache.maven.project.MavenProject;
+import org.apache.maven.project.ProjectBuilder;
+import org.apache.maven.project.ProjectBuildingException;
+import org.apache.maven.project.ProjectBuildingRequest;
 import org.assertj.core.util.diff.Delta;
 import org.codehaus.plexus.component.configurator.expression.ExpressionEvaluationException;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
@@ -626,6 +630,17 @@ public class CqCommonUtils {
                 .orElseThrow(() -> new IllegalStateException("Could not split Maven module name '" + name
                         + "' using any of delimiters " + MAVEN_MODULE_NAME_DELIMITERS + " expecting 3 parts"));
         return nameParts[1];
+    }
+
+    public static Model resolveEffectiveModel(Path pomFile, ProjectBuilder mavenProjectBuilder, MavenSession session) {
+        ProjectBuildingRequest pbr = new DefaultProjectBuildingRequest(session.getProjectBuildingRequest());
+        pbr.setProcessPlugins(false);
+
+        try {
+            return mavenProjectBuilder.build(pomFile.toFile(), pbr).getProject().getModel();
+        } catch (ProjectBuildingException e) {
+            throw new RuntimeException("Failed to create model for " + pomFile, e);
+        }
     }
 
 }

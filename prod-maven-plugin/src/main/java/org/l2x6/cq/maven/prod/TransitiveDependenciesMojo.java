@@ -46,10 +46,7 @@ import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.logging.Log;
-import org.apache.maven.project.DefaultProjectBuildingRequest;
 import org.apache.maven.project.ProjectBuilder;
-import org.apache.maven.project.ProjectBuildingException;
-import org.apache.maven.project.ProjectBuildingRequest;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
@@ -588,7 +585,7 @@ public class TransitiveDependenciesMojo {
                         }
                     });
 
-            final Model model = resolveEffectiveModel(pomFile, mavenProjectBuilder, session);
+            final Model model = CqCommonUtils.resolveEffectiveModel(pomFile, mavenProjectBuilder, session);
 
             final Map<Ga, EntryPointInfo> resolutionEntryPoints = new TreeMap<>();
 
@@ -690,17 +687,6 @@ public class TransitiveDependenciesMojo {
 
         public Map<Ga, EntryPointInfo> getResolutionEntryPoints() {
             return resolutionEntryPoints;
-        }
-
-        static Model resolveEffectiveModel(Path pomFile, ProjectBuilder mavenProjectBuilder, MavenSession session) {
-            ProjectBuildingRequest pbr = new DefaultProjectBuildingRequest(session.getProjectBuildingRequest());
-            pbr.setProcessPlugins(false);
-
-            try {
-                return mavenProjectBuilder.build(pomFile.toFile(), pbr).getProject().getModel();
-            } catch (ProjectBuildingException e) {
-                throw new RuntimeException("Failed to create model for " + pomFile, e);
-            }
         }
 
         public Set<Ga> getConstraintGas() {
