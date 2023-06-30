@@ -77,7 +77,7 @@
     <properties>
 
         <!-- Dependency versions in alphabectic order -->
-        <camel-community.version>3.20.6</camel-community.version>
+        <camel-community.version>3.21.0</camel-community.version>
         <maven.version>3.9.3</maven.version>
         <maven-artifact-transfer.version>0.13.1</maven-artifact-transfer.version>
         <maven-project.version>3.0-alpha-2</maven-project.version>
