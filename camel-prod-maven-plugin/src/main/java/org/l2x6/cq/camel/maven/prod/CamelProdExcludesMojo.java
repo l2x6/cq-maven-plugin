@@ -422,7 +422,8 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                         .transform(transformations);
             }
         });
-        Stream.of("pom.xml", "parent/pom.xml").forEach(relPath -> {
+
+        Stream.of("parent/pom.xml").forEach(relPath -> {
             new PomTransformer(workRoot.resolve(relPath), charset, simpleElementWhitespace)
                     .transform(Transformation.setTextValue("/" +
                             PomTunerUtils.anyNs("dependency", "version") + "[.." + PomTunerUtils.anyNs("artifactId")
