@@ -54,6 +54,7 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.MavenProjectHelper;
+import org.codehaus.plexus.build.DefaultBuildContext;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
@@ -70,7 +71,6 @@ import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Module;
 import org.l2x6.pom.tuner.model.Profile;
-import org.sonatype.plexus.build.incremental.DefaultBuildContext;
 import org.w3c.dom.Document;
 
 /**
@@ -505,7 +505,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                         mojo.setLog(getLog());
                         mojo.setPluginContext(getPluginContext());
                         mojo.execute(project, projectHelper,
-                                new org.codehaus.plexus.build.DefaultBuildContext(new DefaultBuildContext()));
+                                new DefaultBuildContext(new org.sonatype.plexus.build.incremental.DefaultBuildContext()));
 
                     } catch (Exception e) {
                         throw new RuntimeException("Could not excute ComponentDslMojo in " + moduleBaseDir, e);
