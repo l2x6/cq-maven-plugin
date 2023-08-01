@@ -174,7 +174,7 @@ public class CreateTestMojo extends AbstractExtensionListMojo {
      * <li>{@code TestResource.java}</li>
      * </ul>
      * Note that you do not need to provide all of them. Files not available in your custom {@link #templatesUriBase}
-     * will be looked up in the default URI base {@value #DEFAULT_TEMPLATES_URI_BASE}. The default templates are
+     * will be looked up in the default URI base (CqUtils.DEFAULT_TEMPLATES_URI_BASE). The default templates are
      * maintained <a href=
      * "https://github.com/quarkusio/quarkus/tree/main/devtools/maven/src/main/resources/create-extension-templates">here</a>.
      *
