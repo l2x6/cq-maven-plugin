@@ -18,19 +18,19 @@
             <!--$ org.apache.camel $-->
             <dependency>
                 <groupId>org.apache.camel</groupId>
-                <artifactId>camel-dozer</artifactId>
+                <artifactId>camel-amqp</artifactId>
                 <version>${camel.version}</version>
             </dependency>
 
             <!--$ org.apache.camel.quarkus $-->
             <dependency>
                 <groupId>org.apache.camel.quarkus</groupId>
-                <artifactId>camel-quarkus-dozer</artifactId>
+                <artifactId>camel-quarkus-amqp</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.camel.quarkus</groupId>
-                <artifactId>camel-quarkus-dozer-deployment</artifactId>
+                <artifactId>camel-quarkus-amqp-deployment</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

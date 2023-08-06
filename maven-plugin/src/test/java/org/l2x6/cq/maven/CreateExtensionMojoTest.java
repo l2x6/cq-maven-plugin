@@ -108,7 +108,7 @@ public class CreateExtensionMojoTest {
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
         final String testName = "create-extension-component";
         final CreateExtensionMojo mojo = initMojo(TestUtils.createProjectFromTemplate("create-extension-pom", testName));
-        mojo.artifactIdBase = "dozer";
+        mojo.artifactIdBase = "amqp";
         mojo.execute();
 
         TestUtils.assertTreesMatch(Paths.get("src/test/expected/" + testName),
@@ -120,7 +120,7 @@ public class CreateExtensionMojoTest {
             IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException, IOException {
         final String testName = "create-extension-component-jvm";
         final CreateExtensionMojo mojo = initMojo(TestUtils.createProjectFromTemplate("create-extension-pom", testName));
-        mojo.artifactIdBase = "dozer";
+        mojo.artifactIdBase = "amqp";
         mojo.nativeSupported = false;
         mojo.execute();
 
