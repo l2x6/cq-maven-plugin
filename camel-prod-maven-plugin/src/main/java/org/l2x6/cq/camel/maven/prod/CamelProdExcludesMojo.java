@@ -504,7 +504,8 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                         ComponentDslMojo mojo = new ComponentDslMojo();
                         mojo.setLog(getLog());
                         mojo.setPluginContext(getPluginContext());
-                        mojo.execute(project, projectHelper, new DefaultBuildContext());
+                        mojo.execute(project, projectHelper,
+                                new org.codehaus.plexus.build.DefaultBuildContext(new DefaultBuildContext()));
 
                     } catch (Exception e) {
                         throw new RuntimeException("Could not excute ComponentDslMojo in " + moduleBaseDir, e);
