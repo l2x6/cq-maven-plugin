@@ -30,7 +30,6 @@ import org.apache.maven.model.PluginManagement;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.project.MavenProject;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.test.utils.TestUtils;
@@ -38,9 +37,7 @@ import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@Disabled("Dozer component removed in Camel 4, Test throws errors because it is no longer in the Camel 4 Catalog")
 public class CreateExtensionMojoTest {
-
     private static CreateExtensionMojo initMojo(final Path projectDir) throws IOException {
         final CreateExtensionMojo mojo = new CreateExtensionMojo();
         mojo.project = new MavenProject();
