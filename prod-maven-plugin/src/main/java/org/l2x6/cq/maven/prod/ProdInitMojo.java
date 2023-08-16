@@ -153,22 +153,6 @@ public class ProdInitMojo extends AbstractMojo {
     @Parameter(defaultValue = "${quarkiverse-cxf.version}", readonly = true)
     String quarkiverseCxfVersion;
 
-    /**
-     * GRPC version
-     *
-     * @since 3.3.0
-     */
-    @Parameter(defaultValue = "${grpc.version}", readonly = true)
-    String grpcVersion;
-
-    /**
-     * ProtoBuf version
-     *
-     * @since 3.3.0
-     */
-    @Parameter(defaultValue = "${protobuf.version}", readonly = true)
-    String protobufVersion;
-
     /** {@inheritDoc} */
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
@@ -222,14 +206,6 @@ public class ProdInitMojo extends AbstractMojo {
                     getLog().info("Adding to pom.xml: graalvm-community.version property");
                     props.addChildTextElementIfNeeded("graalvm-community.version", "${graalvm.version}",
                             Comparator.comparing(Map.Entry::getKey, Comparators.after("graalvm.version")));
-
-                    getLog().info("Adding to pom.xml: grpc-community.version property");
-                    props.addChildTextElementIfNeeded("grpc-community.version", grpcVersion,
-                            Comparator.comparing(Map.Entry::getKey, Comparators.after("grpc.version")));
-
-                    getLog().info("Adding to pom.xml: protobuf-community.version property");
-                    props.addChildTextElementIfNeeded("protobuf-community.version", protobufVersion,
-                            Comparator.comparing(Map.Entry::getKey, Comparators.after("protobuf.version")));
 
                     getLog().info("Setting camel-quarkus.extension.finder.strict = false in pom.xml");
                     props.addOrSetChildTextElement("camel-quarkus.extension.finder.strict", "false");
@@ -373,26 +349,6 @@ public class ProdInitMojo extends AbstractMojo {
                             .get();
                     qcxfBomNode.getNode().setVersion("${quarkiverse-cxf-community.version}");
                 });
-
-        /* Edit integration-tests/grpc/pom.xml */
-        new PomTransformer(basedir.toPath().resolve("integration-tests/grpc/pom.xml"), charset, simpleElementWhitespace)
-                .transform(
-                        (Document document, TransformationContext context) -> {
-
-                            final ContainerElement plugins = context.getOrAddContainerElements(
-                                    "build", "plugins");
-                            final NodeGavtcs protobufPlugnNode = plugins.childElementsStream()
-                                    .map(ContainerElement::asGavtcs)
-                                    .filter(gavtcs -> gavtcs.getArtifactId().equals("protobuf-maven-plugin"))
-                                    .findFirst()
-                                    .get();
-                            ContainerElement config = protobufPlugnNode.getNode()
-                                    .getChildContainerElement("executions", "execution", "configuration").get();
-                            config.addOrSetChildTextElement("protocArtifact",
-                                    "com.google.protobuf:protoc:${protobuf-community.version}:exe:${os.detected.classifier}");
-                            config.addOrSetChildTextElement("pluginArtifact",
-                                    "io.grpc:protoc-gen-grpc-java:${grpc-community.version}:exe:${os.detected.classifier}");
-                        });
 
         // Force Camel community version for unsupported Maven plugins
         final Path buildParentItPomPath = basedir.toPath().resolve("poms/build-parent-it/pom.xml");
