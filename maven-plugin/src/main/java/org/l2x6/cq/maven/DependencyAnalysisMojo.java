@@ -377,9 +377,11 @@ public class DependencyAnalysisMojo extends AbstractMojo {
                 "pom",
                 repositories, repoSystem, useRepoSession);
         final Model camelParentModel = CqCommonUtils.resolveEffectiveModel(camelParentPath, mavenProjectBuilder, session);
+        getLog().info("Camel constraints:");
         final List<org.eclipse.aether.graph.Dependency> aetherConstraints = camelParentModel.getDependencyManagement()
                 .getDependencies()
                 .stream()
+                .peek(dep -> getLog().info(" - " + dep.getGroupId() + ":" + dep.getArtifactId() + ":" + dep.getVersion()))
                 .map(DependencyAnalysisMojo::toAetherDependency)
                 .collect(Collectors.toList());
 
@@ -609,9 +611,9 @@ public class DependencyAnalysisMojo extends AbstractMojo {
                                         .collect(Collectors.toCollection(TreeSet::new));
 
                                 if (versions.size() == 1) {
-                                    log.accept("    # same version throughout CQ dependency graph: " + versions);
+                                    log.accept("    # ✅ same version throughout CQ dependency graph: " + versions);
                                 } else {
-                                    log.accept("    # various versions throughout CQ dependency graph: " + versions);
+                                    log.accept("    # ❌ various versions throughout CQ dependency graph: " + versions);
                                 }
 
                                 final AtomicBoolean managed = new AtomicBoolean(false);
@@ -622,22 +624,22 @@ public class DependencyAnalysisMojo extends AbstractMojo {
                                             .collect(Collectors.toCollection(TreeSet::new));
                                     if (managedVersions.size() > 0) {
                                         managed.set(true);
-                                        String fullyOrPartly = managedVersions.size() == projectArtifacts.size() ? "fully"
-                                                : "partly";
-                                        log.accept("    # managed " + fullyOrPartly + " (" + managedVersions.size()
+                                        String fullyOrPartly = managedVersions.size() == projectArtifacts.size() ? "✅ fully"
+                                                : "⚠️ partly";
+                                        log.accept("    # " + fullyOrPartly + " managed (" + managedVersions.size()
                                                 + "/" + projectArtifacts.size() + ") in " + bomGav + " at version(s) "
                                                 + managedVersions);
                                     }
                                 });
                                 if (!managed.get()) {
-                                    log.accept("    # not managed in any of the listed BOMs");
+                                    log.accept("    # ❌ not managed in any of the listed BOMs");
                                 }
                                 if (versions.equals(camelArtifactVersions)) {
-                                    log.accept("    # Camel uses " + camelGas.size()
+                                    log.accept("    # ✅ Camel uses " + camelGas.size()
                                             + "/" + projectArtifacts.size() + " artifacts with the same versions: "
                                             + camelArtifactVersions);
                                 } else {
-                                    log.accept("    # Camel uses " + camelGas.size()
+                                    log.accept("    # ❌ Camel uses " + camelGas.size()
                                             + "/" + projectArtifacts.size() + " artifacts with different versions: "
                                             + camelArtifactVersions);
                                 }
