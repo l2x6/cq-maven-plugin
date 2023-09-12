@@ -86,7 +86,7 @@
         <maven.shared.file-management>3.1.0</maven.shared.file-management>
         <maven.shared.invoker>3.2.0</maven.shared.invoker>
         <maven.shared.utils>3.4.2</maven.shared.utils>
-        <pom-tuner.version>4.2.0</pom-tuner.version>
+        <pom-tuner.version>4.3.0</pom-tuner.version>
         <jdom2.version>2.0.6.1</jdom2.version>
         <jgit.version>6.6.0.202305301015-r</jgit.version>
         <junit.version>5.10.0</junit.version>

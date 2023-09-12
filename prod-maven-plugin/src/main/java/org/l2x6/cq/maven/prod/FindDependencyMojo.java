@@ -21,15 +21,21 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -45,12 +51,16 @@ import org.eclipse.aether.collection.DependencyCollectionException;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.graph.DependencyVisitor;
 import org.eclipse.aether.repository.RemoteRepository;
+import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.pom.tuner.MavenSourceTree;
+import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
 import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.Gav;
 import org.l2x6.pom.tuner.model.GavPattern;
 import org.l2x6.pom.tuner.model.Gavtcs;
+import org.l2x6.pom.tuner.model.Glob;
 import org.l2x6.pom.tuner.model.Module;
+import org.l2x6.pom.tuner.model.Profile;
 
 /**
  * List the transitive runtime dependencies of all supported extensions.
@@ -116,6 +126,22 @@ public class FindDependencyMojo extends AbstractMojo {
     String gavPattern;
 
     /**
+     * Print out the dependency path from an imaginary application depending on all CQ extensions to any GAV matching
+     * the given {@link #gavPattern} AND containing a resource whose slash-separated fully qualified name matches
+     * the given {@link #resourcePattern}.
+     * <p>
+     * Examples:
+     * <ul>
+     * <li><code>-Dcq.resourcePattern=&#42;&#42;/FileBackedOutputStream.class</code>
+     * <li><code>-Dcq.resourcePattern=org/acme/*</code>
+     * </ul>
+     *
+     * @since 4.4.4
+     */
+    @Parameter(property = "cq.resourcePattern")
+    String resourcePattern;
+
+    /**
      *
      *
      * @since 2.16.0
@@ -126,6 +152,9 @@ public class FindDependencyMojo extends AbstractMojo {
     public static enum RootsSourceType {
         TREE, PLATFORM_BOMS
     }
+
+    @Parameter(defaultValue = "${session}", readonly = true, required = true)
+    protected MavenSession session;
 
     @Component
     private RepositorySystem repoSystem;
@@ -145,6 +174,8 @@ public class FindDependencyMojo extends AbstractMojo {
             rootsSourceType = RootsSourceType.TREE;
         }
         final GavPattern gavPatternMatcher = gavPattern != null ? GavPattern.of(gavPattern) : null;
+        final Glob resourceRegExPattern = resourcePattern == null ? null : new Glob(resourcePattern);
+        final Path localRepositoryPath = Paths.get(localRepository);
 
         listRoots()
                 .forEach(extension -> {
@@ -179,12 +210,25 @@ public class FindDependencyMojo extends AbstractMojo {
 
                                 if (gavPattern != null
                                         && gavPatternMatcher.matches(a.getGroupId(), a.getArtifactId(), a.getVersion())) {
-                                    getLog().warn("Found "
-                                            + StreamSupport
-                                                    .stream(((Iterable<Gavtcs>) (() -> stack.descendingIterator()))
-                                                            .spliterator(), false)
-                                                    .map(Gavtcs::toString)
-                                                    .collect(Collectors.joining("\n        -> ")));
+
+                                    final String resourcePath;
+                                    if (resourceRegExPattern != null) {
+                                        final Path jarPath = CqCommonUtils.resolveJar(localRepositoryPath, a.getGroupId(),
+                                                a.getArtifactId(), a.getVersion(), repositories, repoSystem, repoSession);
+                                        resourcePath = findResource(jarPath, resourceRegExPattern);
+                                    } else {
+                                        resourcePath = "";
+                                    }
+                                    if (resourcePath != null) {
+                                        final String msg = "Found "
+                                                + StreamSupport
+                                                        .stream(((Iterable<Gavtcs>) (() -> stack.descendingIterator()))
+                                                                .spliterator(), false)
+                                                        .map(Gavtcs::toString)
+                                                        .collect(Collectors.joining("\n        -> "))
+                                                + resourcePath;
+                                        getLog().warn(msg);
+                                    }
                                 }
                                 return true;
                             }
@@ -197,11 +241,34 @@ public class FindDependencyMojo extends AbstractMojo {
 
     }
 
+    static String findResource(Path jarPath, Glob classPattern) {
+        if (classPattern == null) {
+            return null;
+        }
+        try (ZipFile zipFile = new ZipFile(jarPath.toFile())) {
+            Enumeration<? extends ZipEntry> zipEntries = zipFile.entries();
+            while (zipEntries.hasMoreElements()) {
+                final String fileName = zipEntries.nextElement().getName();
+                if (classPattern.matches(fileName)) {
+                    return "\n           ^ " + fileName;
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Could not list entries in " + jarPath, e);
+        }
+        return null;
+    }
+
     public Stream<Gav> listRoots() {
+        final Predicate<Profile> profiles = ActiveProfiles.of(
+                session.getCurrentProject().getActiveProfiles().stream()
+                        .map(org.apache.maven.model.Profile::getId)
+                        .toArray(String[]::new));
+
         switch (rootsSourceType) {
         case TREE:
             final MavenSourceTree tree = MavenSourceTree.of(basedir.toPath().resolve("pom.xml"), charset,
-                    Dependency::isVirtual);
+                    Dependency::isVirtual, profiles);
             return tree.getModulesByGa().entrySet().stream()
                     .filter(en -> !en.getValue().getPackaging().equals("pom"))
                     .map(Map.Entry::getKey)
