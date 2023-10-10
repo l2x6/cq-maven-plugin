@@ -497,7 +497,7 @@ public class FlattenBomTask {
             try {
                 Files.readAllLines(prodArtifacts, charset).stream()
                         .filter(line -> !line.isBlank())
-                        .map(line -> new BomEntryTransformation(line, "[\\-\\.]redhat-\\d+$/", null, null))
+                        .map(line -> new BomEntryTransformation(line, "(\\.fuse)?[\\-\\.]redhat-\\d+$/", null, null))
                         .forEach(result::add);
             } catch (IOException e) {
                 throw new RuntimeException("Could not read " + prodArtifacts, e);
