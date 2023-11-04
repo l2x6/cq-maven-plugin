@@ -52,6 +52,7 @@ import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.PomTunerUtils;
 import org.l2x6.pom.tuner.model.Dependency;
+import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.model.Profile;
 import org.w3c.dom.Document;
@@ -153,6 +154,14 @@ public class ProdInitMojo extends AbstractMojo {
     @Parameter(defaultValue = "${quarkiverse-cxf.version}", readonly = true)
     String quarkiverseCxfVersion;
 
+    /**
+     * Camel Sap version
+     *
+     * @since 4.4.6
+     */
+    @Parameter(defaultValue = "${camel-sap.version}", required = true)
+    String camelSapVersion;
+
     /** {@inheritDoc} */
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
@@ -193,6 +202,10 @@ public class ProdInitMojo extends AbstractMojo {
 
                     getLog().info("Adding to pom.xml: camel-quarkus-community.version property");
                     props.addChildTextElementIfNeeded("camel-quarkus-community.version", version,
+                            Comparator.comparing(Map.Entry::getKey, Comparators.before("cassandra-quarkus.version")));
+
+                    getLog().info("Adding to pom.xml: camel-sap.version property");
+                    props.addChildTextElementIfNeeded("camel-sap.version", camelSapVersion,
                             Comparator.comparing(Map.Entry::getKey, Comparators.before("cassandra-quarkus.version")));
 
                     getLog().info("Adding to pom.xml: quarkus-community.version property");
@@ -335,6 +348,14 @@ public class ProdInitMojo extends AbstractMojo {
                             .map(ContainerElement::asGavtcs)
                             .filter(gavtcs -> gavtcs.getGroupId().equals("org.graalvm.js"))
                             .forEach(node -> node.getNode().setVersion("${graalvm-community.version}"));
+
+                    /** Add camel-sap and camel-quarkus-sap dependencies */
+                    dependencyManagementDeps.addGavtcs(new Gavtcs("org.fusesource", "camel-sap", "${camel-sap.version}",
+                            "", "", "", Ga.of("org.eclipse:osgi")));
+                    dependencyManagementDeps
+                            .addGavtcs(new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-sap", "${camel-quarkus.version}"));
+                    dependencyManagementDeps.addGavtcs(
+                            new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-sap-deployment", "${camel-quarkus.version}"));
                 });
 
         /* Edit poms/bom-test/pom.xml */
@@ -357,6 +378,25 @@ public class ProdInitMojo extends AbstractMojo {
                             .get();
                     qcxfBomNode.getNode().setVersion("${quarkiverse-cxf-community.version}");
                 });
+
+        /* Edit extensions-jvm/pom.xml to add sap extension */
+        new PomTransformer(basedir.toPath().resolve("extensions-jvm/pom.xml"), charset, simpleElementWhitespace).transform(
+                (Document document, TransformationContext context) -> {
+                    final ContainerElement profileParent = context.getOrAddProfileParent(null);
+                    final ContainerElement modules = profileParent.getOrAddChildContainerElement("modules");
+
+                    modules.addChildTextElement("module", "sap");
+                });
+
+        /* Edit integration-tests-jvm/pom.xml to add sap test */
+        new PomTransformer(basedir.toPath().resolve("integration-tests-jvm/pom.xml"), charset, simpleElementWhitespace)
+                .transform(
+                        (Document document, TransformationContext context) -> {
+                            final ContainerElement profileParent = context.getOrAddProfileParent(null);
+                            final ContainerElement modules = profileParent.getOrAddChildContainerElement("modules");
+
+                            modules.addChildTextElement("module", "sap");
+                        });
 
         // Force Camel community version for unsupported Maven plugins
         final Path buildParentItPomPath = basedir.toPath().resolve("poms/build-parent-it/pom.xml");
@@ -382,7 +422,9 @@ public class ProdInitMojo extends AbstractMojo {
                 "product/pom.xml",
                 "product/README.adoc",
                 "product/src/main/groovy/generate-camel-quarkus-product-json.groovy",
-                "product/src/main/resources/camel-quarkus-product-source.json");
+                "product/src/main/resources/camel-quarkus-product-source.json",
+                "extensions-jvm/sap/",
+                "integration-tests-jvm/sap/");
 
         try (Repository repo = new FileRepositoryBuilder()
                 .readEnvironment() // scan environment GIT_* variables
@@ -397,20 +439,26 @@ public class ProdInitMojo extends AbstractMojo {
                 final RevTree tree = commit.getTree();
 
                 for (String relPath : filesToCopy) {
-                    getLog().info("Copying from " + fromBranch + ": " + relPath);
                     try (TreeWalk treeWalk = new TreeWalk(repo)) {
                         treeWalk.addTree(tree);
                         treeWalk.setRecursive(true);
                         treeWalk.setFilter(PathFilter.create(relPath));
-                        if (!treeWalk.next()) {
-                            throw new IllegalStateException("Could not find '" + relPath + "' in branch " + fromBranch);
-                        }
-                        final ObjectId objectId = treeWalk.getObjectId(0);
+                        boolean found = false;
+                        while (treeWalk.next()) {
+                            final ObjectId objectId = treeWalk.getObjectId(0);
 
-                        final Path destFile = basedir.toPath().resolve(relPath);
-                        Files.createDirectories(destFile.getParent());
-                        try (OutputStream out = Files.newOutputStream(destFile)) {
-                            repo.open(objectId).copyTo(out);
+                            final String copyPath = treeWalk.getPathString();
+                            final Path destFile = basedir.toPath().resolve(copyPath);
+
+                            getLog().info("Copying from " + fromBranch + ": " + copyPath);
+                            Files.createDirectories(destFile.getParent());
+                            try (OutputStream out = Files.newOutputStream(destFile)) {
+                                repo.open(objectId).copyTo(out);
+                            }
+                            found = true;
+                        }
+                        if (!found) {
+                            throw new IllegalStateException("Could not find '" + relPath + "' in branch " + fromBranch);
                         }
                     }
                 }
