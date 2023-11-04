@@ -231,10 +231,18 @@ public class ProdInitMojo extends AbstractMojo {
                     final String xPath = PomTunerUtils.anyNs("project", "modules", "module") + "[text() = 'docs']";
                     context.removeNode(xPath, true, true, false);
 
-                    /* Add product module */
-                    getLog().info("Adding to pom.xml: product module");
                     final ContainerElement profileParent = context.getOrAddProfileParent(null);
                     final ContainerElement modules = profileParent.getOrAddChildContainerElement("modules");
+
+                    /* Add integration-tests/message module.
+                       camel-quarkus-integration-test-messaging-jms needed to be productized as a transitive dependency
+                       of jms-(artemis|qpid-jms|ibmmq)-client tests.
+                     */
+                    getLog().info("Adding to pom.xml: integration-tests/messaging module");
+                    modules.addChildTextElement("module", "integration-tests/messaging");
+
+                    /* Add product module */
+                    getLog().info("Adding to pom.xml: product module");
                     modules.addChildTextElement("module", "product");
 
                     /* Change the version of camel-build-tools under license-maven-plugin to camel-community.version */
