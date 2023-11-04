@@ -1061,7 +1061,8 @@ public class ProdExcludesMojo extends AbstractMojo {
                 final String pomXmlRelPath = PomTunerUtils.toUnixPath(basedir.relativize(pomXmlPath).toString());
                 final Module testModule = tree.getModulesByPath().get(pomXmlRelPath);
                 if (testModule == null) {
-                    throw new IllegalStateException("Could not find module for path " + pomXmlRelPath);
+                    log.warn("Could not find module for path " + pomXmlRelPath);
+                    continue;
                 }
                 final Ga moduleGa = evaluator.evaluateGa(testModule.getGav());
                 if (!excludeTests.contains(moduleGa)) {
