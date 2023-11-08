@@ -630,12 +630,12 @@ public class FlattenBomTask {
             final Model pom = CqCommonUtils.readPom(path, charset);
             final List<Dependency> deps = pom.getDependencyManagement().getDependencies();
             final String msg = deps.stream()
-                    .peek(dep -> additionalBomEntryConsumer.accept(gav, dep))
                     .filter(dep -> dep.getVersion().contains("${"))
+                    .peek(dep -> additionalBomEntryConsumer.accept(gav, dep))
                     .map(dep -> dep.getGroupId() + ":" + dep.getArtifactId() + ":" + dep.getVersion())
                     .collect(Collectors.joining("\n    - "));
             if (!msg.isEmpty()) {
-                throw new IllegalStateException("Additional BOM " + gav + " contains unresolved versions:\n    - " + msg);
+                reportFailure("Additional BOM " + gav + " contains unresolved versions:\n    - " + msg);
             }
         }
     }
