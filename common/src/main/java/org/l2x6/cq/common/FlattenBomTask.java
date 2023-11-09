@@ -629,14 +629,19 @@ public class FlattenBomTask {
                     repositories, repoSystem, repoSession);
             final Model pom = CqCommonUtils.readPom(path, charset);
             final List<Dependency> deps = pom.getDependencyManagement().getDependencies();
+
             final String msg = deps.stream()
                     .filter(dep -> dep.getVersion().contains("${"))
-                    .peek(dep -> additionalBomEntryConsumer.accept(gav, dep))
                     .map(dep -> dep.getGroupId() + ":" + dep.getArtifactId() + ":" + dep.getVersion())
                     .collect(Collectors.joining("\n    - "));
             if (!msg.isEmpty()) {
                 reportFailure("Additional BOM " + gav + " contains unresolved versions:\n    - " + msg);
             }
+
+            deps.stream()
+                    .filter(dep -> !dep.getVersion().contains("${"))
+                    .forEach(dep -> additionalBomEntryConsumer.accept(gav, dep));
+
         }
     }
 
