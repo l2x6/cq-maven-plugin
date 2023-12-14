@@ -102,7 +102,7 @@
         <plexus-build-api-version>1.2.0</plexus-build-api-version>
         <plexus-container-default-version>2.1.1</plexus-container-default-version>
         <plexus-utils-version>4.0.0</plexus-utils-version>
-        <plexus-xml-version>4.0.2</plexus-xml-version>
+        <plexus-xml-version>4.0.3</plexus-xml-version>
 
         <!-- Plugins and their dependencies -->
         <buildnumber-maven-plugin.version>3.2.0</buildnumber-maven-plugin.version>
