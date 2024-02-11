@@ -16,14 +16,31 @@
  */
 package org.l2x6.cq.maven.doc;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import freemarker.template.Configuration;
+import freemarker.template.TemplateMethodModelEx;
+import freemarker.template.TemplateModelException;
+import io.quarkus.annotation.processor.Constants;
+import io.quarkus.annotation.processor.generate_doc.ConfigDocItem;
+import io.quarkus.annotation.processor.generate_doc.ConfigDocKey;
+import io.quarkus.annotation.processor.generate_doc.DocGeneratorUtil;
+import io.quarkus.annotation.processor.generate_doc.FsMap;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.text.Normalizer;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -103,7 +120,68 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         model.put("configurationPropertiesInclude",
                 configurationPropertiesInclude(getMultiModuleProjectDirectoryPath(), artifactId, docPagePath));
         model.put("limitations", loadSection(basePath, "limitations.adoc", getCharset(), artifactId, null));
+        model.put("configOptions", listConfigOptions(basePath, multiModuleProjectDirectory.toPath()));
+        model.put("toAnchor", new TemplateMethodModelEx() {
+            @Override
+            public Object exec(List arguments) throws TemplateModelException {
+                if (arguments.size() != 1) {
+                    throw new TemplateModelException("Wrong argument count in toAnchor()");
+                }
+                String string = String.valueOf(arguments.get(0));
+                string = Normalizer.normalize(string, Normalizer.Form.NFKC)
+                        .replaceAll("[àáâãäåāąă]", "a")
+                        .replaceAll("[çćčĉċ]", "c")
+                        .replaceAll("[ďđð]", "d")
+                        .replaceAll("[èéêëēęěĕė]", "e")
+                        .replaceAll("[ƒſ]", "f")
+                        .replaceAll("[ĝğġģ]", "g")
+                        .replaceAll("[ĥħ]", "h")
+                        .replaceAll("[ìíîïīĩĭįı]", "i")
+                        .replaceAll("[ĳĵ]", "j")
+                        .replaceAll("[ķĸ]", "k")
+                        .replaceAll("[łľĺļŀ]", "l")
+                        .replaceAll("[ñńňņŉŋ]", "n")
+                        .replaceAll("[òóôõöøōőŏœ]", "o")
+                        .replaceAll("[Þþ]", "p")
+                        .replaceAll("[ŕřŗ]", "r")
+                        .replaceAll("[śšşŝș]", "s")
+                        .replaceAll("[ťţŧț]", "t")
+                        .replaceAll("[ùúûüūůűŭũų]", "u")
+                        .replaceAll("[ŵ]", "w")
+                        .replaceAll("[ýÿŷ]", "y")
+                        .replaceAll("[žżź]", "z")
+                        .replaceAll("[æ]", "ae")
+                        .replaceAll("[ÀÁÂÃÄÅĀĄĂ]", "A")
+                        .replaceAll("[ÇĆČĈĊ]", "C")
+                        .replaceAll("[ĎĐÐ]", "D")
+                        .replaceAll("[ÈÉÊËĒĘĚĔĖ]", "E")
+                        .replaceAll("[ĜĞĠĢ]", "G")
+                        .replaceAll("[ĤĦ]", "H")
+                        .replaceAll("[ÌÍÎÏĪĨĬĮİ]", "I")
+                        .replaceAll("[Ĵ]", "J")
+                        .replaceAll("[Ķ]", "K")
+                        .replaceAll("[ŁĽĹĻĿ]", "L")
+                        .replaceAll("[ÑŃŇŅŊ]", "N")
+                        .replaceAll("[ÒÓÔÕÖØŌŐŎ]", "O")
+                        .replaceAll("[ŔŘŖ]", "R")
+                        .replaceAll("[ŚŠŞŜȘ]", "S")
+                        .replaceAll("[ÙÚÛÜŪŮŰŬŨŲ]", "U")
+                        .replaceAll("[Ŵ]", "W")
+                        .replaceAll("[ÝŶŸ]", "Y")
+                        .replaceAll("[ŹŽŻ]", "Z")
+                        .replaceAll("[ß]", "ss");
+                string = string.replace('.', '-');
 
+                // Apostrophes.
+                string = string.replaceAll("([a-z])'s([^a-z])", "$1s$2");
+                // Allow only letters, -, _, .
+                string = string.replaceAll("[^\\w-_.]", "-").replaceAll("-{2,}", "-");
+                // Get rid of any - at the start and end.
+                string = string.replaceAll("-+$", "").replaceAll("^-+", "");
+
+                return string.toLowerCase();
+            }
+        });
         evalTemplate(getCharset(), docPagePath, cfg, model, "extension-doc-page.adoc", "//");
     }
 
@@ -165,4 +243,162 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         }
     }
 
+    static List<ConfigItem> listConfigOptions(Path basePath, Path multiModuleProjectDirectory) {
+        final List<String> configRootClasses = loadConfigRoots(basePath);
+        if (configRootClasses.isEmpty()) {
+            return Collections.emptyList();
+        }
+        final Path configRootsModelsDir = multiModuleProjectDirectory
+                .resolve("target/asciidoc/generated/config/all-configuration-roots-generated-doc");
+        if (!Files.exists(configRootsModelsDir)) {
+            throw new IllegalStateException("You should run " + UpdateDocPageMojo.class.getSimpleName()
+                    + " after compilation with io.quarkus.annotation.processor.ExtensionAnnotationProcessor");
+        }
+        final FsMap configRootsModels = new FsMap(configRootsModelsDir);
+
+        final ObjectMapper mapper = new ObjectMapper();
+        final List<ConfigDocItem> configDocItems = new ArrayList<>();
+        for (String configRootClass : configRootClasses) {
+            final String rawModel = configRootsModels.get(configRootClass);
+            if (rawModel == null) {
+                throw new IllegalStateException("Could not find " + configRootClass + " in " + configRootsModelsDir);
+            }
+            try {
+                final List<ConfigDocItem> items = mapper.readValue(rawModel, Constants.LIST_OF_CONFIG_ITEMS_TYPE_REF);
+                configDocItems.addAll(items);
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException("Could not parse " + rawModel, e);
+            }
+
+        }
+        DocGeneratorUtil.sort(configDocItems);
+        return configDocItems.stream().map(ConfigItem::of).collect(Collectors.toList());
+    }
+
+    static List<String> loadConfigRoots(Path basePath) {
+        final Path configRootsListPath = basePath.resolve("target/classes/META-INF/quarkus-config-roots.list");
+        if (!Files.exists(configRootsListPath)) {
+            return Collections.emptyList();
+        }
+        try (Stream<String> lines = Files.lines(configRootsListPath, StandardCharsets.UTF_8)) {
+            return lines
+                    .map(String::trim)
+                    .filter(l -> !l.isEmpty())
+                    .map(l -> l.replace('$', '.'))
+                    .collect(Collectors.toList());
+        } catch (IOException e) {
+            throw new RuntimeException("Could not read from " + configRootsListPath, e);
+        }
+    }
+
+    public static class ConfigItem {
+        private static final Pattern LINK_PATTERN = Pattern
+                .compile("\\Qlink:http\\Es?\\Q://camel.apache.org/camel-quarkus/latest/\\E([^\\[]+).html");
+
+        private final String key;
+        private final String illustration;
+        private final String configDoc;
+        private final String type;
+        private final String defaultValue;
+        private final boolean optional;
+        private final String since;
+        private final String environmentVariable;
+
+        public static ConfigItem of(ConfigDocItem configDocItem) {
+            final ConfigDocKey configDocKey = configDocItem.getConfigDocKey();
+            final String adocSource = LINK_PATTERN.matcher(configDocKey.getConfigDoc()).replaceAll("xref:$1.adoc");
+            return new ConfigItem(
+                    configDocKey.getKey(),
+                    configDocKey.getConfigPhase().getIllustration(),
+                    adocSource,
+                    typeContent(configDocKey),
+                    configDocKey.getDefaultValue(),
+                    configDocKey.isOptional(),
+                    configDocKey.getSince(),
+                    configDocKey.getEnvironmentVariable());
+        }
+
+        static String typeContent(ConfigDocKey configDocKey) {
+            String typeContent = "";
+            if (configDocKey.hasAcceptedValues()) {
+                if (configDocKey.isEnum()) {
+                    typeContent = joinEnumValues(configDocKey.getAcceptedValues());
+                } else {
+                    typeContent = joinAcceptedValues(configDocKey.getAcceptedValues());
+                }
+            } else if (configDocKey.hasType()) {
+                typeContent = configDocKey.computeTypeSimpleName();
+                final String javaDocLink = configDocKey.getJavaDocSiteLink();
+                if (!javaDocLink.isEmpty()) {
+                    typeContent = String.format("link:%s[%s]\n", javaDocLink, typeContent);
+                }
+            }
+            if (configDocKey.isList()) {
+                typeContent = "list of " + typeContent;
+            }
+            return typeContent;
+        }
+
+        static String joinAcceptedValues(List<String> acceptedValues) {
+            if (acceptedValues == null || acceptedValues.isEmpty()) {
+                return "";
+            }
+
+            return acceptedValues.stream()
+                    .collect(Collectors.joining("`, `", Constants.CODE_DELIMITER, Constants.CODE_DELIMITER));
+        }
+
+        static String joinEnumValues(List<String> enumValues) {
+            if (enumValues == null || enumValues.isEmpty()) {
+                return Constants.EMPTY;
+            }
+
+            // nested macros are only detected when cell starts with a new line, e.g. a|\n myMacro::[]
+            return String.join(", ", enumValues);
+        }
+
+        public ConfigItem(String key, String illustration, String configDoc, String type, String defaultValue,
+                boolean optional, String since, String environmentVariable) {
+            this.key = key;
+            this.illustration = illustration;
+            this.configDoc = configDoc;
+            this.type = type;
+            this.defaultValue = defaultValue;
+            this.optional = optional;
+            this.since = since;
+            this.environmentVariable = environmentVariable;
+        }
+
+        public String getKey() {
+            return key;
+        }
+
+        public String getIllustration() {
+            return illustration;
+        }
+
+        public String getConfigDoc() {
+            return configDoc;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public String getDefaultValue() {
+            return defaultValue;
+        }
+
+        public boolean isOptional() {
+            return optional;
+        }
+
+        public String getSince() {
+            return since;
+        }
+
+        public String getEnvironmentVariable() {
+            return environmentVariable;
+        }
+    }
 }
