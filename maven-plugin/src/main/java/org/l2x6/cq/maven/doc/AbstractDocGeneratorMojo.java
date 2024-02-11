@@ -70,7 +70,7 @@ abstract class AbstractDocGeneratorMojo extends AbstractMojo {
      * @since 3.4.0
      */
     @Parameter(defaultValue = "${maven.multiModuleProjectDirectory}", readonly = true)
-    private File multiModuleProjectDirectory;
+    protected File multiModuleProjectDirectory;
     private Path multiModuleProjectDirectoryPath;
 
     /**
