@@ -152,8 +152,6 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         model.put("usage", loadSection(basePath, "usage.adoc", getCharset(), artifactId, null));
         model.put("usageAdvanced", loadSection(basePath, "usage-advanced.adoc", getCharset(), artifactId, null));
         model.put("configuration", loadSection(basePath, "configuration.adoc", getCharset(), artifactId, null));
-        model.put("configurationPropertiesInclude",
-                configurationPropertiesInclude(getMultiModuleProjectDirectoryPath(), artifactId, docPagePath));
         model.put("limitations", loadSection(basePath, "limitations.adoc", getCharset(), artifactId, null));
         model.put("configOptions",
                 listConfigOptions(basePath, multiModuleProjectDirectory.toPath(), ownLinkRe, configOptionExcludeRes, fixPipes));
@@ -223,14 +221,6 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
 
     public static String extensionName(Model project) {
         return project.getProperties().getProperty("cq.name", CqCommonUtils.getNameBase(project.getName()));
-    }
-
-    static String configurationPropertiesInclude(Path multiModuleProjectDirectoryPath, String artifactId, Path docPagePath) {
-        final Path props = multiModuleProjectDirectoryPath.resolve("docs/modules/ROOT/pages/includes/" + artifactId + ".adoc");
-        if (Files.isRegularFile(props)) {
-            return docPagePath.getParent().relativize(props).toString();
-        }
-        return null;
     }
 
     private String getRequiredProperty(String key) {
@@ -331,6 +321,7 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         return configDocItems.stream()
                 .map(ConfigItem::of)
                 .filter(i -> configOptionExcludeRes.stream().noneMatch(p -> p.matcher(i.getKey()).find()))
+                .peek(i -> System.out.println("==== opt " + i.getKey()))
                 .collect(Collectors.toList());
     }
 
