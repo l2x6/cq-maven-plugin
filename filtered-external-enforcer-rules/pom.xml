@@ -21,7 +21,7 @@
     <parent>
         <groupId>org.l2x6.cq</groupId>
         <artifactId>cq</artifactId>
-        <version>4.4.10-SNAPSHOT</version>
+        <version>4.4.10</version>
     </parent>
 
     <artifactId>cq-filtered-external-enforcer-rules</artifactId>
