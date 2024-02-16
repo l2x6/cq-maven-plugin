@@ -33,11 +33,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.Normalizer;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -79,15 +81,6 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
     boolean skip = false;
 
     /**
-     * If {@code true}, {@code |} will be replaced by {@code \|} in configuration options' descriptions to fix the
-     * broken escaping Quarkus annotation processor.
-     *
-     * @since 4.4.9
-     */
-    @Parameter(defaultValue = "true", property = "cq.fixPipes")
-    boolean fixPipes = false;
-
-    /**
      * A regular expression matching own {@code https://} links, to replace with {@code xref:$1.adoc}.
      * <p>
      * Example: {@code \Qlink:http\Es?\Q://camel.apache.org/camel-quarkus/latest/\E([^\[]+).html}
@@ -105,6 +98,24 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
      */
     @Parameter(property = "cq.configOptionExcludes")
     List<String> configOptionExcludes;
+
+    /**
+     * A list of if form {@code regEx/replacement} where {@code regEx} is a regular expression and {@code replacement}
+     * is a string to replace for the matches in configuration option descriptions. The default delimiter {@code /} can
+     * be changed via {@link #descriptionReplacementDelimiter}.
+     *
+     * @since 4.4.10
+     */
+    @Parameter(property = "cq.descriptionReplacements")
+    List<String> descriptionReplacements;
+
+    /**
+     * A delimiter for {@link #descriptionReplacements}.
+     *
+     * @since 4.4.10
+     */
+    @Parameter(defaultValue = "/", property = "cq.descriptionReplacementDelimiter")
+    String descriptionReplacementDelimiter;
 
     @Parameter(defaultValue = "${project}", readonly = true)
     MavenProject project;
@@ -127,6 +138,19 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         if (configOptionExcludes != null) {
             for (String pattern : configOptionExcludes) {
                 configOptionExcludeRes.add(Pattern.compile(pattern));
+            }
+        }
+        final List<Map.Entry<Pattern, String>> descriptionReplacementRes = new ArrayList<>();
+        if (descriptionReplacements != null) {
+            for (String entry : descriptionReplacements) {
+                int i = entry.indexOf(descriptionReplacementDelimiter);
+                if (i < 0) {
+                    throw new IllegalStateException("descriptionReplacements '" + entry + "' sould contain delimiter '"
+                            + descriptionReplacementDelimiter + "'");
+                }
+                final String pattern = entry.substring(0, i);
+                final String replacement = entry.substring(i + descriptionReplacementDelimiter.length());
+                descriptionReplacementRes.add(new AbstractMap.SimpleImmutableEntry<>(Pattern.compile(pattern), replacement));
             }
         }
 
@@ -154,7 +178,8 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         model.put("configuration", loadSection(basePath, "configuration.adoc", getCharset(), artifactId, null));
         model.put("limitations", loadSection(basePath, "limitations.adoc", getCharset(), artifactId, null));
         model.put("configOptions",
-                listConfigOptions(basePath, multiModuleProjectDirectory.toPath(), ownLinkRe, configOptionExcludeRes, fixPipes));
+                listConfigOptions(basePath, multiModuleProjectDirectory.toPath(), ownLinkRe, configOptionExcludeRes,
+                        descriptionReplacementRes));
         model.put("toAnchor", new TemplateMethodModelEx() {
             @Override
             public Object exec(List arguments) throws TemplateModelException {
@@ -276,7 +301,7 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
     }
 
     static List<ConfigItem> listConfigOptions(Path basePath, Path multiModuleProjectDirectory, Pattern ownLinkRe,
-            List<Pattern> configOptionExcludeRes, boolean fixPipes) {
+            List<Pattern> configOptionExcludeRes, List<Entry<Pattern, String>> descriptionReplacementRes) {
 
         final List<String> configRootClasses = loadConfigRoots(basePath);
         if (configRootClasses.isEmpty()) {
@@ -304,12 +329,14 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
                 throw new RuntimeException("Could not parse " + rawModel, e);
             }
         }
-        if (fixPipes || ownLinkRe != null) {
+        if (!descriptionReplacementRes.isEmpty() || ownLinkRe != null) {
             for (ConfigDocItem configDocItem : configDocItems) {
                 ConfigDocKey k = configDocItem.getConfigDocKey();
                 String newVal = k.getConfigDoc();
-                if (fixPipes) {
-                    newVal = newVal.replace("|", "\\|");
+                if (!descriptionReplacementRes.isEmpty()) {
+                    for (Entry<Pattern, String> en : descriptionReplacementRes) {
+                        newVal = en.getKey().matcher(newVal).replaceAll(en.getValue());
+                    }
                 }
                 if (ownLinkRe != null) {
                     newVal = ownLinkRe.matcher(newVal).replaceAll("xref:$1.adoc");
