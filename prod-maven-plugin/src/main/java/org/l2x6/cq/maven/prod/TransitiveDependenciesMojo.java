@@ -207,7 +207,7 @@ public class TransitiveDependenciesMojo {
         log.info("Installing camel-quarkus-bom again, now with proper Camel constraints");
         bomInstaller.run();
 
-        final DependencyCollector collector = new DependencyCollector();
+        final DependencyCollector collector = new DependencyCollector(product);
         collect(bomModel, collector, bomModel.getConstraints());
 
         final Set<Ga> allTransitiveGas = toGas(collector.allTransitives);
@@ -514,8 +514,10 @@ public class TransitiveDependenciesMojo {
         private final Set<Gav> prodTransitives = new TreeSet<>();
         private final Set<Gav> allTransitives = new TreeSet<>();
         private final Deque<Gav> stack = new ArrayDeque<>();
+        private final Product product;
 
-        public DependencyCollector() {
+        public DependencyCollector(Product product) {
+            this.product = product;
         }
 
         @Override
@@ -526,19 +528,28 @@ public class TransitiveDependenciesMojo {
 
         @Override
         public boolean visitEnter(DependencyNode node) {
-            final Artifact a = node.getArtifact();
-            final Gav gav = new Gav(a.getGroupId(), a.getArtifactId(), a.getVersion());
+            final Gav gav = dependencyNodeToGav(node);
             stack.push(gav);
-            if ("quarkus-cxf-rt-ws-rm".equals(gav.getGroupId())) {
-                System.out.println("=============== Adding quarkus-cxf-rt-ws-rm as " + isProd + ": " + stack);
-            }
-            allTransitives.add(gav);
-            if (isProd) {
-                prodTransitives.add(gav);
+
+            if (!product.getIgnoredTransitiveDependencies().contains(Ga.of(gav.getGroupId(), gav.getArtifactId()))) {
+                allTransitives.add(gav);
+                if (isProd) {
+                    prodTransitives.add(gav);
+                }
             }
             return true;
         }
 
+        private Gav dependencyNodeToGav(DependencyNode node) {
+            final Artifact a = node.getArtifact();
+            String artifactId = a.getArtifactId();
+
+            if (product.getArtifactIdTransformations().containsKey(artifactId)) {
+                artifactId = artifactId.replaceAll(artifactId, product.getArtifactIdTransformations().get(artifactId));
+            }
+
+            return new Gav(a.getGroupId(), artifactId, a.getVersion());
+        }
     }
 
     static class EntryPointInfo {
