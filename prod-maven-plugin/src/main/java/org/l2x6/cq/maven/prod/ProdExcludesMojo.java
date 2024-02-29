@@ -1338,7 +1338,6 @@ public class ProdExcludesMojo extends AbstractMojo {
                 final Map<Ga, Extension> extensionsMap = new TreeMap<>();
                 final Set<Ga> excludeTests = new TreeSet<Ga>();
                 final Map<Ga, Set<Ga>> allowedMixedTests = new TreeMap<>();
-                final List<Ga> ignoredTransitiveDependencies = new ArrayList<>();
                 for (Entry<String, Object> en : extensions.entrySet()) {
 
                     final String artifactId = en.getKey();
@@ -1425,12 +1424,15 @@ public class ProdExcludesMojo extends AbstractMojo {
                     bannedDeps.union(bannedDependencyResource.getBannedSet(charset));
                 }
 
-                final Map<String, String> artifactIdTransformations = (Map<String, String>) json
-                        .getOrDefault("artifactIdTransformations", Collections.emptyMap());
+                final Map<Ga, Ga> transitiveDependencyReplacements = new LinkedHashMap<>();
+                ((Map<String, String>) json.getOrDefault("transitiveDependencyReplacements", Collections.emptyMap()))
+                        .entrySet()
+                        .forEach(en -> transitiveDependencyReplacements.put(Ga.of(en.getKey()), Ga.of(en.getValue())));
 
-                final List<String> ignoredTransitives = (List<String>) json.getOrDefault("ignoredTransitiveDependencies",
-                        Collections.emptyList());
-                ignoredTransitives.stream().map(Ga::of).forEach(ignoredTransitiveDependencies::add);
+                final org.l2x6.pom.tuner.model.GavSet.IncludeExcludeGavSet.Builder ignoredTransitiveDependencies = GavSet
+                        .builder();
+                ((List<String>) json.getOrDefault("ignoredTransitiveDependencies",
+                        Collections.emptyList())).forEach(ignoredTransitiveDependencies::include);
 
                 return new Product(
                         Collections.unmodifiableMap(extensionsMap),
@@ -1452,8 +1454,8 @@ public class ProdExcludesMojo extends AbstractMojo {
                         nonProductizedDependenciesFile,
                         Collections.unmodifiableMap(additionalDependenciesMap),
                         bannedDeps.build(),
-                        artifactIdTransformations,
-                        ignoredTransitiveDependencies);
+                        Collections.unmodifiableMap(transitiveDependencyReplacements),
+                        ignoredTransitiveDependencies.build());
             } catch (IOException e) {
                 throw new RuntimeException("Could not read " + absProdJson, e);
             }
@@ -1478,8 +1480,8 @@ public class ProdExcludesMojo extends AbstractMojo {
         private final Path nonProductizedDependenciesFile;
         private final Map<String, GavSet> additionalExtensionDependencies;
         private final GavSet bannedDependencies;
-        private final Map<String, String> artifactIdTransformations;
-        private final List<Ga> ignoredTransitiveDependencies;
+        private final Map<Ga, Ga> transitiveDependencyReplacements;
+        private final GavSet ignoredTransitiveDependencies;
 
         public Product(Map<Ga, Extension> extensions, String prodGuideUrlTemplate, String majorVersion, Path docReferenceDir,
                 Map<String, String> versionTransformations, List<String> additionalProductizedArtifacts, Set<Ga> excludeTests,
@@ -1494,8 +1496,8 @@ public class ProdExcludesMojo extends AbstractMojo {
                 Path nonProductizedDependenciesFile,
                 Map<String, GavSet> additionalExtensionDependencies,
                 GavSet bannedDependencies,
-                Map<String, String> artifactIdTransformations,
-                List<Ga> ignoredTransitiveDependencies) {
+                Map<Ga, Ga> transitiveDependencyReplacements,
+                GavSet ignoredTransitiveDependencies) {
             this.extensions = extensions;
             this.prodGuideUrlTemplate = prodGuideUrlTemplate;
             this.majorVersion = majorVersion;
@@ -1515,8 +1517,8 @@ public class ProdExcludesMojo extends AbstractMojo {
             this.nonProductizedDependenciesFile = nonProductizedDependenciesFile;
             this.additionalExtensionDependencies = additionalExtensionDependencies;
             this.bannedDependencies = bannedDependencies;
-            this.artifactIdTransformations = Collections.unmodifiableMap(artifactIdTransformations);
-            this.ignoredTransitiveDependencies = Collections.unmodifiableList(ignoredTransitiveDependencies);
+            this.transitiveDependencyReplacements = transitiveDependencyReplacements;
+            this.ignoredTransitiveDependencies = ignoredTransitiveDependencies;
         }
 
         /**
@@ -1587,14 +1589,14 @@ public class ProdExcludesMojo extends AbstractMojo {
         /**
          * @return see {@code product/README.adoc} of the current product branch
          */
-        public Map<String, String> getArtifactIdTransformations() {
-            return artifactIdTransformations;
+        public Map<Ga, Ga> getTransitiveDependencyReplacements() {
+            return transitiveDependencyReplacements;
         }
 
         /**
          * @return see {@code product/README.adoc} of the current product branch
          */
-        public List<Ga> getIgnoredTransitiveDependencies() {
+        public GavSet getIgnoredTransitiveDependencies() {
             return ignoredTransitiveDependencies;
         }
 
