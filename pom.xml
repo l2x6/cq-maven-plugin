@@ -78,49 +78,49 @@
 
         <!-- Dependency versions in alphabectic order -->
         <camel-community.version>4.4.0</camel-community.version>
-        <maven.version>3.9.4</maven.version>
+        <maven.version>3.9.6</maven.version>
         <maven-artifact-transfer.version>0.13.1</maven-artifact-transfer.version>
         <maven-project.version>3.0-alpha-2</maven-project.version>
-        <maven.plugin-tools.version>3.9.0</maven.plugin-tools.version>
-        <maven-resolver.version>1.9.15</maven-resolver.version>
+        <maven.plugin-tools.version>3.10.2</maven.plugin-tools.version>
+        <maven-resolver.version>1.9.18</maven-resolver.version>
         <maven.shared.file-management>3.1.0</maven.shared.file-management>
         <maven.shared.invoker>3.2.0</maven.shared.invoker>
         <maven.shared.utils>3.4.2</maven.shared.utils>
         <pom-tuner.version>4.3.0</pom-tuner.version>
         <jdom2.version>2.0.6.1</jdom2.version>
-        <jgit.version>6.6.0.202305301015-r</jgit.version>
-        <junit.version>5.10.0</junit.version>
-        <enforcer-api.version>3.4.0</enforcer-api.version>
+        <jgit.version>6.8.0.202311291450-r</jgit.version>
+        <junit.version>5.10.1</junit.version>
+        <enforcer-api.version>3.4.1</enforcer-api.version>
         <google-client.version>1.34.1</google-client.version>
-        <google-api-services-sheets.version>v4-rev20230808-2.0.0</google-api-services-sheets.version>
+        <google-api-services-sheets.version>v4-rev20230815-2.0.0</google-api-services-sheets.version>
         <gson.version>2.10.1</gson.version>
         <quarkus.version>3.8.0.CR1</quarkus.version>
 
         <camel.version>4.4.0</camel.version>
         <freemarker.version>2.3.32</freemarker.version>
-        <assertj.version>3.24.2</assertj.version>
+        <assertj.version>3.25.1</assertj.version>
 
         <!-- Plugins and their dependencies -->
         <buildnumber-maven-plugin.version>3.2.0</buildnumber-maven-plugin.version>
         <editorconfig-maven-plugin.version>0.1.3</editorconfig-maven-plugin.version>
         <formatter-maven-plugin.version>2.23.0</formatter-maven-plugin.version>
         <impsort-maven-plugin.version>1.9.0</impsort-maven-plugin.version>
-        <license-maven-plugin.version>4.2</license-maven-plugin.version>
-        <maven-clean-plugin.version>3.3.1</maven-clean-plugin.version>
-        <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
+        <license-maven-plugin.version>4.3</license-maven-plugin.version>
+        <maven-clean-plugin.version>3.3.2</maven-clean-plugin.version>
+        <maven-compiler-plugin.version>3.12.1</maven-compiler-plugin.version>
         <maven-deploy-plugin.version>3.1.1</maven-deploy-plugin.version>
         <maven-gpg-plugin.version>3.1.0</maven-gpg-plugin.version>
         <maven-install-plugin.version>3.1.1</maven-install-plugin.version>
         <maven-jar-pluginversion.version>3.3.0</maven-jar-pluginversion.version>
-        <maven-javadoc-plugin.version>3.5.0</maven-javadoc-plugin.version>
-        <maven-plugin-plugin.version>3.9.0</maven-plugin-plugin.version>
-        <maven-project-info-reports-plugin.version>3.4.5</maven-project-info-reports-plugin.version>
+        <maven-javadoc-plugin.version>3.6.3</maven-javadoc-plugin.version>
+        <maven-plugin-plugin.version>3.11.0</maven-plugin-plugin.version>
+        <maven-project-info-reports-plugin.version>3.5.0</maven-project-info-reports-plugin.version>
         <maven-release-plugin.version>3.0.1</maven-release-plugin.version>
         <maven-resources-plugin.version>3.3.1</maven-resources-plugin.version>
         <maven-scm-plugin.version>2.0.1</maven-scm-plugin.version>
         <maven-site-plugin.version>3.12.1</maven-site-plugin.version>
         <maven-source-plugin.version>3.3.0</maven-source-plugin.version>
-        <maven-surefire-plugin.version>3.1.2</maven-surefire-plugin.version>
+        <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
         <nexus-staging-maven-plugin.version>1.6.13</nexus-staging-maven-plugin.version>
         <site-maven-plugin.version>0.12</site-maven-plugin.version>
 
