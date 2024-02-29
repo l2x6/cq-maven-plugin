@@ -70,7 +70,6 @@ import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Module;
 import org.l2x6.pom.tuner.model.Profile;
-import org.sonatype.plexus.build.incremental.DefaultBuildContext;
 import org.w3c.dom.Document;
 
 /**
@@ -464,7 +463,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
          * Unpack the community jars of excluded components to their target/classes so that Camel plugins find it there
          */
         project.getBasedir();
-        excludes.stream()
+        excludes.parallelStream()
                 .map(ga -> fullTree.getModulesByGa().get(ga))
                 .filter(CamelProdExcludesMojo::isComponent)
                 .forEach(module -> {
@@ -496,22 +495,17 @@ public class CamelProdExcludesMojo extends AbstractMojo {
 
                     /* Execute ComponentDslMojo in the excluded component modules */
                     getLog().info("Executing ComponentDslMojo in " + moduleBaseDir);
-                    final File origFile = project.getFile();
-                    project.setFile(pomFilePath.toFile());
-                    final String originalBuildDir = project.getBuild().getDirectory();
-                    project.getBuild().setDirectory(moduleBaseDir.resolve("target").toString());
+                    final MavenProject projectCopy = new MavenProject(project);
+                    projectCopy.setFile(pomFilePath.toFile());
+                    projectCopy.getBuild().setDirectory(moduleBaseDir.resolve("target").toString());
                     try {
                         ComponentDslMojo mojo = new ComponentDslMojo();
                         mojo.setLog(getLog());
                         mojo.setPluginContext(getPluginContext());
-                        mojo.execute(project, projectHelper,
-                                new org.codehaus.plexus.build.DefaultBuildContext(new DefaultBuildContext()));
+                        mojo.execute(projectCopy, projectHelper, null);
 
                     } catch (Exception e) {
                         throw new RuntimeException("Could not excute ComponentDslMojo in " + moduleBaseDir, e);
-                    } finally {
-                        project.setFile(origFile);
-                        project.getBuild().setDirectory(originalBuildDir);
                     }
 
                 });
