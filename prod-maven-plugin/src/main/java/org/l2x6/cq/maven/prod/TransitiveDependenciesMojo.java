@@ -69,6 +69,7 @@ import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gav;
+import org.l2x6.pom.tuner.model.GavSet;
 import org.w3c.dom.Document;
 
 /**
@@ -207,7 +208,9 @@ public class TransitiveDependenciesMojo {
         log.info("Installing camel-quarkus-bom again, now with proper Camel constraints");
         bomInstaller.run();
 
-        final DependencyCollector collector = new DependencyCollector(product);
+        final DependencyCollector collector = new DependencyCollector(
+                product.getTransitiveDependencyReplacements(),
+                product.getIgnoredTransitiveDependencies());
         collect(bomModel, collector, bomModel.getConstraints());
 
         final Set<Ga> allTransitiveGas = toGas(collector.allTransitives);
@@ -514,10 +517,13 @@ public class TransitiveDependenciesMojo {
         private final Set<Gav> prodTransitives = new TreeSet<>();
         private final Set<Gav> allTransitives = new TreeSet<>();
         private final Deque<Gav> stack = new ArrayDeque<>();
-        private final Product product;
+        private final Map<Ga, Ga> transitiveDependencyReplacements;
+        private final GavSet ignoredTransitiveDependencies;
 
-        public DependencyCollector(Product product) {
-            this.product = product;
+        public DependencyCollector(Map<Ga, Ga> transitiveDependencyReplacements,
+                GavSet ignoredTransitiveDependencies) {
+            this.transitiveDependencyReplacements = transitiveDependencyReplacements;
+            this.ignoredTransitiveDependencies = ignoredTransitiveDependencies;
         }
 
         @Override
@@ -531,24 +537,27 @@ public class TransitiveDependenciesMojo {
             final Gav gav = dependencyNodeToGav(node);
             stack.push(gav);
 
-            if (!product.getIgnoredTransitiveDependencies().contains(Ga.of(gav.getGroupId(), gav.getArtifactId()))) {
-                allTransitives.add(gav);
-                if (isProd) {
-                    prodTransitives.add(gav);
-                }
+            if (ignoredTransitiveDependencies.contains(gav)) {
+                /* ignore also the transitives */
+                return false;
+            }
+
+            allTransitives.add(gav);
+            if (isProd) {
+                prodTransitives.add(gav);
             }
             return true;
         }
 
         private Gav dependencyNodeToGav(DependencyNode node) {
             final Artifact a = node.getArtifact();
-            String artifactId = a.getArtifactId();
-
-            if (product.getArtifactIdTransformations().containsKey(artifactId)) {
-                artifactId = artifactId.replaceAll(artifactId, product.getArtifactIdTransformations().get(artifactId));
+            final Ga original = new Ga(a.getGroupId(), a.getArtifactId());
+            final Ga replacement = transitiveDependencyReplacements.get(original);
+            if (replacement == null) {
+                return new Gav(original.getGroupId(), original.getArtifactId(), a.getVersion());
+            } else {
+                return new Gav(replacement.getGroupId(), replacement.getArtifactId(), a.getVersion());
             }
-
-            return new Gav(a.getGroupId(), artifactId, a.getVersion());
         }
     }
 
