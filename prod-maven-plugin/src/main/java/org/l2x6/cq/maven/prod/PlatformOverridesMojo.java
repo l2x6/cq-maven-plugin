@@ -115,11 +115,9 @@ public class PlatformOverridesMojo extends AbstractMojo {
         }
         charset = Charset.forName(encoding);
 
-        final String majorVersion = documentedProductVersion.substring(0, documentedProductVersion.indexOf('.'));
-
         final Path absProdJson = basedir.toPath().resolve(productJson.toPath());
         final Path basePath = basedir.toPath();
-        final Product product = Product.read(absProdJson, charset, majorVersion, basePath, basePath);
+        final Product product = Product.read(absProdJson, charset, documentedProductVersion, basePath, basePath);
 
         final Path overridesPath;
         if (overridesFile == null) {

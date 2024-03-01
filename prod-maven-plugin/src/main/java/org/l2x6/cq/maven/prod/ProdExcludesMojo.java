@@ -242,7 +242,7 @@ public class ProdExcludesMojo extends AbstractMojo {
     @Parameter(defaultValue = CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH, required = true, property = "cq.productJson")
     File productJson;
 
-    @Parameter(property = "cq.productJson")
+    @Parameter(property = "cq.productJsonCxf")
     File productJsonCxf;
 
     /**
@@ -362,11 +362,10 @@ public class ProdExcludesMojo extends AbstractMojo {
         charset = Charset.forName(encoding);
         localRepositoryPath = Paths.get(localRepository);
 
-        final String majorVersion = version.split("\\.")[0];
         final Path docReferenceDir = basedir.toPath().resolve("docs/modules/ROOT/pages/reference/extensions");
 
-        final Product product = readProduct(productJson, majorVersion, docReferenceDir);
-        final Product productCxf = productJsonCxf != null ? readProduct(productJsonCxf, majorVersion, docReferenceDir) : null;
+        final Product product = readProduct(productJson, camelVersion, docReferenceDir);
+        final Product productCxf = productJsonCxf != null ? readProduct(productJsonCxf, camelVersion, docReferenceDir) : null;
 
         final Path jenkinsfileName = product.getJenkinsfile().getFileName();
         final Path basePath = basedir.toPath();
@@ -534,9 +533,9 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     }
 
-    public Product readProduct(File productJson, final String majorVersion, final Path docReferenceDir) {
+    public Product readProduct(File productJson, final String version, final Path docReferenceDir) {
         final Path absProdJson = basedir.toPath().resolve(productJson.toPath());
-        final Product product = Product.read(absProdJson, charset, majorVersion, docReferenceDir,
+        final Product product = Product.read(absProdJson, charset, version, docReferenceDir,
                 multiModuleProjectDirectory.toPath());
         return product;
     }
@@ -601,9 +600,10 @@ public class ProdExcludesMojo extends AbstractMojo {
         }
     }
 
-    static String guideUrl(String majorVersion, final Ga ga, final String guideUrlTemplate) {
+    static String guideUrl(String productMajorMinorVersion, final Ga ga, final String guideUrlTemplate) {
         return guideUrlTemplate
-                .replace("${cqMajorVersion}", majorVersion)
+                .replace("${productMajorMinorVersion}", productMajorMinorVersion)
+                .replace("${artifactId}", ga.getArtifactId())
                 .replace("${artifactIdBase}", ga.getArtifactId().replace("camel-quarkus-", ""));
     }
 
