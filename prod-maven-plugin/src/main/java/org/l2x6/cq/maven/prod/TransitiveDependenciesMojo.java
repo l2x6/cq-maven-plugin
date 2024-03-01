@@ -62,7 +62,6 @@ import org.eclipse.aether.resolution.ArtifactResolutionException;
 import org.eclipse.aether.resolution.ArtifactResult;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.maven.prod.ProdExcludesMojo.CamelEdition;
-import org.l2x6.cq.maven.prod.ProdExcludesMojo.Product;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
