@@ -132,6 +132,7 @@ public class TransitiveDependenciesMojo {
     private final Path nonProductizedDependenciesFile;
 
     private final Product product;
+    private final Product productCxf;
 
     /**
      * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
@@ -163,6 +164,7 @@ public class TransitiveDependenciesMojo {
             Path allDependenciesFile,
             Path nonProductizedDependenciesFile,
             Product product,
+            Product productCxf,
             SimpleElementWhitespace simpleElementWhitespace,
             List<RemoteRepository> repositories,
             RepositorySystem repoSystem,
@@ -179,6 +181,7 @@ public class TransitiveDependenciesMojo {
         this.allDependenciesFile = basedir.resolve(allDependenciesFile);
         this.nonProductizedDependenciesFile = basedir.resolve(nonProductizedDependenciesFile);
         this.product = product;
+        this.productCxf = productCxf;
         this.simpleElementWhitespace = simpleElementWhitespace;
         this.repositories = repositories;
         this.repoSystem = repoSystem;
@@ -194,7 +197,7 @@ public class TransitiveDependenciesMojo {
         final BomModel bomModel = BomModel.of(
                 basedir.resolve("poms/bom/pom.xml"),
                 charset,
-                product.getInitialProductizedModules(),
+                Product.getInitialProductizedModules(product, productCxf),
                 mavenProjectBuilder,
                 session);
         /*

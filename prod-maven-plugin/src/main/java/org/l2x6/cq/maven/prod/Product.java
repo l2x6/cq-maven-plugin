@@ -35,7 +35,6 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.l2x6.cq.common.BannedDependencyResource;
-import org.l2x6.cq.maven.prod.ProdExcludesMojo.ModeSupportStatus;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.GavSet;
 import org.l2x6.pom.tuner.model.GavSet.UnionGavSet.Builder;
@@ -51,6 +50,7 @@ public class Product {
         try (Reader r = Files.newBufferedReader(absProdJson, charset)) {
             @SuppressWarnings("unchecked")
             final Map<String, Object> json = new Gson().fromJson(r, Map.class);
+            final String groupId = (String) json.getOrDefault("groupId", "org.apache.camel.quarkus");
             final String prodGuideUrlTemplate = (String) json.get("guideUrlTemplate");
             @SuppressWarnings("unchecked")
             final Map<String, Object> extensions = (Map<String, Object>) json.get("extensions");
@@ -60,7 +60,7 @@ public class Product {
             for (Entry<String, Object> en : extensions.entrySet()) {
 
                 final String artifactId = en.getKey();
-                final Ga extensionGa = new Ga("org.apache.camel.quarkus", artifactId);
+                final Ga extensionGa = new Ga(groupId, artifactId);
                 Map<String, Object> extensionEntry = (Map<String, Object>) en.getValue();
                 extensionsMap.put(extensionGa,
                         new Extension(extensionGa, ModeSupportStatus.valueOf((String) extensionEntry.get("jvm")),
@@ -70,7 +70,7 @@ public class Product {
                 final List<String> allowedMixedTestsList = (List<String>) extensionEntry.get("allowedMixedTests");
                 if (allowedMixedTestsList != null) {
                     final Set<Ga> moduleAllowedMixedTests = allowedMixedTestsList.stream()
-                            .map(a -> new Ga("org.apache.camel.quarkus", a))
+                            .map(a -> new Ga(groupId, a))
                             .collect(Collectors.toCollection(TreeSet::new));
                     allowedMixedTests.put(extensionGa, moduleAllowedMixedTests);
                 }
@@ -82,7 +82,7 @@ public class Product {
             final List<String> excludeTestsList = (List<String>) json.get("excludeTests");
             if (excludeTestsList != null) {
                 for (String artifactId : excludeTestsList) {
-                    excludeTests.add(new Ga("org.apache.camel.quarkus", artifactId));
+                    excludeTests.add(new Ga(groupId, artifactId));
                 }
             }
 
@@ -158,6 +158,7 @@ public class Product {
 
             return new Product(
                     Collections.unmodifiableMap(extensionsMap),
+                    groupId,
                     prodGuideUrlTemplate,
                     majorVersion,
                     docReferenceDir,
@@ -184,6 +185,7 @@ public class Product {
     }
 
     private final Map<Ga, Product.Extension> extensions;
+    private final String groupId;
     private final String prodGuideUrlTemplate;
     private final String majorVersion;
     private final Path docReferenceDir;
@@ -205,7 +207,11 @@ public class Product {
     private final Map<Ga, Ga> transitiveDependencyReplacements;
     private final GavSet ignoredTransitiveDependencies;
 
-    public Product(Map<Ga, Product.Extension> extensions, String prodGuideUrlTemplate, String majorVersion,
+    public Product(
+            Map<Ga, Product.Extension> extensions,
+            String groupId,
+            String prodGuideUrlTemplate,
+            String majorVersion,
             Path docReferenceDir,
             Map<String, String> versionTransformations, List<String> additionalProductizedArtifacts, Set<Ga> excludeTests,
             Map<Ga, Set<Ga>> allowedMixedTests, List<DirectoryScanner> integrationTests,
@@ -222,6 +228,7 @@ public class Product {
             Map<Ga, Ga> transitiveDependencyReplacements,
             GavSet ignoredTransitiveDependencies) {
         this.extensions = extensions;
+        this.groupId = groupId;
         this.prodGuideUrlTemplate = prodGuideUrlTemplate;
         this.majorVersion = majorVersion;
         this.docReferenceDir = docReferenceDir;
@@ -255,20 +262,24 @@ public class Product {
      * @return a {@link SortedSet} of {@link Ga}s representing modules required by the product. This is the
      *         "initial" set - i.e. any possible transitive dependencies are yet to be resolved.
      */
-    public SortedSet<Ga> getInitialProductizedModules() {
+    public static SortedSet<Ga> getInitialProductizedModules(Product... products) {
         SortedSet<Ga> result = new TreeSet<>();
-        for (Ga ga : extensions.keySet()) {
-            result.add(ga);
-            result.add(new Ga("org.apache.camel.quarkus", ga.getArtifactId() + "-deployment"));
-        }
-        if (additionalProductizedArtifacts != null) {
-            for (String maybeGa : additionalProductizedArtifacts) {
-                /* groupId is optional so that we stay backwards compatible */
-                final int colonPos = maybeGa.indexOf(':');
-                if (colonPos >= 0) {
-                    result.add(new Ga(maybeGa.substring(0, colonPos), maybeGa.substring(colonPos + 1)));
-                } else {
-                    result.add(new Ga("org.apache.camel.quarkus", maybeGa));
+        for (Product product : products) {
+            if (product != null) {
+                for (Ga ga : product.extensions.keySet()) {
+                    result.add(ga);
+                    result.add(new Ga(product.groupId, ga.getArtifactId() + "-deployment"));
+                }
+                if (product.additionalProductizedArtifacts != null) {
+                    for (String maybeGa : product.additionalProductizedArtifacts) {
+                        /* groupId is optional so that we stay backwards compatible */
+                        final int colonPos = maybeGa.indexOf(':');
+                        if (colonPos >= 0) {
+                            result.add(new Ga(maybeGa.substring(0, colonPos), maybeGa.substring(colonPos + 1)));
+                        } else {
+                            result.add(new Ga(product.groupId, maybeGa));
+                        }
+                    }
                 }
             }
         }
@@ -323,29 +334,6 @@ public class Product {
         return ignoredTransitiveDependencies;
     }
 
-    /**
-     * A representation of a product extension as defined in {@code camel-quarkus-product-source.json}
-     */
-    static class Extension {
-        private final Ga ga;
-        private final ModeSupportStatus jvmSupportStatus;
-        private final ModeSupportStatus nativeSupportStatus;
-
-        public Extension(Ga ga, ModeSupportStatus jvmSupportStatus, ModeSupportStatus nativeSupportStatus) {
-            this.ga = ga;
-            this.jvmSupportStatus = jvmSupportStatus;
-            this.nativeSupportStatus = nativeSupportStatus;
-        }
-
-        public boolean hasProductDocumentationPage() {
-            return jvmSupportStatus.hasProductDocumentationPage() || nativeSupportStatus.hasProductDocumentationPage();
-        }
-
-        public Ga getGa() {
-            return ga;
-        }
-    }
-
     public List<DirectoryScanner> getIntegrationTests() {
         return integrationTests;
     }
@@ -393,4 +381,71 @@ public class Product {
     public Map<String, String> getVersionTransformations() {
         return versionTransformations;
     }
+
+    /**
+     * A representation of a product extension as defined in {@code camel-quarkus-product-source.json}
+     */
+    public static class Extension {
+        private final Ga ga;
+        private final ModeSupportStatus jvmSupportStatus;
+        private final ModeSupportStatus nativeSupportStatus;
+
+        public Extension(Ga ga, ModeSupportStatus jvmSupportStatus, ModeSupportStatus nativeSupportStatus) {
+            this.ga = ga;
+            this.jvmSupportStatus = jvmSupportStatus;
+            this.nativeSupportStatus = nativeSupportStatus;
+        }
+
+        public boolean hasProductDocumentationPage() {
+            return jvmSupportStatus.hasProductDocumentationPage() || nativeSupportStatus.hasProductDocumentationPage();
+        }
+
+        public Ga getGa() {
+            return ga;
+        }
+
+        /**
+         * @return support level string usable Quarkus Platform metadata, such as
+         *         <code>"redhat-support" : [ "tech-preview" ]</code>
+         */
+        public String redhatSupportLevel() {
+            if (nativeSupportStatus == jvmSupportStatus) {
+                return nativeSupportStatus.quarkusSupportLevel;
+            }
+            if (jvmSupportStatus == ModeSupportStatus.supported && nativeSupportStatus == ModeSupportStatus.techPreview) {
+                return "supported-in-jvm";
+            }
+            throw new IllegalStateException(
+                    "Cannot merge native support level " + nativeSupportStatus + " with JVM supportlevel " + jvmSupportStatus);
+        }
+
+    }
+
+    public enum ModeSupportStatus {
+        community(null),
+        devSupport("dev-support"),
+        techPreview("tech-preview"),
+        supported("supported");
+
+        private ModeSupportStatus(String quarkusSupportLevel) {
+            this.quarkusSupportLevel = quarkusSupportLevel;
+        }
+
+        private final String quarkusSupportLevel;
+
+        public boolean hasProductDocumentationPage() {
+            switch (this) {
+            case devSupport:
+            case techPreview:
+            case supported:
+                return true;
+            case community:
+                return false;
+            default:
+                throw new IllegalStateException("Unexpected " + ModeSupportStatus.class.getSimpleName() + "." + name());
+            }
+        }
+
+    }
+
 }

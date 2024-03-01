@@ -202,23 +202,6 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     }
 
-    enum ModeSupportStatus {
-        community, techPreview, supported, devSupport;
-
-        public boolean hasProductDocumentationPage() {
-            switch (this) {
-            case devSupport:
-            case techPreview:
-            case supported:
-                return true;
-            case community:
-                return false;
-            default:
-                throw new IllegalStateException("Unexpected " + ModeSupportStatus.class.getSimpleName() + "." + name());
-            }
-        }
-    }
-
     public static final String CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH = "product/src/main/resources/camel-quarkus-product-source.json";
     static final String MODULE_COMMENT = "disabled by cq-prod-maven-plugin:prod-excludes";
     static final String DEFAULT_REQUIRED_PRODUCTIZED_CAMEL_ARTIFACTS_TXT = "target/required-productized-camel-artifacts.txt";
@@ -258,6 +241,9 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     @Parameter(defaultValue = CAMEL_QUARKUS_PRODUCT_SOURCE_JSON_PATH, required = true, property = "cq.productJson")
     File productJson;
+
+    @Parameter(property = "cq.productJson")
+    File productJsonCxf;
 
     /**
      * Skip the execution of this mojo.
@@ -379,9 +365,8 @@ public class ProdExcludesMojo extends AbstractMojo {
         final String majorVersion = version.split("\\.")[0];
         final Path docReferenceDir = basedir.toPath().resolve("docs/modules/ROOT/pages/reference/extensions");
 
-        final Path absProdJson = basedir.toPath().resolve(productJson.toPath());
-        final Product product = Product.read(absProdJson, charset, majorVersion, docReferenceDir,
-                multiModuleProjectDirectory.toPath());
+        final Product product = readProduct(productJson, majorVersion, docReferenceDir);
+        final Product productCxf = productJsonCxf != null ? readProduct(productJsonCxf, majorVersion, docReferenceDir) : null;
 
         final Path jenkinsfileName = product.getJenkinsfile().getFileName();
         final Path basePath = basedir.toPath();
@@ -431,7 +416,8 @@ public class ProdExcludesMojo extends AbstractMojo {
 
         /* Add the modules required by the includes */
         final Set<Ga> expandedIncludesWithoutTests = Collections
-                .unmodifiableSet(fullTree.findRequiredModules(product.getInitialProductizedModules(), profiles));
+                .unmodifiableSet(
+                        fullTree.findRequiredModules(Product.getInitialProductizedModules(product, productCxf), profiles));
 
         updateVersions(fullTree, profiles, product.getVersionTransformations());
 
@@ -491,6 +477,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                 basedir.toPath(),
                 workRoot,
                 product,
+                productCxf,
                 productizedDependenciesPath,
                 nonProductizedDependenciesPath,
                 allDependenciesPath);
@@ -545,6 +532,13 @@ public class ProdExcludesMojo extends AbstractMojo {
             throw new MojoFailureException(sb.toString());
         }
 
+    }
+
+    public Product readProduct(File productJson, final String majorVersion, final Path docReferenceDir) {
+        final Path absProdJson = basedir.toPath().resolve(productJson.toPath());
+        final Product product = Product.read(absProdJson, charset, majorVersion, docReferenceDir,
+                multiModuleProjectDirectory.toPath());
+        return product;
     }
 
     void excludeTestsFromTestList(Path workRoot, MavenSourceTree fullTree, Path testListPomPath, Path integrationTestsDir,
@@ -1136,6 +1130,7 @@ public class ProdExcludesMojo extends AbstractMojo {
             Path realRoot,
             Path workRoot,
             Product product,
+            Product productCxf,
             Path productizedDependenciesPath,
             Path nonProductizedDependenciesPath,
             Path allDependenciesPath) {
@@ -1171,6 +1166,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                 workRoot.resolve(allDependenciesPath),
                 workRoot.resolve(nonProductizedDependenciesPath),
                 product,
+                productCxf,
                 simpleElementWhitespace,
                 repositories,
                 repoSystem,
