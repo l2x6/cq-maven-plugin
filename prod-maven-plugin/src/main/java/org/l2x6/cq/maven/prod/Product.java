@@ -44,8 +44,10 @@ import org.l2x6.pom.tuner.model.GavSet.UnionGavSet.Builder;
  */
 public class Product {
 
-    public static Product read(Path absProdJson, Charset charset, String majorVersion, Path docReferenceDir,
+    public static Product read(Path absProdJson, Charset charset, String version, Path docReferenceDir,
             Path multiModuleProjectDirectory) {
+        final String[] parts = version.split("\\.");
+        final String majorMinorVersion = parts[0] + "." + parts[1];
 
         try (Reader r = Files.newBufferedReader(absProdJson, charset)) {
             @SuppressWarnings("unchecked")
@@ -160,7 +162,7 @@ public class Product {
                     Collections.unmodifiableMap(extensionsMap),
                     groupId,
                     prodGuideUrlTemplate,
-                    majorVersion,
+                    majorMinorVersion,
                     docReferenceDir,
                     Collections.unmodifiableMap(versionTransformations),
                     Collections.unmodifiableList(additionalProductizedArtifacts),
@@ -187,7 +189,7 @@ public class Product {
     private final Map<Ga, Product.Extension> extensions;
     private final String groupId;
     private final String prodGuideUrlTemplate;
-    private final String majorVersion;
+    private final String productMajorMinorVersion;
     private final Path docReferenceDir;
     private final Map<String, String> versionTransformations;
     private final List<String> additionalProductizedArtifacts;
@@ -230,7 +232,7 @@ public class Product {
         this.extensions = extensions;
         this.groupId = groupId;
         this.prodGuideUrlTemplate = prodGuideUrlTemplate;
-        this.majorVersion = majorVersion;
+        this.productMajorMinorVersion = majorVersion;
         this.docReferenceDir = docReferenceDir;
         this.versionTransformations = versionTransformations;
         this.additionalProductizedArtifacts = additionalProductizedArtifacts;
@@ -296,11 +298,11 @@ public class Product {
         final Product.Extension ext = extensions.get(ga);
 
         if (ext != null && ext.hasProductDocumentationPage()) {
-            return ProdExcludesMojo.guideUrl(majorVersion, ga, prodGuideUrlTemplate);
+            return ProdExcludesMojo.guideUrl(productMajorMinorVersion, ga, prodGuideUrlTemplate);
         }
         final String artifactIdBase = ga.getArtifactId().replace("camel-quarkus-", "");
         if (Files.isRegularFile(docReferenceDir.resolve(artifactIdBase + ".adoc"))) {
-            return ProdExcludesMojo.guideUrl(majorVersion, ga, ProdExcludesMojo.communityGuideUrlTemplate);
+            return ProdExcludesMojo.guideUrl(productMajorMinorVersion, ga, ProdExcludesMojo.communityGuideUrlTemplate);
         } else {
             return ProdExcludesMojo.defaultCommunityGuide;
         }
