@@ -89,7 +89,7 @@
         <pom-tuner.version>4.3.0</pom-tuner.version>
         <jdom2.version>2.0.6.1</jdom2.version>
         <jgit.version>6.8.0.202311291450-r</jgit.version>
-        <junit.version>5.10.1</junit.version>
+        <junit.version>5.10.2</junit.version>
         <enforcer-api.version>3.4.1</enforcer-api.version>
         <google-client.version>1.35.0</google-client.version>
         <google-api-services-sheets.version>v4-rev20230815-2.0.0</google-api-services-sheets.version>
