@@ -126,12 +126,12 @@ public class Product {
                     .getOrDefault("nonProductizedDependenciesFile",
                             ProdExcludesMojo.DEFAULT_NON_PRODUCTIZED_DEPENDENCIES_FILE));
             @SuppressWarnings("unchecked")
-            final Map<String, String> additionalExtensionDependencies = (Map<String, String>) json
+            final Map<String, List<String>> additionalExtensionDependencies = (Map<String, List<String>>) json
                     .getOrDefault("additionalExtensionDependencies", Collections.emptyMap());
 
             final TreeMap<String, GavSet> additionalDependenciesMap = new TreeMap<>();
             if (additionalExtensionDependencies != null) {
-                for (Entry<String, String> en : additionalExtensionDependencies.entrySet()) {
+                for (Entry<String, List<String>> en : additionalExtensionDependencies.entrySet()) {
                     additionalDependenciesMap.put(en.getKey(), GavSet.builder().includes(en.getValue()).build());
                 }
             }
