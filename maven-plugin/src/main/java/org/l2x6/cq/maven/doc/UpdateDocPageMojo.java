@@ -43,6 +43,7 @@ import java.util.Map.Entry;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -120,6 +121,9 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
     @Parameter(defaultValue = "${project}", readonly = true)
     MavenProject project;
 
+    @Parameter(defaultValue = "${session}", readonly = true, required = true)
+    private MavenSession session;
+
     /** {@inheritDoc} */
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
@@ -127,10 +131,32 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
             getLog().info("Skipping per user request");
             return;
         }
-        final Path basePath = baseDir.toPath();
+        final Path currentModuleDir = baseDir.toPath();
+        final Path runtimeModuleDir;
+        final Path deploymentModuleDir;
+        final MavenProject runtimeProject;
+        if ("runtime".equals(currentModuleDir.getFileName().toString())) {
+            deploymentModuleDir = currentModuleDir.getParent().resolve("deployment");
+            if (session.getAllProjects().stream()
+                    .anyMatch(p -> p.getBasedir().toPath().equals(deploymentModuleDir))) {
+                getLog().info("Skipping the execution in " + project.getArtifactId() + " and postponing it to "
+                        + project.getArtifactId() + "-deployment");
+                return;
+            }
+            runtimeModuleDir = currentModuleDir;
+            runtimeProject = project;
+        } else if ("deployment".equals(currentModuleDir.getFileName().toString())) {
+            runtimeModuleDir = currentModuleDir.getParent().resolve("runtime");
+            deploymentModuleDir = currentModuleDir;
 
-        if (!"runtime".equals(basePath.getFileName().toString())) {
-            getLog().info("Skipping a module that is not a Quarkus extension runtime module");
+            runtimeProject = session.getAllProjects().stream()
+                    .filter(p -> p.getBasedir().toPath().equals(runtimeModuleDir))
+                    .findFirst()
+                    .orElseGet(
+                            () -> new MavenProject(CqCommonUtils.readPom(runtimeModuleDir.resolve("pom.xml"), getCharset())));
+
+        } else {
+            getLog().info("Skipping a module that is nether Quarkus extension runtime nor deployment module");
             return;
         }
         final Pattern ownLinkRe = ownLinkPattern != null ? Pattern.compile(ownLinkPattern) : null;
@@ -154,31 +180,34 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
             }
         }
 
-        final Configuration cfg = CqUtils.getTemplateConfig(basePath, DEFAULT_TEMPLATES_URI_BASE, templatesUriBase,
+        final Configuration cfg = CqUtils.getTemplateConfig(runtimeModuleDir, DEFAULT_TEMPLATES_URI_BASE, templatesUriBase,
                 getCharset().toString());
 
         final Map<String, Object> model = new HashMap<>();
-        final String artifactId = project.getArtifactId();
+        final String artifactId = runtimeProject.getArtifactId();
         final Path docPagePath = getMultiModuleProjectDirectoryPath()
                 .resolve("docs/modules/ROOT/pages/reference/extensions/" + artifactId + ".adoc");
         model.put("artifactId", artifactId);
-        model.put("groupId", project.getGroupId());
-        model.put("since", getRequiredProperty("cq.since"));
-        model.put("name", extensionName(project.getModel()));
-        model.put("status", org.l2x6.cq.common.ExtensionStatus.valueOf(project.getProperties()
+        model.put("groupId", runtimeProject.getGroupId());
+        model.put("since", getRequiredProperty(runtimeProject, "cq.since"));
+        model.put("name", extensionName(runtimeProject.getModel()));
+        model.put("status", org.l2x6.cq.common.ExtensionStatus.valueOf(runtimeProject.getProperties()
                 .getProperty("quarkus.metadata.status", org.l2x6.cq.common.ExtensionStatus.stable.name())).getCapitalized());
         final boolean deprecated = Boolean
-                .parseBoolean(project.getProperties().getProperty("quarkus.metadata.deprecated", "false"));
+                .parseBoolean(runtimeProject.getProperties().getProperty("quarkus.metadata.deprecated", "false"));
         model.put("deprecated", deprecated);
-        model.put("unlisted", Boolean.parseBoolean(project.getProperties().getProperty("quarkus.metadata.unlisted", "false")));
-        model.put("intro", loadSection(basePath, "intro.adoc", getCharset(), artifactId, project.getDescription()));
-        model.put("standards", loadSection(basePath, "standards.adoc", getCharset(), artifactId, null));
-        model.put("usage", loadSection(basePath, "usage.adoc", getCharset(), artifactId, null));
-        model.put("usageAdvanced", loadSection(basePath, "usage-advanced.adoc", getCharset(), artifactId, null));
-        model.put("configuration", loadSection(basePath, "configuration.adoc", getCharset(), artifactId, null));
-        model.put("limitations", loadSection(basePath, "limitations.adoc", getCharset(), artifactId, null));
+        model.put("unlisted",
+                Boolean.parseBoolean(runtimeProject.getProperties().getProperty("quarkus.metadata.unlisted", "false")));
+        model.put("intro",
+                loadSection(runtimeModuleDir, "intro.adoc", getCharset(), artifactId, runtimeProject.getDescription()));
+        model.put("standards", loadSection(runtimeModuleDir, "standards.adoc", getCharset(), artifactId, null));
+        model.put("usage", loadSection(runtimeModuleDir, "usage.adoc", getCharset(), artifactId, null));
+        model.put("usageAdvanced", loadSection(runtimeModuleDir, "usage-advanced.adoc", getCharset(), artifactId, null));
+        model.put("configuration", loadSection(runtimeModuleDir, "configuration.adoc", getCharset(), artifactId, null));
+        model.put("limitations", loadSection(runtimeModuleDir, "limitations.adoc", getCharset(), artifactId, null));
         model.put("configOptions",
-                listConfigOptions(basePath, multiModuleProjectDirectory.toPath(), ownLinkRe, configOptionExcludeRes,
+                listConfigOptions(runtimeModuleDir, deploymentModuleDir, multiModuleProjectDirectory.toPath(), ownLinkRe,
+                        configOptionExcludeRes,
                         descriptionReplacementRes));
         model.put("toAnchor", new TemplateMethodModelEx() {
             @Override
@@ -248,11 +277,11 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         return project.getProperties().getProperty("cq.name", CqCommonUtils.getNameBase(project.getName()));
     }
 
-    private String getRequiredProperty(String key) {
-        Object val = project.getProperties().get(key);
+    private static String getRequiredProperty(MavenProject runtimeProject, String key) {
+        Object val = runtimeProject.getProperties().get(key);
         if (val == null) {
             throw new IllegalStateException(
-                    "Could not find required property " + key + " in module " + project.getArtifactId());
+                    "Could not find required property " + key + " in module " + runtimeProject.getArtifactId());
         }
         return String.valueOf(val);
     }
@@ -300,10 +329,13 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         }
     }
 
-    static List<ConfigItem> listConfigOptions(Path basePath, Path multiModuleProjectDirectory, Pattern ownLinkRe,
+    static List<ConfigItem> listConfigOptions(
+            Path runtimeModuleDir,
+            Path deploymentModuleDir,
+            Path multiModuleProjectDirectory, Pattern ownLinkRe,
             List<Pattern> configOptionExcludeRes, List<Entry<Pattern, String>> descriptionReplacementRes) {
 
-        final List<String> configRootClasses = loadConfigRoots(basePath);
+        final List<String> configRootClasses = loadConfigRoots(runtimeModuleDir, deploymentModuleDir);
         if (configRootClasses.isEmpty()) {
             return Collections.emptyList();
         }
@@ -348,24 +380,27 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         return configDocItems.stream()
                 .map(ConfigItem::of)
                 .filter(i -> configOptionExcludeRes.stream().noneMatch(p -> p.matcher(i.getKey()).find()))
-                .peek(i -> System.out.println("==== opt " + i.getKey()))
                 .collect(Collectors.toList());
     }
 
-    static List<String> loadConfigRoots(Path basePath) {
-        final Path configRootsListPath = basePath.resolve("target/classes/META-INF/quarkus-config-roots.list");
-        if (!Files.exists(configRootsListPath)) {
-            return Collections.emptyList();
-        }
-        try (Stream<String> lines = Files.lines(configRootsListPath, StandardCharsets.UTF_8)) {
-            return lines
-                    .map(String::trim)
-                    .filter(l -> !l.isEmpty())
-                    .map(l -> l.replace('$', '.'))
-                    .collect(Collectors.toList());
-        } catch (IOException e) {
-            throw new RuntimeException("Could not read from " + configRootsListPath, e);
-        }
+    static List<String> loadConfigRoots(Path... basePath) {
+        final List<String> result = new ArrayList<>();
+        Stream.of(basePath)
+                .map(p -> p.resolve("target/classes/META-INF/quarkus-config-roots.list"))
+                .filter(Files::exists)
+                .forEach(configRootsListPath -> {
+
+                    try (Stream<String> lines = Files.lines(configRootsListPath, StandardCharsets.UTF_8)) {
+                        lines
+                                .map(String::trim)
+                                .filter(l -> !l.isEmpty())
+                                .map(l -> l.replace('$', '.'))
+                                .forEach(result::add);
+                    } catch (IOException e) {
+                        throw new RuntimeException("Could not read from " + configRootsListPath, e);
+                    }
+                });
+        return Collections.unmodifiableList(result);
     }
 
     public static class ConfigItem {
