@@ -152,6 +152,11 @@ public class PlatformOverridesMojo extends AbstractMojo {
                 if (overrideGuide) {
                     md.put("guide", product.getExtensionDocPageUrl(ga));
                 }
+
+                if (redhatSupportLevel.equals("supported-in-jvm")) {
+                    extModel.put("unlisted", "false");
+                }
+
                 extModel.put("metadata", md);
 
                 extensions.add(extModel);
