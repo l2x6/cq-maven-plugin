@@ -275,7 +275,7 @@ public class TransitiveDependenciesMojo {
                     final Ga depGa = new Ga(dep.getGroupId(), dep.getArtifactId());
                     if (!allTransitiveGas.contains(depGa)) {
                         final Set<Ga> gaSet = bomModel.getGasWithVersionProperty(dep.getVersion());
-                        if (prodTransitiveGas.stream().anyMatch(gaSet::contains)) {
+                        if (prodTransitiveGas.stream().anyMatch(gaSet::contains) && !"test".equals(dep.getScope())) {
                             prodTransitiveGas.add(depGa);
                             log.debug("   - BOM entry mappable to an otherwise productized group: " + depGa);
                         } else if (allTransitiveGas.stream().anyMatch(gaSet::contains)) {
