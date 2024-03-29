@@ -41,6 +41,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.lang.model.SourceVersion;
 import org.apache.camel.tooling.model.ArtifactModel;
+import org.apache.camel.tooling.model.Kind;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.logging.Log;
 import org.l2x6.cq.common.ExtensionStatus;
@@ -167,7 +168,7 @@ public class CqUtils {
             Path rootDir,
             Log log,
             List<String> errors) {
-        final String kind;
+        final Kind kind;
         if (models.isEmpty()) {
             if (!unlisted) {
                 log.debug(artifactIdBase + ": found zero models");

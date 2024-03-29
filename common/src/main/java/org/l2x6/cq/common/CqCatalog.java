@@ -27,19 +27,22 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.camel.catalog.CamelCatalog;
 import org.apache.camel.catalog.DefaultCamelCatalog;
 import org.apache.camel.catalog.DefaultRuntimeProvider;
 import org.apache.camel.catalog.DefaultVersionManager;
-import org.apache.camel.catalog.Kind;
 import org.apache.camel.catalog.RuntimeProvider;
 import org.apache.camel.catalog.impl.CatalogHelper;
 import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.camel.tooling.model.BaseModel;
 import org.apache.camel.tooling.model.ComponentModel;
 import org.apache.camel.tooling.model.EipModel;
+import org.apache.camel.tooling.model.Kind;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
@@ -141,17 +144,40 @@ public class CqCatalog {
                 .flatMap(kind -> models(kind));
     }
 
-    public Stream<ArtifactModel<?>> models(org.apache.camel.catalog.Kind kind) {
-        return catalog.findNames(kind).stream().map(name -> (ArtifactModel<?>) catalog.model(kind, name));
+    public Stream<ArtifactModel<?>> models(Kind kind) {
+        return findNames(kind).stream().map(name -> (ArtifactModel<?>) model(kind, name));
+    }
+
+    // TODO: remove once https://github.com/apache/camel/pull/13665 reaches us
+    List<String> findNames(Kind kind) {
+        switch (kind) {
+        case model:
+            return catalog.findModelNames();
+        default:
+            return catalog.findNames(kind);
+        }
+    }
+
+    // TODO: remove once https://github.com/apache/camel/pull/13665 reaches us
+    BaseModel<?> model(Kind kind, String name) {
+        System.out.println("== kind " + kind);
+        switch (kind) {
+        case bean:
+            return catalog.pojoBeanModel(name);
+        case model:
+            return catalog.eipModel(name);
+        default:
+            return catalog.model(kind, name);
+        }
     }
 
     public Stream<EipModel> eips() {
         return catalog.findNames(Kind.eip).stream().map(name -> catalog.eipModel(name));
     }
 
-    public static Stream<org.apache.camel.catalog.Kind> kinds() {
-        return Stream.of(org.apache.camel.catalog.Kind.values())
-                .filter(kind -> kind != org.apache.camel.catalog.Kind.eip);
+    public static Stream<Kind> kinds() {
+        return Stream.of(Kind.values())
+                .filter(kind -> kind != Kind.eip && kind != Kind.model);
     }
 
     /**
@@ -210,10 +236,23 @@ public class CqCatalog {
         private static final String DATAFORMAT_DIR = CQ_CATALOG_DIR + "/dataformats";
         private static final String LANGUAGE_DIR = CQ_CATALOG_DIR + "/languages";
         private static final String OTHER_DIR = CQ_CATALOG_DIR + "/others";
+        private static final String DEV_CONSOLE_DIR = CQ_CATALOG_DIR + "/dev-consoles";
+        private static final String POJO_BEAN_DIR = CQ_CATALOG_DIR + "/beans";
+        private static final String TRANSFORMER_DIR = CQ_CATALOG_DIR + "/transformers";
+
         private static final String COMPONENTS_CATALOG = CQ_CATALOG_DIR + "/components.properties";
         private static final String DATA_FORMATS_CATALOG = CQ_CATALOG_DIR + "/dataformats.properties";
         private static final String LANGUAGE_CATALOG = CQ_CATALOG_DIR + "/languages.properties";
         private static final String OTHER_CATALOG = CQ_CATALOG_DIR + "/others.properties";
+        private static final String DEV_CONSOLE_CATALOG = CQ_CATALOG_DIR + "/dev-consoles.properties";
+        private static final String POJO_BEAN_CATALOG = CQ_CATALOG_DIR + "/beans.properties";
+        private static final String TRANSFORMER_CATALOG = CQ_CATALOG_DIR + "/transformers.properties";
+
+        private static final String CAPABILITIES_CATALOG = null;
+
+        private static final String DEV_CONSOLES_CATALOG = null;
+
+        private static final String TRANSFORMERS_CATALOG = null;
 
         private CamelCatalog camelCatalog;
 
@@ -266,68 +305,72 @@ public class CqCatalog {
             return OTHER_DIR;
         }
 
-        protected String getComponentsCatalog() {
-            return COMPONENTS_CATALOG;
+        @Override
+        public String getDevConsoleJSonSchemaDirectory() {
+            return DEV_CONSOLE_DIR;
         }
 
-        protected String getDataFormatsCatalog() {
-            return DATA_FORMATS_CATALOG;
+        @Override
+        public String getPojoBeanJSonSchemaDirectory() {
+            return POJO_BEAN_DIR;
         }
 
-        protected String getLanguageCatalog() {
-            return LANGUAGE_CATALOG;
-        }
-
-        protected String getOtherCatalog() {
-            return OTHER_CATALOG;
+        @Override
+        public String getTransformerJSonSchemaDirectory() {
+            return TRANSFORMER_DIR;
         }
 
         @Override
         public List<String> findComponentNames() {
-            List<String> names = new ArrayList<>();
-            InputStream is = getCamelCatalog().getVersionManager().getResourceAsStream(getComponentsCatalog());
-            if (is != null) {
-                try {
-                    CatalogHelper.loadLines(is, names);
-                } catch (IOException e) {
-                    // ignore
-                }
-            }
-            return names;
+            return findNames(COMPONENTS_CATALOG);
         }
 
         @Override
         public List<String> findDataFormatNames() {
-            List<String> names = new ArrayList<>();
-            InputStream is = getCamelCatalog().getVersionManager().getResourceAsStream(getDataFormatsCatalog());
-            if (is != null) {
-                try {
-                    CatalogHelper.loadLines(is, names);
-                } catch (IOException e) {
-                    // ignore
-                }
-            }
-            return names;
+            return findNames(DATA_FORMATS_CATALOG);
         }
 
         @Override
         public List<String> findLanguageNames() {
-            List<String> names = new ArrayList<>();
-            InputStream is = getCamelCatalog().getVersionManager().getResourceAsStream(getLanguageCatalog());
-            if (is != null) {
-                try {
-                    CatalogHelper.loadLines(is, names);
-                } catch (IOException e) {
-                    // ignore
-                }
-            }
-            return names;
+            return findNames(LANGUAGE_CATALOG);
         }
 
         @Override
         public List<String> findOtherNames() {
+            return findNames(OTHER_CATALOG);
+        }
+
+        @Override
+        public List<String> findBeansNames() {
+            return findNames(POJO_BEAN_CATALOG);
+        }
+
+        @Override
+        public Map<String, String> findCapabilities() {
+            final Properties properties = new Properties();
+
+            try (InputStream is = getCamelCatalog().getVersionManager().getResourceAsStream(CAPABILITIES_CATALOG)) {
+                properties.load(is);
+            } catch (IOException e) {
+                // ignore
+            }
+
+            return new TreeMap<>((Map<String, String>) (Map) properties);
+        }
+
+        @Override
+        public List<String> findDevConsoleNames() {
+            return findNames(DEV_CONSOLES_CATALOG);
+        }
+
+        @Override
+        public List<String> findTransformerNames() {
+            return findNames(TRANSFORMERS_CATALOG);
+        }
+
+        List<String> findNames(String path) {
             List<String> names = new ArrayList<>();
-            InputStream is = getCamelCatalog().getVersionManager().getResourceAsStream(getOtherCatalog());
+            InputStream is = getCamelCatalog().getVersionManager().getResourceAsStream(path);
             if (is != null) {
                 try {
                     CatalogHelper.loadLines(is, names);
@@ -339,7 +382,7 @@ public class CqCatalog {
         }
     }
 
-    public BaseModel<?> load(org.apache.camel.catalog.Kind kind, String name) {
+    public BaseModel<?> load(Kind kind, String name) {
         return catalog.model(kind, name);
     }
 

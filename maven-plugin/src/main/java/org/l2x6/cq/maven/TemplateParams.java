@@ -26,6 +26,7 @@ import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.camel.tooling.model.ArtifactModel;
+import org.apache.camel.tooling.model.Kind;
 import org.l2x6.cq.common.ExtensionStatus;
 import org.l2x6.pom.tuner.model.Gavtcs;
 
@@ -55,7 +56,7 @@ public class TemplateParams {
     private final List<String> keywords;
     private final String guideUrl;
     private final List<String> categories;
-    private final String kind;
+    private final Kind kind;
     private final List<ArtifactModel<?>> models;
     private final ExtensionStatus status;
     private final TemplateMethodModelEx toCapCamelCase = new TemplateMethodModelEx() {
@@ -208,7 +209,7 @@ public class TemplateParams {
         return categories;
     }
 
-    public String getKind() {
+    public Kind getKind() {
         return kind;
     }
 
@@ -264,7 +265,7 @@ public class TemplateParams {
         private Collection<String> keywords = new ArrayList<>();
         private String guideUrl;
         private List<String> categories = new ArrayList<>();
-        private String kind;
+        private Kind kind;
         private List<ArtifactModel<?>> models = new ArrayList<>();
         private boolean unlisted;
         private boolean deprecated = false;
@@ -394,7 +395,7 @@ public class TemplateParams {
             return this;
         }
 
-        public Builder kind(String kind) {
+        public Builder kind(Kind kind) {
             this.kind = kind;
             return this;
         }
