@@ -58,10 +58,10 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import org.apache.camel.catalog.Kind;
 import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.camel.tooling.model.BaseModel;
 import org.apache.camel.tooling.model.EipModel;
+import org.apache.camel.tooling.model.Kind;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -467,10 +467,9 @@ public class SyncExtensionListMojo extends AbstractMojo {
                     }
                 }
                 row.setNativeSupport(nativeSupport);
-                final String kind = model.getKind();
-                row.set(Column.Kind, kind);
-                final Kind k = Kind.valueOf(model.getKind());
-                nativeSupportsMap.get(k).put(scheme, nativeSupport);
+                final Kind kind = model.getKind();
+                row.set(Column.Kind, kind.toString());
+                nativeSupportsMap.get(kind).put(scheme, nativeSupport);
             }
 
             final boolean deprecated = (camelModel != null && camelModel.isDeprecated())
