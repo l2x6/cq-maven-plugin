@@ -154,7 +154,7 @@ public class PlatformOverridesMojo extends AbstractMojo {
                 }
 
                 if (redhatSupportLevel.equals("supported-in-jvm")) {
-                    extModel.put("unlisted", "false");
+                    md.put("unlisted", "false");
                 }
 
                 extModel.put("metadata", md);
