@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.TreeMap;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.camel.catalog.CamelCatalog;
@@ -82,6 +83,17 @@ public class CqCatalog {
         }
     }
 
+    static final Predicate<Kind> SUPPORTED_CATALOG_KIND_FILTER = kind -> {
+        return kind.equals(Kind.component) ||
+                kind.equals(Kind.dataformat) ||
+                kind.equals(Kind.language) ||
+                kind.equals(Kind.other);
+    };
+
+    static final Predicate<ArtifactModel> SUPPORTED_CATALOG_MODEL_FILTER = artifactModel -> {
+        return SUPPORTED_CATALOG_KIND_FILTER.test(artifactModel.getKind());
+    };
+
     private final DefaultCamelCatalog catalog;
     protected final Path baseDir;
     private Flavor flavor;
@@ -116,6 +128,7 @@ public class CqCatalog {
     public Stream<ArtifactModel<?>> filterModels(String cqArtifactIdBase) {
         List<String> camelArtifactIds = toCamelArtifactIdBase(cqArtifactIdBase);
         return models()
+                .filter(SUPPORTED_CATALOG_MODEL_FILTER)
                 .filter(model -> camelArtifactIds.contains(model.getArtifactId()));
     }
 
@@ -129,7 +142,7 @@ public class CqCatalog {
                 .collect(Collectors.toList());
         if (models.size() > 1) {
             List<ArtifactModel<?>> componentModels = models.stream()
-                    .filter(m -> m.getKind().equals("component"))
+                    .filter(m -> m.getKind().equals(Kind.component))
                     .collect(Collectors.toList());
             if (componentModels.size() == 1) {
                 /* If there is only one component take that one */
@@ -141,7 +154,13 @@ public class CqCatalog {
 
     public Stream<ArtifactModel<?>> models() {
         return kinds()
-                .flatMap(kind -> models(kind));
+                .filter(kind -> {
+                    return kind.equals(Kind.component) ||
+                            kind.equals(Kind.dataformat) ||
+                            kind.equals(Kind.language) ||
+                            kind.equals(Kind.other);
+                })
+                .flatMap(this::models);
     }
 
     public Stream<ArtifactModel<?>> models(Kind kind) {
@@ -160,7 +179,6 @@ public class CqCatalog {
 
     // TODO: remove once https://github.com/apache/camel/pull/13665 reaches us
     BaseModel<?> model(Kind kind, String name) {
-        System.out.println("== kind " + kind);
         switch (kind) {
         case bean:
             return catalog.pojoBeanModel(name);
@@ -172,7 +190,7 @@ public class CqCatalog {
     }
 
     public Stream<EipModel> eips() {
-        return catalog.findNames(Kind.eip).stream().map(name -> catalog.eipModel(name));
+        return catalog.findNames(Kind.eip).stream().map(catalog::eipModel);
     }
 
     public static Stream<Kind> kinds() {
@@ -193,7 +211,7 @@ public class CqCatalog {
     }
 
     public static boolean isFirstScheme(ArtifactModel<?> model) {
-        if (model.getKind().equals("component")) {
+        if (model.getKind().equals(Kind.component)) {
             final String altSchemes = ((ComponentModel) model).getAlternativeSchemes();
             if (altSchemes == null || altSchemes.isEmpty()) {
                 return true;
@@ -236,7 +254,7 @@ public class CqCatalog {
         private static final String DATAFORMAT_DIR = CQ_CATALOG_DIR + "/dataformats";
         private static final String LANGUAGE_DIR = CQ_CATALOG_DIR + "/languages";
         private static final String OTHER_DIR = CQ_CATALOG_DIR + "/others";
-        private static final String DEV_CONSOLE_DIR = CQ_CATALOG_DIR + "/dev-consoles";
+        private static final String DEV_CONSOLE_DIR = CQ_CATALOG_DIR + "/consoles";
         private static final String POJO_BEAN_DIR = CQ_CATALOG_DIR + "/beans";
         private static final String TRANSFORMER_DIR = CQ_CATALOG_DIR + "/transformers";
 
@@ -244,15 +262,10 @@ public class CqCatalog {
         private static final String DATA_FORMATS_CATALOG = CQ_CATALOG_DIR + "/dataformats.properties";
         private static final String LANGUAGE_CATALOG = CQ_CATALOG_DIR + "/languages.properties";
         private static final String OTHER_CATALOG = CQ_CATALOG_DIR + "/others.properties";
-        private static final String DEV_CONSOLE_CATALOG = CQ_CATALOG_DIR + "/dev-consoles.properties";
+        private static final String DEV_CONSOLE_CATALOG = CQ_CATALOG_DIR + "/consoles.properties";
         private static final String POJO_BEAN_CATALOG = CQ_CATALOG_DIR + "/beans.properties";
         private static final String TRANSFORMER_CATALOG = CQ_CATALOG_DIR + "/transformers.properties";
-
-        private static final String CAPABILITIES_CATALOG = null;
-
-        private static final String DEV_CONSOLES_CATALOG = null;
-
-        private static final String TRANSFORMERS_CATALOG = null;
+        private static final String CAPABILITIES_CATALOG = CQ_CATALOG_DIR + "/capabilities.properties";;
 
         private CamelCatalog camelCatalog;
 
@@ -360,12 +373,12 @@ public class CqCatalog {
 
         @Override
         public List<String> findDevConsoleNames() {
-            return findNames(DEV_CONSOLES_CATALOG);
+            return findNames(DEV_CONSOLE_CATALOG);
         }
 
         @Override
         public List<String> findTransformerNames() {
-            return findNames(TRANSFORMERS_CATALOG);
+            return findNames(TRANSFORMER_CATALOG);
         }
 
         List<String> findNames(String path) {
