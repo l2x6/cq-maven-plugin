@@ -93,7 +93,7 @@
         <google-client.version>1.35.0</google-client.version>
         <google-api-services-sheets.version>v4-rev20240319-2.0.0</google-api-services-sheets.version>
         <gson.version>2.10.1</gson.version>
-        <quarkus.version>3.9.2</quarkus.version>
+        <quarkus.version>3.9.3</quarkus.version>
 
         <camel.version>4.5.0</camel.version>
         <freemarker.version>2.3.32</freemarker.version>
