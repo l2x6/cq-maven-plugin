@@ -456,7 +456,10 @@ public class ProdExcludesMojo extends AbstractMojo {
         final Set<Ga> missingCamelArtifacts = updateBoms(fullTree, expandedIncludesWithAllTests, profiles,
                 requiredCamelArtifacts);
 
-        updateSuperApp(workRoot, product.getProductExtensions().keySet(),
+        updateSuperApp(
+                workRoot,
+                product.getProductExtensions().keySet(),
+                productCxf == null ? Collections.emptySet() : productCxf.getProductExtensions().keySet(),
                 fullTree.getRootModule().getGav().getVersion().asConstant());
 
         /* Uncomment the product module and comment test modules */
@@ -607,7 +610,11 @@ public class ProdExcludesMojo extends AbstractMojo {
                 .replace("${artifactIdBase}", ga.getArtifactId().replace("camel-quarkus-", ""));
     }
 
-    void updateSuperApp(Path workRoot, Set<Ga> requiredExtensions, String version) {
+    void updateSuperApp(
+            Path workRoot,
+            Set<Ga> requiredExtensions,
+            Set<Ga> requiredExtensionsCxf,
+            String version) {
 
         final Path productPomPath = workRoot.resolve("product/pom.xml");
         new PomTransformer(productPomPath, charset, simpleElementWhitespace)
@@ -624,9 +631,14 @@ public class ProdExcludesMojo extends AbstractMojo {
                         Transformation.removeDependencies(null, true, true, gavtcs -> true),
                         (Document document, TransformationContext context) -> {
                             final ContainerElement deps = context.getOrAddContainerElements("dependencies");
-                            requiredExtensions.forEach(ga -> {
-                                deps.addGavtcs(new Gavtcs(ga.getGroupId(), ga.getArtifactId(), null));
-                            });
+
+                            Stream.concat(
+                                    requiredExtensions.stream(),
+                                    requiredExtensionsCxf.stream())
+                                    .sorted()
+                                    .forEach(ga -> {
+                                        deps.addGavtcs(new Gavtcs(ga.getGroupId(), ga.getArtifactId(), null));
+                                    });
                         });
     }
 
