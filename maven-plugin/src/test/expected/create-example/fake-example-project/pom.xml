@@ -1,0 +1,35 @@
+<project>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>camel-quarkus-examples-foo-bar</artifactId>
+    <groupId>org.apache.camel.quarkus.examples</groupId>
+    <version>1.0.0</version>
+
+    <name>Camel Quarkus :: Examples :: Foo Bar</name>
+    <description>Camel Quarkus Example :: Foo Bar</description>
+
+    <properties>
+        <quarkus.platform.version>1.0.0</quarkus.platform.version>
+        <camel-quarkus.platform.version>3.10.0</camel-quarkus.platform.version>
+
+        <quarkus.platform.group-id>io.quarkus</quarkus.platform.group-id>
+        <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
+        <camel-quarkus.platform.group-id>org.apache.camel.quarkus</camel-quarkus.platform.group-id>
+        <camel-quarkus.platform.artifact-id>camel-quarkus-bom</camel-quarkus.platform.artifact-id>
+
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.testTarget>${maven.compiler.target}</maven.compiler.testTarget>
+        <maven.compiler.testSource>${maven.compiler.source}</maven.compiler.testSource>
+
+        <formatter-maven-plugin.version>1.0.0</formatter-maven-plugin.version>
+        <impsort-maven-plugin.version>1.2.0</impsort-maven-plugin.version>
+        <license-maven-plugin.version>1.3.0</license-maven-plugin.version>
+        <maven-compiler-plugin.version>1.4.0</maven-compiler-plugin.version>
+        <maven-jar-plugin.version>1.5.0</maven-jar-plugin.version>
+        <maven-resources-plugin.version>1.6.0</maven-resources-plugin.version>
+        <maven-surefire-plugin.version>1.7.0</maven-surefire-plugin.version>
+    </properties>
+</project>
