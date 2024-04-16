@@ -358,6 +358,7 @@ limitations under the License.</inlineHeader>
                             <exclude>**/*-template-pom.xml</exclude>
                             <exclude>**/*-template.txt</exclude>
                             <exclude>**/create-extension-templates/*</exclude>
+                            <exclude>**/create-example-templates/*</exclude>
                             <exclude>**/README.*</exclude>
                             <exclude>**/.gitkeep</exclude>
                             <exclude>.gitattributes/</exclude>
