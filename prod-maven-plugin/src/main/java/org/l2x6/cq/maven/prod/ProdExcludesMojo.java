@@ -630,7 +630,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                         Transformation.addOrSetProperty("enforcer.skip", "false"),
                         Transformation.removeDependencies(null, true, true, gavtcs -> true),
                         (Document document, TransformationContext context) -> {
-                            final ContainerElement deps = context.getOrAddContainerElements("dependencies");
+                            ContainerElement deps = context.getOrAddContainerElements("dependencies");
 
                             Stream.concat(
                                     requiredExtensions.stream(),
@@ -639,6 +639,44 @@ public class ProdExcludesMojo extends AbstractMojo {
                                     .forEach(ga -> {
                                         deps.addGavtcs(new Gavtcs(ga.getGroupId(), ga.getArtifactId(), null));
                                     });
+
+                            /* Enforcer setup with allow-findbugs.xsl */
+                            final ContainerElement plugin = context.getOrAddContainerElements("build", "plugins", "plugin");
+                            plugin.addChildTextElement("groupId", "org.apache.maven.plugins");
+                            plugin.addChildTextElement("artifactId", "maven-enforcer-plugin");
+
+                            final ContainerElement pluginDeps = plugin.addChildContainerElement("dependencies");
+                            pluginDeps.addGavtcs(new Gavtcs("io.quarkus", "quarkus-enforcer-rules", "${quarkus.version}"));
+                            pluginDeps.addGavtcs(
+                                    new Gavtcs("org.l2x6.cq", "cq-filtered-external-enforcer-rules", "${cq-plugin.version}"));
+
+                            final ContainerElement execution = plugin.addChildContainerElement("executions")
+                                    .addChildContainerElement("execution");
+                            execution.addChildTextElement("id", "camel-quarkus-enforcer-rules");
+                            execution.addChildContainerElement("goals").addChildTextElement("goal", "enforce");
+
+                            final ContainerElement rules = execution.addChildContainerElement("configuration")
+                                    .addChildContainerElement("rules");
+                            rules.addChildContainerElement("dependencyConvergence");
+                            {
+                                final ContainerElement filtered = rules.addChildContainerElement("filteredExternalRules");
+                                filtered.addChildTextElement("location",
+                                        "classpath:enforcer-rules/quarkus-banned-dependencies.xml");
+                                filtered.addChildTextElement("xsltLocation",
+                                        "${maven.multiModuleProjectDirectory}/tooling/enforcer-rules/quarkus-banned-dependencies.xsl");
+                            }
+                            {
+                                final ContainerElement filtered = rules.addChildContainerElement("filteredExternalRules");
+                                filtered.addChildTextElement("location",
+                                        "${maven.multiModuleProjectDirectory}/tooling/enforcer-rules/camel-quarkus-banned-dependencies.xml");
+                                filtered.addChildTextElement("xsltLocation",
+                                        "${maven.multiModuleProjectDirectory}/tooling/enforcer-rules/allow-findbugs.xsl");
+                            }
+                            {
+                                final ContainerElement filtered = rules.addChildContainerElement("filteredExternalRules");
+                                filtered.addChildTextElement("location",
+                                        "${maven.multiModuleProjectDirectory}/tooling/enforcer-rules/camel-quarkus-banned-dependencies-spring.xml");
+                            }
                         });
     }
 
