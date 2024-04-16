@@ -21,7 +21,7 @@
 
     <groupId>org.l2x6.cq</groupId>
     <artifactId>cq</artifactId>
-    <version>4.7.2-SNAPSHOT</version>
+    <version>4.8.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>CQ</name>
@@ -207,17 +207,17 @@
             <dependency>
                 <groupId>org.l2x6.cq</groupId>
                 <artifactId>cq-common</artifactId>
-                <version>4.7.2-SNAPSHOT</version>
+                <version>4.8.0-SNAPSHOT</version>
             </dependency>
             <dependency>
                 <groupId>org.l2x6.cq</groupId>
                 <artifactId>cq-test-utils</artifactId>
-                <version>4.7.2-SNAPSHOT</version>
+                <version>4.8.0-SNAPSHOT</version>
             </dependency>
             <dependency>
                 <groupId>org.l2x6.cq</groupId>
                 <artifactId>cq-maven-plugin</artifactId>
-                <version>4.7.2-SNAPSHOT</version>
+                <version>4.8.0-SNAPSHOT</version>
             </dependency>
 
             <dependency>
