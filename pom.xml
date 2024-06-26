@@ -85,7 +85,9 @@
         <maven.shared.file-management>3.1.0</maven.shared.file-management>
         <maven.shared.invoker>3.3.0</maven.shared.invoker>
         <maven.shared.utils>3.4.2</maven.shared.utils>
+        <mockito.version>4.11.0</mockito.version>
         <pom-tuner.version>4.3.0</pom-tuner.version>
+        <javax.inject.version>1</javax.inject.version>
         <jdom2.version>2.0.6.1</jdom2.version>
         <jgit.version>6.10.0.202406032230-r</jgit.version>
         <junit.version>5.10.2</junit.version>
@@ -121,6 +123,7 @@
         <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
         <maven-surefire-plugin.version>3.3.0</maven-surefire-plugin.version>
         <nexus-staging-maven-plugin.version>1.7.0</nexus-staging-maven-plugin.version>
+        <sisu-maven-plugin.version>0.9.0.M1</sisu-maven-plugin.version>
         <site-maven-plugin.version>0.12</site-maven-plugin.version>
 
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -191,6 +194,11 @@
                 <artifactId>quarkus-extension-processor</artifactId>
                 <version>${quarkus.version}</version>
             </dependency>
+            <dependency>
+                <groupId>javax.inject</groupId>
+                <artifactId>javax.inject</artifactId>
+                <version>${javax.inject.version}</version>
+            </dependency>
 
             <dependency>
                 <groupId>org.apache.camel</groupId>
@@ -218,6 +226,17 @@
                 <groupId>org.l2x6.cq</groupId>
                 <artifactId>cq-maven-plugin</artifactId>
                 <version>4.8.1-SNAPSHOT</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <version>${mockito.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-junit-jupiter</artifactId>
+                <version>${mockito.version}</version>
             </dependency>
 
             <dependency>
