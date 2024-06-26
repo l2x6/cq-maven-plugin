@@ -14,14 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.maven.plugins.enforcer;
+package org.l2x6.cq.enforcer.ext.rules;
 
-import org.apache.maven.enforcer.rule.api.EnforcerRule;
+import javax.inject.Inject;
+import javax.inject.Named;
+import org.apache.maven.execution.MavenSession;
+import org.apache.maven.plugin.MojoExecution;
+import org.apache.maven.plugin.PluginParameterExpressionEvaluator;
 
-public class EnforcerDescriptor {
-    EnforcerRule[] rules;
+/**
+ * A configured {@code ExpressionEvaluator} used by rules.
+ *
+ * @author Slawomir Jaranowski
+ * @since  3.2.0
+ */
+@Named
+public class CqExpressionEvaluator extends PluginParameterExpressionEvaluator {
 
-    public EnforcerRule[] getRules() {
-        return rules;
+    @Inject
+    public CqExpressionEvaluator(MavenSession session, MojoExecution mojoExecution) {
+        super(session, mojoExecution);
     }
 }
