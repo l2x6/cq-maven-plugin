@@ -26,7 +26,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
-import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -110,9 +109,12 @@ public class AwaitReleaseMojo extends AbstractExtensionListMojo {
         int verifiedUriCount = 0;
         while (!remotePaths.isEmpty()) {
 
-            Iterator<String> it = remotePaths.iterator();
-            while (it.hasNext()) {
-                final String uri = it.next();
+            while (!remotePaths.isEmpty()) {
+                int randomIndex = remotePaths.size() == 1 ? 0 : (int) Math.round((Math.random() * (double) remotePaths.size()));
+                if (randomIndex >= remotePaths.size()) {
+                    continue;
+                }
+                final String uri = remotePaths.get(randomIndex);
                 final HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(uri))
                         .build();
@@ -120,10 +122,14 @@ public class AwaitReleaseMojo extends AbstractExtensionListMojo {
                     HttpResponse<String> response = httpClient.send(request, BodyHandlers.ofString());
                     final int statusCode = response.statusCode();
                     if (statusCode == 200) {
-                        it.remove();
+                        remotePaths.remove(randomIndex);
                         verifiedUriCount++;
                     }
                     getLog().info("" + verifiedUriCount + "/" + uriCount + " Got " + statusCode + " for " + uri);
+                    if (statusCode != 200) {
+                        /* Do not iterate over the rest of the list once we have got a non-200 */
+                        break;
+                    }
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 } catch (InterruptedException e) {
