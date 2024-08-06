@@ -589,7 +589,7 @@ limitations under the License.</inlineHeader>
                         <autoDropAfterRelease>false</autoDropAfterRelease>
                         <keepStagingRepositoryOnFailure>true</keepStagingRepositoryOnFailure>
                         <keepStagingRepositoryOnCloseRuleFailure>true</keepStagingRepositoryOnCloseRuleFailure>
-                        <stagingProgressTimeoutMinutes>25</stagingProgressTimeoutMinutes>
+                        <stagingProgressTimeoutMinutes>60</stagingProgressTimeoutMinutes>
                     </configuration>
                 </plugin>
 
