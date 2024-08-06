@@ -213,7 +213,7 @@ public class TransitiveDependenciesMojo {
         final DependencyCollector collector = new DependencyCollector(
                 product.getTransitiveDependencyReplacements(),
                 product.getIgnoredTransitiveDependencies());
-        collect(bomModel, collector, bomModel.getConstraints());
+        collect(bomModel, collector, readConstraints());
 
         final Set<Ga> allTransitiveGas = toGas(collector.allTransitives);
         final Set<Ga> prodTransitiveGas = toGas(collector.prodTransitives);
@@ -584,7 +584,6 @@ public class TransitiveDependenciesMojo {
 
     static class BomModel {
         private final Map<Ga, EntryPointInfo> resolutionEntryPoints;
-        private final List<Dependency> constraints;
         private final Map<Ga, String> constraintGas;
         private final Map<String, Set<Ga>> versionProperty2Gas;
         private final List<org.apache.maven.model.Dependency> rawConstraints;
@@ -614,7 +613,6 @@ public class TransitiveDependenciesMojo {
             final Map<Ga, List<Dependency>> additionalDependencies = new LinkedHashMap<>();
 
             final Map<Ga, String> gaConstraints = new LinkedHashMap<>();
-            final List<Dependency> constraints = new ArrayList<>();
 
             model.getDependencyManagement().getDependencies().stream()
                     .filter(dep -> !"import".equals(dep.getScope()))
@@ -667,7 +665,6 @@ public class TransitiveDependenciesMojo {
 
             return new BomModel(
                     Collections.unmodifiableMap(resolutionEntryPoints),
-                    Collections.unmodifiableList(constraints),
                     Collections.unmodifiableMap(gaConstraints),
                     Collections.unmodifiableMap(versionProperty2Gas),
                     Collections.unmodifiableList(rawModel.getDependencyManagement().getDependencies()));
@@ -680,12 +677,10 @@ public class TransitiveDependenciesMojo {
 
         private BomModel(
                 Map<Ga, EntryPointInfo> resolutionEntryPoints,
-                List<Dependency> constraints,
                 Map<Ga, String> gaConstraints,
                 Map<String, Set<Ga>> versionProperty2Gas,
                 List<org.apache.maven.model.Dependency> rawConstraints) {
             this.resolutionEntryPoints = resolutionEntryPoints;
-            this.constraints = constraints;
             this.constraintGas = gaConstraints;
             this.versionProperty2Gas = versionProperty2Gas;
             this.rawConstraints = rawConstraints;
@@ -693,10 +688,6 @@ public class TransitiveDependenciesMojo {
 
         public boolean isManaged(Ga ga) {
             return constraintGas.keySet().contains(ga);
-        }
-
-        public List<Dependency> getConstraints() {
-            return constraints;
         }
 
         public Set<Ga> getGasWithVersionProperty(String versionProperty) {
