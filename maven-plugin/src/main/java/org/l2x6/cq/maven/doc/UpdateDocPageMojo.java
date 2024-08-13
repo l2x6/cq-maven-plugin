@@ -16,16 +16,19 @@
  */
 package org.l2x6.cq.maven.doc;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import freemarker.template.Configuration;
 import freemarker.template.TemplateMethodModelEx;
 import freemarker.template.TemplateModelException;
-import io.quarkus.annotation.processor.Constants;
-import io.quarkus.annotation.processor.generate_doc.ConfigDocItem;
-import io.quarkus.annotation.processor.generate_doc.ConfigDocKey;
-import io.quarkus.annotation.processor.generate_doc.DocGeneratorUtil;
-import io.quarkus.annotation.processor.generate_doc.FsMap;
+import io.quarkus.annotation.processor.documentation.config.merger.JavadocMerger;
+import io.quarkus.annotation.processor.documentation.config.merger.JavadocRepository;
+import io.quarkus.annotation.processor.documentation.config.merger.MergedModel;
+import io.quarkus.annotation.processor.documentation.config.merger.ModelMerger;
+import io.quarkus.annotation.processor.documentation.config.model.AbstractConfigItem;
+import io.quarkus.annotation.processor.documentation.config.model.ConfigProperty;
+import io.quarkus.annotation.processor.documentation.config.model.ConfigRoot;
+import io.quarkus.annotation.processor.documentation.config.model.Extension;
+import io.quarkus.annotation.processor.documentation.config.model.JavadocElements.JavadocElement;
+import io.quarkus.annotation.processor.documentation.config.util.Types;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.nio.charset.Charset;
@@ -33,6 +36,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.Normalizer;
+import java.time.Duration;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -40,6 +44,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -67,6 +73,8 @@ import org.l2x6.cq.maven.doc.processor.SectionIdPostProcessor;
 @Mojo(name = UpdateDocPageMojo.UPDATE_DOC_PAGE, threadSafe = true)
 public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
     static final String UPDATE_DOC_PAGE = "update-doc-page";
+    private static final String TOOLTIP_MACRO = "tooltip:%s[%s]";
+    private static final String MORE_INFO_ABOUT_TYPE_FORMAT = "link:#%s[icon:question-circle[title=More information about the %s format]]";
 
     private static final DocumentationPostProcessor[] documentationPostProcessors = {
             new AppendNewLinePostProcessor(),
@@ -206,7 +214,7 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         model.put("configuration", loadSection(runtimeModuleDir, "configuration.adoc", getCharset(), artifactId, null));
         model.put("limitations", loadSection(runtimeModuleDir, "limitations.adoc", getCharset(), artifactId, null));
         model.put("configOptions",
-                listConfigOptions(runtimeModuleDir, deploymentModuleDir, multiModuleProjectDirectory.toPath(), ownLinkRe,
+                listConfigOptions(runtimeModuleDir, deploymentModuleDir, ownLinkRe,
                         configOptionExcludeRes,
                         descriptionReplacementRes));
         model.put("toAnchor", new TemplateMethodModelEx() {
@@ -332,39 +340,43 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
     static List<ConfigItem> listConfigOptions(
             Path runtimeModuleDir,
             Path deploymentModuleDir,
-            Path multiModuleProjectDirectory, Pattern ownLinkRe,
-            List<Pattern> configOptionExcludeRes, List<Entry<Pattern, String>> descriptionReplacementRes) {
+            Pattern ownLinkRe,
+            List<Pattern> configOptionExcludeRes,
+            List<Entry<Pattern, String>> descriptionReplacementRes) {
 
-        final List<String> configRootClasses = loadConfigRoots(runtimeModuleDir, deploymentModuleDir);
-        if (configRootClasses.isEmpty()) {
-            return Collections.emptyList();
-        }
-        final Path configRootsModelsDir = multiModuleProjectDirectory
-                .resolve("target/asciidoc/generated/config/all-configuration-roots-generated-doc");
-        if (!Files.exists(configRootsModelsDir)) {
-            throw new IllegalStateException("You should run " + UpdateDocPageMojo.class.getSimpleName()
-                    + " after compilation with io.quarkus.annotation.processor.ExtensionAnnotationProcessor");
-        }
-        final FsMap configRootsModels = new FsMap(configRootsModelsDir);
+        final List<ConfigProperty> result = new ArrayList<>();
 
-        final ObjectMapper mapper = new ObjectMapper();
-        final List<ConfigDocItem> configDocItems = new ArrayList<>();
-        for (String configRootClass : configRootClasses) {
-            final String rawModel = configRootsModels.get(configRootClass);
-            if (rawModel == null) {
-                throw new IllegalStateException("Could not find " + configRootClass + " in " + configRootsModelsDir);
-            }
-            try {
-                final List<ConfigDocItem> items = mapper.readValue(rawModel, Constants.LIST_OF_CONFIG_ITEMS_TYPE_REF);
-                configDocItems.addAll(items);
-            } catch (JsonProcessingException e) {
-                throw new RuntimeException("Could not parse " + rawModel, e);
+        final List<Path> targetDirectories = Stream.of(runtimeModuleDir, deploymentModuleDir)
+                .map(p -> p.resolve("target"))
+                .filter(Files::isDirectory)
+                .collect(Collectors.toList());
+
+        final JavadocRepository javadocRepository = JavadocMerger.mergeJavadocElements(targetDirectories);
+        final MergedModel mergedModel = ModelMerger.mergeModel(targetDirectories);
+        for (Entry<Extension, Map<String, ConfigRoot>> extensionConfigRootsEntry : mergedModel.getConfigRoots().entrySet()) {
+            for (Entry<String, ConfigRoot> configRootEntry : extensionConfigRootsEntry.getValue().entrySet()) {
+                final ConfigRoot configRoot = configRootEntry.getValue();
+                for (AbstractConfigItem configItem : configRoot.getItems()) {
+                    if (configItem instanceof ConfigProperty) {
+                        result.add((ConfigProperty) configItem);
+                    }
+                }
             }
         }
-        if (!descriptionReplacementRes.isEmpty() || ownLinkRe != null) {
-            for (ConfigDocItem configDocItem : configDocItems) {
-                ConfigDocKey k = configDocItem.getConfigDocKey();
-                String newVal = k.getConfigDoc();
+        for (Entry<String, ConfigRoot> configRootEntry : mergedModel.getConfigRootsInSpecificFile().entrySet()) {
+            final ConfigRoot configRoot = configRootEntry.getValue();
+            for (AbstractConfigItem configItem : configRoot.getItems()) {
+                if (configItem instanceof ConfigProperty) {
+                    result.add((ConfigProperty) configItem);
+                }
+            }
+        }
+
+        Collections.sort(result);
+
+        Function<String, String> descriptionTransformer = origDescription -> {
+            String newVal = origDescription;
+            if (!descriptionReplacementRes.isEmpty() || ownLinkRe != null) {
                 if (!descriptionReplacementRes.isEmpty()) {
                     for (Entry<Pattern, String> en : descriptionReplacementRes) {
                         newVal = en.getKey().matcher(newVal).replaceAll(en.getValue());
@@ -373,34 +385,14 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
                 if (ownLinkRe != null) {
                     newVal = ownLinkRe.matcher(newVal).replaceAll("xref:$1.adoc");
                 }
-                k.setConfigDoc(newVal);
             }
-        }
-        DocGeneratorUtil.sort(configDocItems);
-        return configDocItems.stream()
-                .map(ConfigItem::of)
+            return newVal;
+        };
+
+        return result.stream()
+                .map(cp -> ConfigItem.of(cp, javadocRepository, descriptionTransformer))
                 .filter(i -> configOptionExcludeRes.stream().noneMatch(p -> p.matcher(i.getKey()).find()))
                 .collect(Collectors.toList());
-    }
-
-    static List<String> loadConfigRoots(Path... basePath) {
-        final List<String> result = new ArrayList<>();
-        Stream.of(basePath)
-                .map(p -> p.resolve("target/classes/META-INF/quarkus-config-roots.list"))
-                .filter(Files::exists)
-                .forEach(configRootsListPath -> {
-
-                    try (Stream<String> lines = Files.lines(configRootsListPath, StandardCharsets.UTF_8)) {
-                        lines
-                                .map(String::trim)
-                                .filter(l -> !l.isEmpty())
-                                .map(l -> l.replace('$', '.'))
-                                .forEach(result::add);
-                    } catch (IOException e) {
-                        throw new RuntimeException("Could not read from " + configRootsListPath, e);
-                    }
-                });
-        return Collections.unmodifiableList(result);
     }
 
     public static class ConfigItem {
@@ -414,57 +406,78 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         private final String since;
         private final String environmentVariable;
 
-        public static ConfigItem of(ConfigDocItem configDocItem) {
-            final ConfigDocKey configDocKey = configDocItem.getConfigDocKey();
+        public static ConfigItem of(ConfigProperty configDocItem, JavadocRepository javadocRepository,
+                Function<String, String> descriptionTransformer) {
+            final Optional<JavadocElement> javadoc = javadocRepository
+                    .getElement(configDocItem.getSourceClass(), configDocItem.getSourceName());
+            if (javadoc.isEmpty()) {
+                throw new IllegalStateException("No JavaDoc for " + configDocItem.getPath() + " alias "
+                        + configDocItem.getSourceClass() + "#" + configDocItem.getSourceName());
+            }
+            final String illustration = configDocItem.getPhase().isFixedAtBuildTime() ? "icon:lock[title=Fixed at build time]"
+                    : "";
             return new ConfigItem(
-                    configDocKey.getKey(),
-                    configDocKey.getConfigPhase().getIllustration(),
-                    configDocKey.getConfigDoc(),
-                    typeContent(configDocKey),
-                    configDocKey.getDefaultValue(),
-                    configDocKey.isOptional(),
-                    configDocKey.getSince(),
-                    configDocKey.getEnvironmentVariable());
+                    configDocItem.getPath(),
+                    illustration,
+                    descriptionTransformer.apply(javadoc.get().description()),
+                    typeContent(configDocItem, javadocRepository, true),
+                    configDocItem.getDefaultValue(),
+                    configDocItem.isOptional(),
+                    javadoc.get().since(),
+                    configDocItem.getEnvironmentVariable());
         }
 
-        static String typeContent(ConfigDocKey configDocKey) {
+        static String typeContent(ConfigProperty configProperty, JavadocRepository javadocRepository,
+                boolean enableEnumTooltips) {
             String typeContent = "";
-            if (configDocKey.hasAcceptedValues()) {
-                if (configDocKey.isEnum()) {
-                    typeContent = joinEnumValues(configDocKey.getAcceptedValues());
-                } else {
-                    typeContent = joinAcceptedValues(configDocKey.getAcceptedValues());
+
+            if (configProperty.isEnum() && enableEnumTooltips) {
+                typeContent = joinEnumValues(configProperty, javadocRepository);
+            } else {
+                typeContent = "`" + configProperty.getTypeDescription() + "`";
+                if (configProperty.getJavadocSiteLink() != null) {
+                    typeContent = String.format("link:%s[%s]", configProperty.getJavadocSiteLink(), typeContent);
                 }
-            } else if (configDocKey.hasType()) {
-                typeContent = configDocKey.computeTypeSimpleName();
-                final String javaDocLink = configDocKey.getJavaDocSiteLink();
-                if (!javaDocLink.isEmpty()) {
-                    typeContent = String.format("link:%s[%s]\n", javaDocLink, typeContent);
-                }
-                typeContent = "`" + typeContent + "`";
             }
-            if (configDocKey.isList()) {
+            if (configProperty.isList()) {
                 typeContent = "List of `" + typeContent + "`";
             }
+
+            if (Duration.class.getName().equals(configProperty.getType())) {
+                typeContent += " " + String.format(MORE_INFO_ABOUT_TYPE_FORMAT,
+                        "duration-note-anchor-{summaryTableId}", Duration.class.getSimpleName());
+            } else if (Types.MEMORY_SIZE_TYPE.equals(configProperty.getType())) {
+                typeContent += " " + String.format(MORE_INFO_ABOUT_TYPE_FORMAT,
+                        "memory-size-note-anchor-{summaryTableId}", "MemorySize");
+            }
+
             return typeContent;
         }
 
-        static String joinAcceptedValues(List<String> acceptedValues) {
-            if (acceptedValues == null || acceptedValues.isEmpty()) {
-                return "";
-            }
-
-            return acceptedValues.stream()
-                    .collect(Collectors.joining("`, `", Constants.CODE_DELIMITER, Constants.CODE_DELIMITER));
+        static String joinEnumValues(ConfigProperty configProperty, JavadocRepository javadocRepository) {
+            return configProperty.getEnumAcceptedValues().values().entrySet().stream()
+                    .map(e -> {
+                        Optional<JavadocElement> javadocElement = javadocRepository.getElement(configProperty.getType(),
+                                e.getKey());
+                        if (javadocElement.isEmpty()) {
+                            return "`" + e.getValue().configValue() + "`";
+                        }
+                        return String.format(TOOLTIP_MACRO, e.getValue().configValue(),
+                                cleanTooltipContent(javadocElement.get().description()));
+                    })
+                    .collect(Collectors.joining(", "));
         }
 
-        static String joinEnumValues(List<String> enumValues) {
-            if (enumValues == null || enumValues.isEmpty()) {
-                return Constants.EMPTY;
-            }
-
-            // nested macros are only detected when cell starts with a new line, e.g. a|\n myMacro::[]
-            return String.join(", ", enumValues);
+        /**
+         * Note that this is extremely brittle. Apparently, colons breaks the tooltips but if escaped with \, the \ appears in
+         * the
+         * output.
+         * <p>
+         * We should probably have some warnings/errors as to what is accepted in enum Javadoc.
+         */
+        static String cleanTooltipContent(String tooltipContent) {
+            return tooltipContent.replace("<p>", "").replace("</p>", "").replace("\n+\n", " ").replace("\n", " ")
+                    .replace(":", "\\:").replace("[", "\\]").replace("]", "\\]");
         }
 
         public ConfigItem(String key, String illustration, String configDoc, String type, String defaultValue,
