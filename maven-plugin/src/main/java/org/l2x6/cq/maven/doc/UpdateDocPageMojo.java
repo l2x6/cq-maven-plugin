@@ -213,10 +213,16 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         model.put("usageAdvanced", loadSection(runtimeModuleDir, "usage-advanced.adoc", getCharset(), artifactId, null));
         model.put("configuration", loadSection(runtimeModuleDir, "configuration.adoc", getCharset(), artifactId, null));
         model.put("limitations", loadSection(runtimeModuleDir, "limitations.adoc", getCharset(), artifactId, null));
-        model.put("configOptions",
-                listConfigOptions(runtimeModuleDir, deploymentModuleDir, ownLinkRe,
-                        configOptionExcludeRes,
-                        descriptionReplacementRes));
+        final List<ConfigItem> configOptions = listConfigOptions(
+                runtimeModuleDir,
+                deploymentModuleDir,
+                ownLinkRe,
+                configOptionExcludeRes,
+                descriptionReplacementRes,
+                artifactId);
+        model.put("configOptions", configOptions);
+        model.put("hasDurationOption", configOptions.stream().anyMatch(ConfigItem::isTypeDuration));
+        model.put("hasMemSizeOption", configOptions.stream().anyMatch(ConfigItem::isTypeMemSize));
         model.put("toAnchor", new TemplateMethodModelEx() {
             @Override
             public Object exec(List arguments) throws TemplateModelException {
@@ -342,7 +348,8 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
             Path deploymentModuleDir,
             Pattern ownLinkRe,
             List<Pattern> configOptionExcludeRes,
-            List<Entry<Pattern, String>> descriptionReplacementRes) {
+            List<Entry<Pattern, String>> descriptionReplacementRes,
+            String artifactIdBase) {
 
         final List<ConfigProperty> result = new ArrayList<>();
 
@@ -390,7 +397,7 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         };
 
         return result.stream()
-                .map(cp -> ConfigItem.of(cp, javadocRepository, descriptionTransformer))
+                .map(cp -> ConfigItem.of(cp, javadocRepository, descriptionTransformer, artifactIdBase))
                 .filter(i -> configOptionExcludeRes.stream().noneMatch(p -> p.matcher(i.getKey()).find()))
                 .collect(Collectors.toList());
     }
@@ -401,13 +408,15 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         private final String illustration;
         private final String configDoc;
         private final String type;
+        private final boolean typeDuration;
+        private final boolean typeMemSize;
         private final String defaultValue;
         private final boolean optional;
         private final String since;
         private final String environmentVariable;
 
         public static ConfigItem of(ConfigProperty configDocItem, JavadocRepository javadocRepository,
-                Function<String, String> descriptionTransformer) {
+                Function<String, String> descriptionTransformer, String artifactIdBase) {
             final Optional<JavadocElement> javadoc = javadocRepository
                     .getElement(configDocItem.getSourceClass(), configDocItem.getSourceName());
             if (javadoc.isEmpty()) {
@@ -416,19 +425,22 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
             }
             final String illustration = configDocItem.getPhase().isFixedAtBuildTime() ? "icon:lock[title=Fixed at build time]"
                     : "";
+            final TypeInfo typeInfo = typeContent(configDocItem, javadocRepository, true, artifactIdBase);
             return new ConfigItem(
                     configDocItem.getPath(),
                     illustration,
                     descriptionTransformer.apply(javadoc.get().description()),
-                    typeContent(configDocItem, javadocRepository, true),
+                    typeInfo.description,
+                    typeInfo.isDuration,
+                    typeInfo.isMemSize,
                     configDocItem.getDefaultValue(),
                     configDocItem.isOptional(),
                     javadoc.get().since(),
                     configDocItem.getEnvironmentVariable());
         }
 
-        static String typeContent(ConfigProperty configProperty, JavadocRepository javadocRepository,
-                boolean enableEnumTooltips) {
+        static TypeInfo typeContent(ConfigProperty configProperty, JavadocRepository javadocRepository,
+                boolean enableEnumTooltips, String artifactIdBase) {
             String typeContent = "";
 
             if (configProperty.isEnum() && enableEnumTooltips) {
@@ -443,15 +455,31 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
                 typeContent = "List of `" + typeContent + "`";
             }
 
+            boolean isDuration = false;
+            boolean isMemSize = false;
             if (Duration.class.getName().equals(configProperty.getType())) {
                 typeContent += " " + String.format(MORE_INFO_ABOUT_TYPE_FORMAT,
-                        "duration-note-anchor-{summaryTableId}", Duration.class.getSimpleName());
+                        "duration-note-anchor-" + artifactIdBase, Duration.class.getSimpleName());
+                isDuration = true;
             } else if (Types.MEMORY_SIZE_TYPE.equals(configProperty.getType())) {
                 typeContent += " " + String.format(MORE_INFO_ABOUT_TYPE_FORMAT,
-                        "memory-size-note-anchor-{summaryTableId}", "MemorySize");
+                        "memory-size-note-anchor-" + artifactIdBase, "MemorySize");
+                isMemSize = true;
             }
 
-            return typeContent;
+            return new TypeInfo(typeContent, isDuration, isMemSize);
+        }
+
+        static class TypeInfo {
+            final String description;
+            final boolean isDuration;
+            final boolean isMemSize;
+
+            TypeInfo(String description, boolean isDuration, boolean isMemSize) {
+                this.description = description;
+                this.isDuration = isDuration;
+                this.isMemSize = isMemSize;
+            }
         }
 
         static String joinEnumValues(ConfigProperty configProperty, JavadocRepository javadocRepository) {
@@ -469,7 +497,8 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         }
 
         /**
-         * Note that this is extremely brittle. Apparently, colons breaks the tooltips but if escaped with \, the \ appears in
+         * Note that this is extremely brittle. Apparently, colons breaks the tooltips but if escaped with \, the \
+         * appears in
          * the
          * output.
          * <p>
@@ -480,12 +509,16 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
                     .replace(":", "\\:").replace("[", "\\]").replace("]", "\\]");
         }
 
-        public ConfigItem(String key, String illustration, String configDoc, String type, String defaultValue,
+        public ConfigItem(String key, String illustration, String configDoc,
+                String type, boolean typeDuration, boolean typeMemSize,
+                String defaultValue,
                 boolean optional, String since, String environmentVariable) {
             this.key = key;
             this.illustration = illustration;
             this.configDoc = configDoc;
             this.type = type;
+            this.typeDuration = typeDuration;
+            this.typeMemSize = typeMemSize;
             this.defaultValue = defaultValue;
             this.optional = optional;
             this.since = since;
@@ -506,6 +539,14 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
 
         public String getType() {
             return type;
+        }
+
+        public boolean isTypeDuration() {
+            return typeDuration;
+        }
+
+        public boolean isTypeMemSize() {
+            return typeMemSize;
         }
 
         public String getDefaultValue() {
