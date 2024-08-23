@@ -329,7 +329,7 @@ public class TransitiveDependenciesMojo {
                         : dep.getExclusions().stream()
                                 .map(e -> new org.eclipse.aether.graph.Exclusion(e.getGroupId(),
                                         e.getArtifactId(),
-                                        null, null))
+                                        "*", "*"))
                                 .collect(Collectors.toList()));
     }
 
