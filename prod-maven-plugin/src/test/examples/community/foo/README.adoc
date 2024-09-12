@@ -1,0 +1,21 @@
+= Foo example project
+
+Foo project used in unit testing
+
+==== Deploying to Kubernetes
+
+Some
+fictional
+content
+about
+deploying
+to Kubernetes
+
+==== Deploying to OpenShift
+
+Some
+fictional
+content
+about
+deploying
+to OpenShift

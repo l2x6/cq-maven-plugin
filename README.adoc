@@ -31,6 +31,7 @@ A collection of maven plugins related to https://github.com/apache/camel-quarkus
 
 * camel-prod-excludes-check : Check whether the modules that should not be productized are properly unlinked from Camel source tree based on product/src/main/resources/required-productized-camel-artifacts.txt.
 * camel-prod-excludes : Unlink modules that should not be productized from Camel source tree based on product/src/main/resources/required-productized-camel-artifacts.txt.
+* sync-examples-from-upstream: Synchronizes the jboss-fuse/camel-quarkus-examples product fork with a community camel-quarkus-examples branch
 
 === Usage
 
@@ -62,6 +63,18 @@ mvn org.l2x6.cq:cq-camel-prod-maven-plugin:check-excludes
 ....
 
 From CAMEL_HOME, camel-prod-excludes is used to comment out modules that should not be productized.
+
+*sync-examples-from-upstream*:
+
+The minimal command to sync example projects from upstream is:
+
+....
+mvn org.l2x6.cq:cq-prod-maven-plugin:sync-examples-from-upstream -Dcq.quarkus.platform.version=<the platform version to use> -DsyncToDir=/path/to/example/projects
+....
+
+You can omit the `syncToDir` option if you change into the directory where you want to sync example projects to.
+
+Use `mvn help:describe` to see the full set of parameters.
 
 *cq-camel-prod-maven-plugin* configured in the camel pom.xml :
 
@@ -99,7 +112,6 @@ mvn org.l2x6.cq:cq-camel-prod-maven-plugin:camel-prod-excludes -N
 ....
 
 === Examples
-
 
 == *camel-spring-bot-prod-maven-plugin* : A Maven plugin to perform various tasks related to productized Camel Spring Boot
 
