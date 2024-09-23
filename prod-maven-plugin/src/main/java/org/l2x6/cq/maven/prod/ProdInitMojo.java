@@ -349,13 +349,20 @@ public class ProdInitMojo extends AbstractMojo {
                             .filter(gavtcs -> gavtcs.getGroupId().equals("org.graalvm.js"))
                             .forEach(node -> node.getNode().setVersion("${graalvm-community.version}"));
 
-                    /** Add camel-sap and camel-quarkus-sap dependencies */
+                    /* Add camel-sap and camel-quarkus-sap dependencies */
                     dependencyManagementDeps.addGavtcs(new Gavtcs("org.fusesource", "camel-sap", "${camel-sap.version}",
                             "", "", "", Ga.of("org.eclipse:osgi")));
                     dependencyManagementDeps
                             .addGavtcs(new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-sap", "${camel-quarkus.version}"));
                     dependencyManagementDeps.addGavtcs(
                             new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-sap-deployment", "${camel-quarkus.version}"));
+
+                    /* Add quarkus-artemis-jms and quarkus-artemis-jms-deployment */
+                    dependencyManagementDeps.addGavtcs(
+                            new Gavtcs("io.quarkiverse.artemis", "quarkus-artemis-jms", "${quarkiverse-artemis.version}"));
+                    dependencyManagementDeps.addGavtcs(
+                            new Gavtcs("io.quarkiverse.artemis", "quarkus-artemis-jms-deployment",
+                                    "${quarkiverse-artemis.version}"));
                 });
 
         /* Edit poms/bom-test/pom.xml */
@@ -377,6 +384,12 @@ public class ProdInitMojo extends AbstractMojo {
                             .findFirst()
                             .get();
                     qcxfBomNode.getNode().setVersion("${quarkiverse-cxf-community.version}");
+
+                    /* Remove quarkus-artemis-bom */
+                    Gavtcs artemisBom = new Gavtcs("io.quarkiverse.artemis", "quarkus-artemis-bom",
+                            "${quarkiverse-artemis.version}",
+                            "pom", null, "import");
+                    context.removeManagedDependency(artemisBom, true, true);
                 });
 
         /* Edit extensions-jvm/pom.xml to add sap extension */
