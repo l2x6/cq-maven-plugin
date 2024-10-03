@@ -412,6 +412,7 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         private final boolean typeMemSize;
         private final String defaultValue;
         private final boolean optional;
+        private final boolean deprecated;
         private final String since;
         private final String environmentVariable;
 
@@ -435,6 +436,7 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
                     typeInfo.isMemSize,
                     configDocItem.getDefaultValue(),
                     configDocItem.isOptional(),
+                    configDocItem.isDeprecated(),
                     javadoc.get().since(),
                     configDocItem.getEnvironmentVariable());
         }
@@ -512,7 +514,9 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         public ConfigItem(String key, String illustration, String configDoc,
                 String type, boolean typeDuration, boolean typeMemSize,
                 String defaultValue,
-                boolean optional, String since, String environmentVariable) {
+                boolean optional,
+                boolean deprecated,
+                String since, String environmentVariable) {
             this.key = key;
             this.illustration = illustration;
             this.configDoc = configDoc;
@@ -521,6 +525,7 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
             this.typeMemSize = typeMemSize;
             this.defaultValue = defaultValue;
             this.optional = optional;
+            this.deprecated = deprecated;
             this.since = since;
             this.environmentVariable = environmentVariable;
         }
@@ -563,6 +568,10 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
 
         public String getEnvironmentVariable() {
             return environmentVariable;
+        }
+
+        public boolean isDeprecated() {
+            return deprecated;
         }
     }
 }
