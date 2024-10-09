@@ -738,7 +738,7 @@ public class SyncExamplesFromUpstreamMojo extends AbstractMojo {
         }
 
         public boolean isUnProductized() {
-            return !ignored && !getVersion().contains(".redhat");
+            return !ignored && !getVersion().contains("redhat");
         }
 
         public boolean isIgnored() {
