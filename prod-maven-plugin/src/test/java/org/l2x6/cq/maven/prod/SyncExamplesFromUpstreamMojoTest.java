@@ -47,6 +47,7 @@ import org.l2x6.cq.common.CqCommonUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SyncExamplesFromUpstreamMojoTest {
@@ -110,7 +111,7 @@ class SyncExamplesFromUpstreamMojoTest {
         // pom.xml should be updated with product versions
         Model model = CqCommonUtils.readPom(projectFoo.resolve("pom.xml"), StandardCharsets.UTF_8);
         Properties properties = model.getProperties();
-        assertEquals("3.8.0-redhat-00001", model.getVersion());
+        assertEquals("3.8.0.redhat-00001", model.getVersion());
         assertEquals("com.redhat.quarkus.platform", properties.getProperty("quarkus.platform.group-id"));
         assertEquals("quarkus-bom", properties.getProperty("quarkus.platform.artifact-id"));
         assertEquals(quarkusPlatformVersion, properties.getProperty("quarkus.platform.version"));
@@ -164,6 +165,19 @@ class SyncExamplesFromUpstreamMojoTest {
         // Only OpenShift manifests should remain
         assertFalse(Files.exists(projectFoo.resolve("src/main/resources/kubernetes/kubernetes.yml")));
         assertTrue(Files.exists(projectFoo.resolve("src/main/resources/kubernetes/openshift.yml")));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "3.15.1.redhat-00003", "3.15.1.temporary-redhat-00001", "3.15.1.SP1-temporary-redhat-00001",
+            "3.1-invalid" })
+    void exampleProjectVersion(String camelQuarkusPlatformVersion) {
+        SyncExamplesFromUpstreamMojo mojo = initMojo(camelQuarkusPlatformVersion);
+
+        if (camelQuarkusPlatformVersion.contains("invalid")) {
+            assertThrows(IllegalArgumentException.class, mojo::getCamelQuarkusExamplesVersion);
+        } else {
+            assertEquals("3.15.0.redhat-00001", mojo.getCamelQuarkusExamplesVersion());
+        }
     }
 
     private static SyncExamplesFromUpstreamMojo initMojo(String quarkusPlatformVersion) {

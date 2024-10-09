@@ -677,7 +677,12 @@ public class SyncExamplesFromUpstreamMojo extends AbstractMojo {
     }
 
     String getCamelQuarkusExamplesVersion() {
-        return resolveCamelQuarkusPlatformVersion().substring(0, 3) + ".0-redhat-00001";
+        String cqPlatformVersion = resolveCamelQuarkusPlatformVersion();
+        String[] versionParts = cqPlatformVersion.split("\\.");
+        if (versionParts.length < 3) {
+            throw new IllegalArgumentException("Invalid Camel Quarkus platform version: " + cqPlatformVersion);
+        }
+        return String.join(".", versionParts[0], versionParts[1], "0.redhat-00001");
     }
 
     String getGitHubDownloadBaseUrl() {
