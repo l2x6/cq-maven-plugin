@@ -41,11 +41,13 @@ import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.l2x6.cq.common.CqCommonUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SyncExamplesFromUpstreamMojoTest {
@@ -77,13 +79,15 @@ class SyncExamplesFromUpstreamMojoTest {
         }
     }
 
-    @Test
-    void syncExamples() throws Exception {
-        SyncExamplesFromUpstreamMojo mojo = initMojo();
+    @ParameterizedTest
+    @ValueSource(strings = { "3.8.5.redhat-00003", "3.8.5.temporary-redhat-00003", "3.8.5.SP1-temporary-redhat-00003" })
+    void syncExamples(String quarkusPlatformVersion) throws Exception {
+        SyncExamplesFromUpstreamMojo mojo = initMojo(quarkusPlatformVersion);
 
+        boolean isTemporaryVersion = quarkusPlatformVersion.contains("temporary");
         Map<String, Set<SyncExamplesFromUpstreamMojo.GAV>> projectDependencies = new TreeMap<>();
-        resolveDependencies(EXAMPLE_FOO, projectDependencies);
-        resolveDependencies(EXAMPLE_BAR, projectDependencies);
+        resolveDependencies(EXAMPLE_FOO, projectDependencies, isTemporaryVersion);
+        resolveDependencies(EXAMPLE_BAR, projectDependencies, isTemporaryVersion);
         Files.walkFileTree(UPSTREAM_EXAMPLES_DIR, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
@@ -107,10 +111,10 @@ class SyncExamplesFromUpstreamMojoTest {
         // pom.xml should be updated with product versions
         Model model = CqCommonUtils.readPom(projectFoo.resolve("pom.xml"), StandardCharsets.UTF_8);
         Properties properties = model.getProperties();
-        assertEquals("3.8.0-redhat-00001", model.getVersion());
+        assertEquals("3.8.0.redhat-00001", model.getVersion());
         assertEquals("com.redhat.quarkus.platform", properties.getProperty("quarkus.platform.group-id"));
         assertEquals("quarkus-bom", properties.getProperty("quarkus.platform.artifact-id"));
-        assertEquals("3.8.5.redhat-00003", properties.getProperty("quarkus.platform.version"));
+        assertEquals(quarkusPlatformVersion, properties.getProperty("quarkus.platform.version"));
         assertEquals("${quarkus.platform.group-id}", properties.getProperty("camel-quarkus.platform.group-id"));
         assertEquals("quarkus-camel-bom", properties.getProperty("camel-quarkus.platform.artifact-id"));
         assertEquals("${quarkus.platform.version}", properties.getProperty("camel-quarkus.platform.version"));
@@ -163,9 +167,22 @@ class SyncExamplesFromUpstreamMojoTest {
         assertTrue(Files.exists(projectFoo.resolve("src/main/resources/kubernetes/openshift.yml")));
     }
 
-    private static SyncExamplesFromUpstreamMojo initMojo() {
+    @ParameterizedTest
+    @ValueSource(strings = { "3.15.1.redhat-00003", "3.15.1.temporary-redhat-00001", "3.15.1.SP1-temporary-redhat-00001",
+            "3.1-invalid" })
+    void exampleProjectVersion(String camelQuarkusPlatformVersion) {
+        SyncExamplesFromUpstreamMojo mojo = initMojo(camelQuarkusPlatformVersion);
+
+        if (camelQuarkusPlatformVersion.contains("invalid")) {
+            assertThrows(IllegalArgumentException.class, mojo::getCamelQuarkusExamplesVersion);
+        } else {
+            assertEquals("3.15.0.redhat-00001", mojo.getCamelQuarkusExamplesVersion());
+        }
+    }
+
+    private static SyncExamplesFromUpstreamMojo initMojo(String quarkusPlatformVersion) {
         SyncExamplesFromUpstreamMojo mojo = new SyncExamplesFromUpstreamMojo();
-        mojo.quarkusPlatformVersion = "3.8.5.redhat-00003";
+        mojo.quarkusPlatformVersion = quarkusPlatformVersion;
         mojo.quarkusPlatformGroupId = "com.redhat.quarkus.platform";
         mojo.quarkusPlatformArtifactId = "quarkus-bom";
         mojo.camelQuarkusPlatformArtifactId = "quarkus-camel-bom";
@@ -176,14 +193,15 @@ class SyncExamplesFromUpstreamMojoTest {
     }
 
     private static void resolveDependencies(Path examplesDir,
-            Map<String, Set<SyncExamplesFromUpstreamMojo.GAV>> projectDependencies) {
+            Map<String, Set<SyncExamplesFromUpstreamMojo.GAV>> projectDependencies, boolean isTemporaryVersion) {
+        String versionSuffix = isTemporaryVersion ? ".temporary-redhat-00001" : ".redhat-00001";
         Model model = CqCommonUtils.readPom(examplesDir.resolve("pom.xml"), StandardCharsets.UTF_8);
         projectDependencies.put(examplesDir.getFileName().toString(), model.getDependencies()
                 .stream()
                 .map(dependency -> {
                     String version = dependency.getVersion();
                     if (version == null && !dependency.getArtifactId().equals("camel-quarkus-zookeeper")) {
-                        version = "1.0.0.redhat-00001";
+                        version = "1.0.0" + versionSuffix;
                     }
 
                     Artifact artifact = new DefaultArtifact(
