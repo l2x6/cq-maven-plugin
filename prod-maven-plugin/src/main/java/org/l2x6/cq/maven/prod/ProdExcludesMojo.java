@@ -646,7 +646,8 @@ public class ProdExcludesMojo extends AbstractMojo {
                             plugin.addChildTextElement("artifactId", "maven-enforcer-plugin");
 
                             final ContainerElement pluginDeps = plugin.addChildContainerElement("dependencies");
-                            pluginDeps.addGavtcs(new Gavtcs("io.quarkus", "quarkus-enforcer-rules", "${quarkus.version}"));
+                            pluginDeps.addGavtcs(
+                                    new Gavtcs("io.quarkus", "quarkus-enforcer-rules", "${quarkus-community.version}"));
                             pluginDeps.addGavtcs(
                                     new Gavtcs("org.l2x6.cq", "cq-filtered-external-enforcer-rules", "${cq-plugin.version}"));
 

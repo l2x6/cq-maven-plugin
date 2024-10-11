@@ -56,7 +56,7 @@
                     <dependency>
                         <groupId>io.quarkus</groupId>
                         <artifactId>quarkus-enforcer-rules</artifactId>
-                        <version>${quarkus.version}</version>
+                        <version>${quarkus-community.version}</version>
                     </dependency>
                     <dependency>
                         <groupId>org.l2x6.cq</groupId>
