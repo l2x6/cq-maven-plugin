@@ -22,9 +22,11 @@ import freemarker.template.TemplateModelException;
 import io.quarkus.annotation.processor.documentation.config.merger.JavadocMerger;
 import io.quarkus.annotation.processor.documentation.config.merger.JavadocRepository;
 import io.quarkus.annotation.processor.documentation.config.merger.MergedModel;
+import io.quarkus.annotation.processor.documentation.config.merger.MergedModel.ConfigRootKey;
 import io.quarkus.annotation.processor.documentation.config.merger.ModelMerger;
 import io.quarkus.annotation.processor.documentation.config.model.AbstractConfigItem;
 import io.quarkus.annotation.processor.documentation.config.model.ConfigProperty;
+import io.quarkus.annotation.processor.documentation.config.model.ConfigProperty.PropertyPath;
 import io.quarkus.annotation.processor.documentation.config.model.ConfigRoot;
 import io.quarkus.annotation.processor.documentation.config.model.Extension;
 import io.quarkus.annotation.processor.documentation.config.model.JavadocElements.JavadocElement;
@@ -360,8 +362,9 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
 
         final JavadocRepository javadocRepository = JavadocMerger.mergeJavadocElements(targetDirectories);
         final MergedModel mergedModel = ModelMerger.mergeModel(targetDirectories);
-        for (Entry<Extension, Map<String, ConfigRoot>> extensionConfigRootsEntry : mergedModel.getConfigRoots().entrySet()) {
-            for (Entry<String, ConfigRoot> configRootEntry : extensionConfigRootsEntry.getValue().entrySet()) {
+        for (Entry<Extension, Map<ConfigRootKey, ConfigRoot>> extensionConfigRootsEntry : mergedModel.getConfigRoots()
+                .entrySet()) {
+            for (Entry<ConfigRootKey, ConfigRoot> configRootEntry : extensionConfigRootsEntry.getValue().entrySet()) {
                 final ConfigRoot configRoot = configRootEntry.getValue();
                 for (AbstractConfigItem configItem : configRoot.getItems()) {
                     if (configItem instanceof ConfigProperty) {
@@ -419,16 +422,17 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         public static ConfigItem of(ConfigProperty configDocItem, JavadocRepository javadocRepository,
                 Function<String, String> descriptionTransformer, String artifactIdBase) {
             final Optional<JavadocElement> javadoc = javadocRepository
-                    .getElement(configDocItem.getSourceClass(), configDocItem.getSourceName());
+                    .getElement(configDocItem.getSourceType().name(), configDocItem.getSourceName());
+            final PropertyPath itemPath = configDocItem.getPath();
             if (javadoc.isEmpty()) {
-                throw new IllegalStateException("No JavaDoc for " + configDocItem.getPath() + " alias "
-                        + configDocItem.getSourceClass() + "#" + configDocItem.getSourceName());
+                throw new IllegalStateException("No JavaDoc for " + itemPath.property() + " alias "
+                        + configDocItem.getSourceType().name() + "#" + configDocItem.getSourceName());
             }
             final String illustration = configDocItem.getPhase().isFixedAtBuildTime() ? "icon:lock[title=Fixed at build time]"
                     : "";
             final TypeInfo typeInfo = typeContent(configDocItem, javadocRepository, true, artifactIdBase);
             return new ConfigItem(
-                    configDocItem.getPath(),
+                    itemPath.property(),
                     illustration,
                     descriptionTransformer.apply(javadoc.get().description()),
                     typeInfo.description,
@@ -438,7 +442,7 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
                     configDocItem.isOptional(),
                     configDocItem.isDeprecated(),
                     javadoc.get().since(),
-                    configDocItem.getEnvironmentVariable());
+                    itemPath.environmentVariable());
         }
 
         static TypeInfo typeContent(ConfigProperty configProperty, JavadocRepository javadocRepository,
@@ -511,12 +515,18 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
                     .replace(":", "\\:").replace("[", "\\]").replace("]", "\\]");
         }
 
-        public ConfigItem(String key, String illustration, String configDoc,
-                String type, boolean typeDuration, boolean typeMemSize,
+        public ConfigItem(
+                String key,
+                String illustration,
+                String configDoc,
+                String type,
+                boolean typeDuration,
+                boolean typeMemSize,
                 String defaultValue,
                 boolean optional,
                 boolean deprecated,
-                String since, String environmentVariable) {
+                String since,
+                String environmentVariable) {
             this.key = key;
             this.illustration = illustration;
             this.configDoc = configDoc;
