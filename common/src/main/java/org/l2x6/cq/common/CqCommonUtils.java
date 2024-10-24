@@ -600,9 +600,9 @@ public class CqCommonUtils {
 
                             final String oldValue = propertyNode.getTextContent();
                             if (oldValue.equals(transformedValue)) {
-                                log.info(" - " + propertyName + ": " + oldValue);
+                                log.info(" ✓ " + propertyName + ": " + oldValue);
                             } else {
-                                log.info(" - " + propertyName + ": " + oldValue + " -> " + transformedValue);
+                                log.info(" 🚀 " + propertyName + ": " + oldValue + " -> " + transformedValue);
                             }
 
                             propertyNode.setTextContent(transformedValue);
