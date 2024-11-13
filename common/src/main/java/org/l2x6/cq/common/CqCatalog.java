@@ -27,9 +27,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.TreeMap;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -356,19 +353,6 @@ public class CqCatalog {
         @Override
         public List<String> findBeansNames() {
             return findNames(POJO_BEAN_CATALOG);
-        }
-
-        @Override
-        public Map<String, String> findCapabilities() {
-            final Properties properties = new Properties();
-
-            try (InputStream is = getCamelCatalog().getVersionManager().getResourceAsStream(CAPABILITIES_CATALOG)) {
-                properties.load(is);
-            } catch (IOException e) {
-                // ignore
-            }
-
-            return new TreeMap<>((Map<String, String>) (Map) properties);
         }
 
         @Override
