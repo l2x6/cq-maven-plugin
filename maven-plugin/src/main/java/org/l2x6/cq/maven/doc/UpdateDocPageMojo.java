@@ -422,11 +422,11 @@ public class UpdateDocPageMojo extends AbstractDocGeneratorMojo {
         public static ConfigItem of(ConfigProperty configDocItem, JavadocRepository javadocRepository,
                 Function<String, String> descriptionTransformer, String artifactIdBase) {
             final Optional<JavadocElement> javadoc = javadocRepository
-                    .getElement(configDocItem.getSourceClass(), configDocItem.getSourceName());
+                    .getElement(configDocItem.getSourceType(), configDocItem.getSourceElementName());
             final PropertyPath itemPath = configDocItem.getPath();
             if (javadoc.isEmpty()) {
                 throw new IllegalStateException("No JavaDoc for " + itemPath.property() + " alias "
-                        + configDocItem.getSourceClass() + "#" + configDocItem.getSourceName());
+                        + configDocItem.getSourceType() + "#" + configDocItem.getSourceElementName());
             }
             final String illustration = configDocItem.getPhase().isFixedAtBuildTime() ? "icon:lock[title=Fixed at build time]"
                     : "";
