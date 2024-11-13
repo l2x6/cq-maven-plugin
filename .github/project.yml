@@ -18,5 +18,5 @@
 # attempt 2
 name: CQ Maven Plugin
 release:
-  current-version: 4.14.2
-  next-version: 4.14.3-SNAPSHOT
+  current-version: 4.14.3
+  next-version: 4.14.4-SNAPSHOT
