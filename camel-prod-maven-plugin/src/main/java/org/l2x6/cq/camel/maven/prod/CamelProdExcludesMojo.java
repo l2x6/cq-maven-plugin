@@ -113,7 +113,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
         CAMEL_COMMUNITY_VERSION {
             @Override
             public String getExpectedVersion(String literalVersion) {
-                return "${camel-community.version}";
+                return "${camel-community-version}";
             }
         },
         LITERAL {
@@ -214,7 +214,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
     /**
      * @since 2.11.0
      */
-    @Parameter(property = "cq.camelCommunityVersion", defaultValue = "${camel-community.version}")
+    @Parameter(property = "cq.camelCommunityVersion", defaultValue = "${camel-community-version}")
     String camelCommunityVersion;
 
     Map<String, VersionStyle> versionStylesByPath;
@@ -287,7 +287,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
 
         final Path rootPomPath = workRoot.resolve("pom.xml");
         new PomTransformer(rootPomPath, charset, simpleElementWhitespace)
-                .transform(Transformation.addOrSetProperty("camel-community.version", camelCommunityVersion));
+                .transform(Transformation.addOrSetProperty("camel-community-version", camelCommunityVersion));
 
         final MavenSourceTree initialTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
         final Predicate<Profile> profiles = ActiveProfiles.of();
@@ -301,7 +301,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                     .transform(Transformation.setTextValue("/" +
                             PomTunerUtils.anyNs("plugin", "version") + "[.." + PomTunerUtils.anyNs("groupId")
                             + "/text() = 'org.apache.camel']",
-                            "${camel-community.version}"));
+                            "${camel-community-version}"));
         });
 
         /* Make a copy of the originalFullTree */
@@ -385,7 +385,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
         fullTree.unlinkModules(expandedIncludes, profiles, charset, simpleElementWhitespace,
                 (Set<String> unlinkModules) -> Transformation.commentModules(unlinkModules, MODULE_COMMENT));
 
-        /* Replace ${project.version} with ${camel-community.version} where necessary */
+        /* Replace ${project.version} with ${camel-community-version} where necessary */
         final MavenSourceTree reducedTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
         reducedTree.getModulesByGa().values().forEach(module -> {
             final List<Transformation> transformations = new ArrayList<>();
@@ -427,7 +427,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                     .transform(Transformation.setTextValue("/" +
                             PomTunerUtils.anyNs("dependency", "version") + "[.." + PomTunerUtils.anyNs("artifactId")
                             + "/text() = 'camel-buildtools']",
-                            "${camel-community.version}"));
+                            "${camel-community-version}"));
         });
 
         if (isChecking() && onCheckFailure != OnFailure.IGNORE) {

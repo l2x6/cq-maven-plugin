@@ -370,7 +370,7 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
                                         .ifPresent(transformations::add);
                             });
 
-                    /* We do not productize camel test-infra - we need to set these to ${camel-community.version} */
+                    /* We do not productize camel test-infra - we need to set these to ${camel-community-version} */
                     profile.getDependencies().stream()
                             .filter(dep -> "org.apache.camel".equals(dep.getGroupId().asConstant())
                                     && "test-jar".equals(dep.getType())
@@ -382,7 +382,7 @@ public class CamelSpringBootProdExcludesMojo extends AbstractMojo {
                                 final VersionStyle vs = versionStylesByPath.get(module.getPomPath());
 
                                 transformations.add(Transformation.setDependencyVersion(profile.getId(),
-                                        "${camel-community.version}", Collections.singletonList(ga)));
+                                        "${camel-community-version}", Collections.singletonList(ga)));
                             });
                 }
 
