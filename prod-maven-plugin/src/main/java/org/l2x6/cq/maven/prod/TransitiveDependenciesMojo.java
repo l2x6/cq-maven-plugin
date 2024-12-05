@@ -257,7 +257,7 @@ public class TransitiveDependenciesMojo {
                     .append("</groupId>\n                <artifactId>")
                     .append(ga.getArtifactId())
                     .append("</artifactId>\n                <version>")
-                    .append(prodTransitiveGas.contains(ga) ? "${camel.version}" : "${camel-community.version}")
+                    .append(prodTransitiveGas.contains(ga) ? "${camel.version}" : "${camel-community-version}")
                     .append("</version>\n            </dependency>"));
             throw new RuntimeException(sb.toString());
         }

@@ -99,7 +99,7 @@ Use `mvn help:describe` to see the full set of parameters.
                         <dependency>
                             <groupId>org.apache.camel</groupId>
                             <artifactId>camel-package-maven-plugin</artifactId>
-                            <version>${camel-community.version}</version>
+                            <version>${camel-community-version}</version>
                         </dependency>
                     </dependencies>
                 </plugin>
@@ -142,11 +142,11 @@ mvn org.l2x6.cq:cq-camel-prod-maven-plugin:camel-prod-excludes -N
             </plugin>
 ----
 
-A version property `<camel-community.version>3.14.1</camel-community.version>` needs to be added to the pom.xml for the maven plugin to execute successfully.
+A version property `<camel-community-version>3.14.1</camel-community-version>` needs to be added to the pom.xml for the maven plugin to execute successfully.
 
 From CAMEL_SPRING_BOOT_HOME, camel-spring-boot-prod-excludes is used to comment out modules that should not be productized.
 
-A version property `<camel-community.version>3.14.1</camel-community.version>` needs to be added to the pom.xml for the maven plugin to execute successfully.
+A version property `<camel-community-version>3.14.1</camel-community-version>` needs to be added to the pom.xml for the maven plugin to execute successfully.
 
 To invoke :
 
@@ -177,7 +177,7 @@ Configured in the pom.xml :
                     <dependency>
                         <groupId>org.apache.camel</groupId>
                         <artifactId>camel-package-maven-plugin</artifactId>
-                        <version>${camel-community.version}</version>
+                        <version>${camel-community-version}</version>
                     </dependency>
                 </dependencies>
             </plugin>

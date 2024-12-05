@@ -125,7 +125,7 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     public enum CamelEdition {
         PRODUCT("${camel.version}"),
-        COMMUNITY("${camel-community.version}");
+        COMMUNITY("${camel-community-version}");
 
         CamelEdition(String versionExpression) {
             this.versionExpression = versionExpression;

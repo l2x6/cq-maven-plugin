@@ -195,8 +195,8 @@ public class ProdInitMojo extends AbstractMojo {
                     /* Add some community props */
                     final ContainerElement props = context.getOrAddContainerElement("properties");
 
-                    getLog().info("Adding to pom.xml: camel-community.version property");
-                    props.addChildTextElementIfNeeded("camel-community.version",
+                    getLog().info("Adding to pom.xml: camel-community-version property");
+                    props.addChildTextElementIfNeeded("camel-community-version",
                             "${camel.major.minor}." + camelVersion.split("\\.")[2],
                             Comparator.comparing(Map.Entry::getKey, Comparators.before("camel.version")));
 
@@ -258,7 +258,7 @@ public class ProdInitMojo extends AbstractMojo {
                     getLog().info("Adding to pom.xml: product module");
                     modules.addChildTextElement("module", "product");
 
-                    /* Change the version of camel-build-tools under license-maven-plugin to camel-community.version */
+                    /* Change the version of camel-build-tools under license-maven-plugin to camel-community-version */
                     final ContainerElement managedPlugins = context.getOrAddContainerElements("build", "pluginManagement",
                             "plugins");
                     final ContainerElement licensePlugin = managedPlugins.childElementsStream()
@@ -271,7 +271,7 @@ public class ProdInitMojo extends AbstractMojo {
                     final ContainerElement buildToolsDep = licensePlugin
                             .getOrAddChildContainerElement("dependencies")
                             .getOrAddChildContainerElement("dependency");
-                    final String camelCommunityVersion = "${camel-community.version}";
+                    final String camelCommunityVersion = "${camel-community-version}";
                     getLog().info("Setting version in pom.xml: camel-buildtools "
                             + buildToolsDep.getChildContainerElement("version").get().getNode().getTextContent() + " -> "
                             + camelCommunityVersion);
@@ -422,9 +422,9 @@ public class ProdInitMojo extends AbstractMojo {
                             .filter(gavtcs -> "camel-salesforce-maven-plugin".equals(gavtcs.getArtifactId())
                                     || "camel-servicenow-maven-plugin".equals(gavtcs.getArtifactId()))
                             .peek(gavtcs -> getLog()
-                                    .info("Updating " + gavtcs.getArtifactId() + " version to ${camel-community.version}"))
+                                    .info("Updating " + gavtcs.getArtifactId() + " version to ${camel-community-version}"))
                             .map(PomTransformer.NodeGavtcs::getNode)
-                            .forEach(containerElement -> containerElement.setVersion("${camel-community.version}"));
+                            .forEach(containerElement -> containerElement.setVersion("${camel-community-version}"));
                 });
 
         /*
