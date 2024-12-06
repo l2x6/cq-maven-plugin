@@ -44,7 +44,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
-import javax.inject.Inject;
 import org.apache.camel.maven.packaging.ComponentDslMojo;
 import org.apache.commons.io.IOUtils;
 import org.apache.maven.plugin.AbstractMojo;
@@ -55,7 +54,6 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.MavenProjectHelper;
-import org.codehaus.plexus.build.BuildContext;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
@@ -235,11 +233,10 @@ public class CamelProdExcludesMojo extends AbstractMojo {
 
     @Parameter(property = "project", required = true, readonly = true)
     protected MavenProject project;
-
+    @Component
     protected MavenProjectHelper projectHelper;
 
     private Predicate<Path> additionalFiles;
-    private BuildContext buildContext;
 
     /**
      * Overridden by {@link CamelProdExcludesCheckMojo}.
@@ -248,12 +245,6 @@ public class CamelProdExcludesMojo extends AbstractMojo {
      */
     protected boolean isChecking() {
         return false;
-    }
-
-    @Inject
-    public CamelProdExcludesMojo(MavenProjectHelper projectHelper, BuildContext buildContext) {
-        this.projectHelper = projectHelper;
-        this.buildContext = buildContext;
     }
 
     /** {@inheritDoc} */
@@ -508,10 +499,10 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                     projectCopy.setFile(pomFilePath.toFile());
                     projectCopy.getBuild().setDirectory(moduleBaseDir.resolve("target").toString());
                     try {
-                        ComponentDslMojo mojo = new ComponentDslMojo(projectHelper, buildContext);
+                        ComponentDslMojo mojo = new ComponentDslMojo();
                         mojo.setLog(getLog());
                         mojo.setPluginContext(getPluginContext());
-                        mojo.execute(projectCopy);
+                        mojo.execute(projectCopy, projectHelper, null);
 
                     } catch (Exception e) {
                         throw new RuntimeException("Could not excute ComponentDslMojo in " + moduleBaseDir, e);

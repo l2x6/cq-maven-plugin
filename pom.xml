@@ -21,7 +21,7 @@
 
     <groupId>org.l2x6.cq</groupId>
     <artifactId>cq</artifactId>
-    <version>4.16.0-SNAPSHOT</version>
+    <version>4.15.2-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>CQ</name>
@@ -97,7 +97,7 @@
         <gson.version>2.11.0</gson.version>
         <quarkus.version>3.17.3</quarkus.version>
 
-        <camel.version>4.9.0</camel.version>
+        <camel.version>4.8.2</camel.version>
         <freemarker.version>2.3.33</freemarker.version>
         <assertj.version>3.26.3</assertj.version>
 
@@ -215,17 +215,17 @@
             <dependency>
                 <groupId>org.l2x6.cq</groupId>
                 <artifactId>cq-common</artifactId>
-                <version>4.16.0-SNAPSHOT</version>
+                <version>4.15.2-SNAPSHOT</version>
             </dependency>
             <dependency>
                 <groupId>org.l2x6.cq</groupId>
                 <artifactId>cq-test-utils</artifactId>
-                <version>4.16.0-SNAPSHOT</version>
+                <version>4.15.2-SNAPSHOT</version>
             </dependency>
             <dependency>
                 <groupId>org.l2x6.cq</groupId>
                 <artifactId>cq-maven-plugin</artifactId>
-                <version>4.16.0-SNAPSHOT</version>
+                <version>4.15.2-SNAPSHOT</version>
             </dependency>
 
             <dependency>
