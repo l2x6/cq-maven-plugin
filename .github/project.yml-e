@@ -19,4 +19,4 @@
 name: CQ Maven Plugin
 release:
   current-version: 4.15.2
-  next-version: 4.16.0-SNAPSHOT
+  next-version: 4.15.2-SNAPSHOT
