@@ -16,7 +16,10 @@
  */
 package org.l2x6.cq.camel.maven.prod;
 
+import javax.inject.Inject;
 import org.apache.maven.plugins.annotations.Mojo;
+import org.apache.maven.project.MavenProjectHelper;
+import org.codehaus.plexus.build.BuildContext;
 
 /**
  * Check whether the modules that should not be productized are properly unlinked from Camel source tree based on
@@ -26,6 +29,11 @@ import org.apache.maven.plugins.annotations.Mojo;
  */
 @Mojo(name = "camel-prod-excludes-check", threadSafe = true, requiresProject = false, inheritByDefault = false)
 public class CamelProdExcludesCheckMojo extends CamelProdExcludesMojo {
+
+    @Inject
+    public CamelProdExcludesCheckMojo(MavenProjectHelper projectHelper, BuildContext buildContext) {
+        super(projectHelper, buildContext);
+    }
 
     @Override
     protected boolean isChecking() {
