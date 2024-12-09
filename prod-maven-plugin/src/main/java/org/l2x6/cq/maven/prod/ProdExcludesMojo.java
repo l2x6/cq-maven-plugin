@@ -30,6 +30,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashSet;
@@ -710,9 +711,14 @@ public class ProdExcludesMojo extends AbstractMojo {
                 Arrays.asList("integration-tests", "integration-tests-jvm", "integration-test-groups"));
         final Set<String> testParentArtifactIds = testParents.stream().map(base -> "camel-quarkus-" + base)
                 .collect(Collectors.toSet());
+        final Collection<String> modulesFromStandardBuild = Arrays.asList("docs", "integration-test-groups",
+                "integration-tests-jvm");
+
         final Path rootPomPath = workRoot.resolve("pom.xml");
         new PomTransformer(rootPomPath, charset, simpleElementWhitespace)
                 .transform(Transformation.commentModules(testParents, MODULE_COMMENT));
+        new PomTransformer(rootPomPath, charset, simpleElementWhitespace)
+                .transform(Transformation.commentModulesInProfile("standard-build", modulesFromStandardBuild, MODULE_COMMENT));
         final Set<Ga> expandedIncludesWithoutTests = expandedIncludes.stream()
                 .filter(ga -> !tests.containsKey(ga) && !testParentArtifactIds.contains(ga.getArtifactId()))
                 .collect(Collectors.toCollection(LinkedHashSet<Ga>::new));

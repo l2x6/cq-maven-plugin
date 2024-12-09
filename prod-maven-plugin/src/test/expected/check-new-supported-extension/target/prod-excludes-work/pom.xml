@@ -752,6 +752,17 @@
             </build>
         </profile>
         <profile>
+            <id>standard-build</id>
+            <activation>
+                <property>
+                    <name>!apache-release</name>
+                </property>
+            </activation>
+            <modules>
+                <!-- <module>integration-tests-jvm</module> disabled by cq-prod-maven-plugin:prod-excludes -->
+            </modules>
+        </profile>
+        <profile>
             <id>apache-release</id>
             <activation>
                 <property>
