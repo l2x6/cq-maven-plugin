@@ -21,7 +21,7 @@
     <parent>
         <groupId>org.l2x6.cq</groupId>
         <artifactId>cq</artifactId>
-        <version>4.16.0</version>
+        <version>4.16.1-SNAPSHOT</version>
     </parent>
 
     <artifactId>cq-camel-prod-maven-plugin</artifactId>
