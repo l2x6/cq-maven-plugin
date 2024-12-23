@@ -98,7 +98,7 @@
         <quarkus.version>3.17.5</quarkus.version>
 
         <camel.version>4.9.0</camel.version>
-        <freemarker.version>2.3.33</freemarker.version>
+        <freemarker.version>2.3.34</freemarker.version>
         <assertj.version>3.27.0</assertj.version>
 
         <!-- Plugins and their dependencies -->
