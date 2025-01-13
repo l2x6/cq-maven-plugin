@@ -93,7 +93,7 @@
         <junit.version>5.11.4</junit.version>
         <enforcer-api.version>3.5.0</enforcer-api.version>
         <google-client.version>1.35.0</google-client.version>
-        <google-api-services-sheets.version>v4-rev20241203-2.0.0</google-api-services-sheets.version>
+        <google-api-services-sheets.version>v4-rev20250106-2.0.0</google-api-services-sheets.version>
         <gson.version>2.11.0</gson.version>
         <quarkus.version>3.17.6</quarkus.version>
 
