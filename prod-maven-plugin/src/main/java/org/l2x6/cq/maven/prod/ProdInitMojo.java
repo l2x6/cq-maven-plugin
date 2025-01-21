@@ -159,7 +159,7 @@ public class ProdInitMojo extends AbstractMojo {
      *
      * @since 4.4.6
      */
-    @Parameter(defaultValue = "${camel-sap.version}", required = true)
+    @Parameter(defaultValue = "${camel-sap.version}")
     String camelSapVersion;
 
     /** {@inheritDoc} */
@@ -204,7 +204,10 @@ public class ProdInitMojo extends AbstractMojo {
                     props.addChildTextElementIfNeeded("camel-quarkus-community.version", version,
                             Comparator.comparing(Map.Entry::getKey, Comparators.before("cassandra-quarkus.version")));
 
-                    getLog().info("Adding to pom.xml: camel-sap.version property");
+                    if (camelSapVersion == null) {
+                        camelSapVersion = "${camel.version}";
+                    }
+                    getLog().info("Adding to pom.xml: camel-sap.version property " + camelSapVersion);
                     props.addChildTextElementIfNeeded("camel-sap.version", camelSapVersion,
                             Comparator.comparing(Map.Entry::getKey, Comparators.before("cassandra-quarkus.version")));
 
@@ -357,12 +360,10 @@ public class ProdInitMojo extends AbstractMojo {
                     dependencyManagementDeps.addGavtcs(
                             new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-sap-deployment", "${camel-quarkus.version}"));
 
-                    /* Add quarkus-artemis-jms and quarkus-artemis-jms-deployment */
+                    /* Add quarkus-artemis-bom */
                     dependencyManagementDeps.addGavtcs(
-                            new Gavtcs("io.quarkiverse.artemis", "quarkus-artemis-jms", "${quarkiverse-artemis.version}"));
-                    dependencyManagementDeps.addGavtcs(
-                            new Gavtcs("io.quarkiverse.artemis", "quarkus-artemis-jms-deployment",
-                                    "${quarkiverse-artemis.version}"));
+                            new Gavtcs("io.quarkiverse.artemis", "quarkus-artemis-bom", "${quarkiverse-artemis.version}", "pom",
+                                    null, "import"));
                 });
 
         /* Edit poms/bom-test/pom.xml */
