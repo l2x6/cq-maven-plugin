@@ -361,9 +361,17 @@ public class ProdInitMojo extends AbstractMojo {
                             new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-sap-deployment", "${camel-quarkus.version}"));
 
                     /* Add quarkus-artemis-bom */
+                    Gavtcs qpidBom = new Gavtcs("org.amqphub.quarkus", "quarkus-qpid-jms-bom", "${quarkus-qpid-jms.version}",
+                            "pom", null, "import");
+                    final NodeGavtcs qpidBomNode = dependencyManagementDeps.childElementsStream()
+                            .map(ContainerElement::asGavtcs)
+                            .filter(gavtcs -> gavtcs.equals(qpidBom))
+                            .findFirst()
+                            .get();
                     dependencyManagementDeps.addGavtcs(
                             new Gavtcs("io.quarkiverse.artemis", "quarkus-artemis-bom", "${quarkiverse-artemis.version}", "pom",
-                                    null, "import"));
+                                    null, "import"),
+                            qpidBomNode.getNode().previousSiblingInsertionRefNode());
                 });
 
         /* Edit poms/bom-test/pom.xml */
