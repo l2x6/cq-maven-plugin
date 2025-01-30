@@ -94,7 +94,7 @@
         <enforcer-api.version>3.5.0</enforcer-api.version>
         <google-client.version>1.35.0</google-client.version>
         <google-api-services-sheets.version>v4-rev20250106-2.0.0</google-api-services-sheets.version>
-        <gson.version>2.11.0</gson.version>
+        <gson.version>2.12.0</gson.version>
         <quarkus.version>3.17.7</quarkus.version>
 
         <camel.version>4.9.0</camel.version>
