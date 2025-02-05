@@ -121,8 +121,13 @@ public class UpdateDocsMojo extends AbstractDocGeneratorMojo {
                     final String name = shortName.startsWith("Quarkus CXF") ? shortName : ("Quarkus CXF " + shortName);
                     standards.append("\n| xref:reference/extensions/" + artifactId + ".adoc[" + name + "] +\n`"
                             + artifactId + "`\n|");
+
                     final String status = getProperty(runtimeModule, eval, "quarkus.metadata.status", () -> "stable");
-                    standards.append(ExtensionStatus.valueOf(status).getCapitalized()).append("\n|");
+                    standards.append(ExtensionStatus.valueOf(status).getCapitalized());
+                    final boolean deprecated = Boolean
+                            .parseBoolean(getProperty(runtimeModule, eval, "quarkus.metadata.deprecated", () -> "false"));
+                    standards.append(deprecated ? "\n⚠️Deprecated\n|" : "\n|");
+
                     final String since = getProperty(runtimeModule, eval, "cq.since", () -> "");
                     standards.append(since).append("\n|");
                     if (Files.isRegularFile(standardsFile)) {
