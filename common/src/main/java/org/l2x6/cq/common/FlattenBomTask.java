@@ -93,6 +93,7 @@ import org.l2x6.pom.tuner.model.Gav;
 import org.l2x6.pom.tuner.model.GavPattern;
 import org.l2x6.pom.tuner.model.GavSet;
 import org.l2x6.pom.tuner.model.Gavtcs;
+import org.l2x6.pom.tuner.model.GavtcsSet;
 import org.l2x6.pom.tuner.model.Module;
 import org.l2x6.pom.tuner.model.Profile;
 import org.w3c.dom.Node;
@@ -403,6 +404,7 @@ public class FlattenBomTask {
 
     private final List<String> resolutionEntryPointIncludes;
     private final List<String> resolutionEntryPointExcludes;
+    private final List<String> resolutionExcludes;
     private final List<String> resolutionSuspects;
     private final List<String> originExcludes;
     private final List<FlattenBomTask.BomEntryTransformation> bomEntryTransformations;
@@ -438,7 +440,10 @@ public class FlattenBomTask {
     private static final Comparator<? super Exclusion> EXCLUSION_COMPARATOR = Comparator.comparing(Exclusion::getGroupId)
             .thenComparing(Exclusion::getArtifactId);
 
-    public FlattenBomTask(List<String> resolutionEntryPointIncludes, List<String> resolutionEntryPointExcludes,
+    public FlattenBomTask(
+            List<String> resolutionEntryPointIncludes,
+            List<String> resolutionEntryPointExcludes,
+            List<String> resolutionExcludes,
             List<String> resolutionSuspects, List<String> originExcludes,
             List<FlattenBomTask.BomEntryTransformation> bomEntryTransformations,
             List<String> requiredBomEntryIncludes, List<String> requiredBomEntryExcludes,
@@ -451,6 +456,7 @@ public class FlattenBomTask {
             GavSet bannedDependencies, Path localRepositoryPath, List<Gav> additionalBoms) {
         this.resolutionEntryPointIncludes = resolutionEntryPointIncludes;
         this.resolutionEntryPointExcludes = resolutionEntryPointExcludes;
+        this.resolutionExcludes = resolutionExcludes;
         this.resolutionSuspects = resolutionSuspects;
         this.originExcludes = originExcludes;
         this.bomEntryTransformations = mergeTransformations(rootModuleDirectory, bomEntryTransformations, charset);
@@ -522,6 +528,10 @@ public class FlattenBomTask {
                     .excludes(resolutionEntryPointExcludes == null ? Collections.emptyList() : resolutionEntryPointExcludes)
                     .build();
 
+            final GavtcsSet resolutionSet = GavtcsSet.builder()
+                    .excludes(resolutionExcludes == null ? Collections.emptyList() : resolutionExcludes)
+                    .build();
+
             /* Get the effective pom */
             final DependencyManagement effectiveDependencyManagement = effectivePomModel.getDependencyManagement();
             final List<Dependency> originalConstrains;
@@ -588,6 +598,7 @@ public class FlattenBomTask {
             /* Exclude non-required constraints */
             final List<Dependency> requiredConstraints = Collections.unmodifiableList(constraintsFilteredByOrigin.stream()
                     .filter(dep -> requiredGas.gas.contains(toGa(dep)))
+                    .filter(dep -> resolutionSet.contains(toGavtcs(dep)))
                     .collect(Collectors.toList()));
 
             checkRequiredConstraints(requiredGas.gas, requiredConstraints);
@@ -946,7 +957,7 @@ public class FlattenBomTask {
                 mvnDep.getVersion(),
                 mvnDep.getType(),
                 mvnDep.getClassifier(),
-                null,
+                mvnDep.getScope(),
                 exclusions);
     }
 
