@@ -1227,6 +1227,7 @@ public class ProdExcludesMojo extends AbstractMojo {
             final Path flattenedBomPath = new FlattenBomTask(
                     childList(config, "resolutionEntryPointIncludes"),
                     childList(config, "resolutionEntryPointExcludes"),
+                    childList(config, "resolutionExcludes"),
                     childList(config, "resolutionSuspects"),
                     childList(config, "originExcludes"),
                     bomEntryTransformations,

@@ -136,6 +136,15 @@ public class FlattenBomMojo extends AbstractMojo {
     List<String> resolutionEntryPointExcludes;
 
     /**
+     * A list of {@code groupId:artifactId:version:type:classifier:scope} patterns whose matching entries will be
+     * removed from the set selected by {@link #resolutionEntryPointIncludes} and {@link #resolutionEntryPointExcludes}.
+     *
+     * @since 4.17.0
+     */
+    @Parameter(property = "cq.resolutionExcludes")
+    List<String> resolutionExcludes;
+
+    /**
      * As list of GAV patterns whose origin will be logged. Useful when searching on which BOM entry some specific
      * exclusion needs to be placed.
      *
@@ -387,6 +396,7 @@ public class FlattenBomMojo extends AbstractMojo {
         new FlattenBomTask(
                 resolutionEntryPointIncludes,
                 resolutionEntryPointExcludes,
+                resolutionExcludes,
                 resolutionSuspects,
                 originExcludes,
                 bomEntryTransformations,
