@@ -60,8 +60,16 @@
                                 <exclude>main-command-mode/pom.xml</exclude>
                                 <exclude>main-unknown-args-fail/pom.xml</exclude>
                                 <exclude>main-unknown-args-fail/pom.xml</exclude>
-                                <exclude>messaging/pom.xml</exclude>
                                 <exclude>js-dsl/pom.xml</exclude>
+                            </excludes>
+                        </fileSet>
+                        <fileSet>
+                            <directory>${basedir}/../../integration-tests-support</directory>
+                            <includes>
+                                <include>*/pom.xml</include>
+                            </includes>
+                            <excludes>
+                                <exclude>messaging/pom.xml</exclude>
                             </excludes>
                         </fileSet>
                     </fileSets>

@@ -254,8 +254,8 @@ public class ProdInitMojo extends AbstractMojo {
                        camel-quarkus-integration-test-messaging-jms needed to be productized as a transitive dependency
                        of jms-(artemis|qpid-jms|ibmmq)-client tests.
                      */
-                    getLog().info("Adding to pom.xml: integration-tests/messaging module");
-                    modules.addChildTextElement("module", "integration-tests/messaging");
+                    getLog().info("Adding to pom.xml: integration-tests-support/messaging module");
+                    modules.addChildTextElement("module", "integration-tests-support/messaging");
 
                     /* Add product module */
                     getLog().info("Adding to pom.xml: product module");
