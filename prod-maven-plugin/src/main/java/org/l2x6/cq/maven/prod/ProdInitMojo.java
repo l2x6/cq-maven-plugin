@@ -250,13 +250,6 @@ public class ProdInitMojo extends AbstractMojo {
                     final ContainerElement profileParent = context.getOrAddProfileParent(null);
                     final ContainerElement modules = profileParent.getOrAddChildContainerElement("modules");
 
-                    /* Add integration-tests/message module.
-                       camel-quarkus-integration-test-messaging-jms needed to be productized as a transitive dependency
-                       of jms-(artemis|qpid-jms|ibmmq)-client tests.
-                     */
-                    getLog().info("Adding to pom.xml: integration-tests-support/messaging module");
-                    modules.addChildTextElement("module", "integration-tests-support/messaging");
-
                     /* Add product module */
                     getLog().info("Adding to pom.xml: product module");
                     modules.addChildTextElement("module", "product");

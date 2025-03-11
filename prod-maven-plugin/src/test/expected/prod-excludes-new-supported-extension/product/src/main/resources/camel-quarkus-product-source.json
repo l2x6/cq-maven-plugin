@@ -28,7 +28,6 @@
                 "integration-tests-jvm/*/pom.xml"
             ],
             "excludes": [
-                "integration-tests/messaging/pom.xml",
                 "integration-tests/*-grouped/pom.xml"
             ]
         }
