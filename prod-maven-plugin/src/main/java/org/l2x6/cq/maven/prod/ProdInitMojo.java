@@ -365,6 +365,22 @@ public class ProdInitMojo extends AbstractMojo {
                             new Gavtcs("io.quarkiverse.artemis", "quarkus-artemis-bom", "${quarkiverse-artemis.version}", "pom",
                                     null, "import"),
                             qpidBomNode.getNode().previousSiblingInsertionRefNode());
+
+                    /* Add io.quarkuiverse.artemis.* in resolutionEntryPointInclude */
+                    final ContainerElement plugins = context.getOrAddContainerElements(
+                            "build", "plugins");
+                    final NodeGavtcs cqPluginNode = plugins.childElementsStream()
+                            .map(ContainerElement::asGavtcs)
+                            .filter(gavtcs -> gavtcs.getArtifactId().equals("cq-maven-plugin"))
+                            .findFirst()
+                            .get();
+                    ContainerElement config = cqPluginNode.getNode()
+                            .getChildContainerElement("executions", "execution", "configuration",
+                                    "resolutionEntryPointIncludes")
+                            .get();
+                    config.addChildTextElementIfNeeded("resolutionEntryPointInclude", "io.quarkiverse.artemis:*",
+                            Comparator.comparing(Map.Entry::getValue, Comparators.before("io.quarkiverse.cxf:*")));
+
                 });
 
         /* Edit poms/bom-test/pom.xml */
