@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Predicate;
 import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.apache.maven.plugin.AbstractMojo;
@@ -55,6 +56,7 @@ import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.model.Profile;
+import org.w3c.dom.Comment;
 import org.w3c.dom.Document;
 
 /**
@@ -240,6 +242,14 @@ public class ProdInitMojo extends AbstractMojo {
 
                     getLog().info("Setting camel-quarkus.extension.finder.strict = false in pom.xml");
                     props.addOrSetChildTextElement("camel-quarkus.extension.finder.strict", "false");
+
+                    Optional<ContainerElement> jxmppVersion = props.getChildContainerElement("jxmpp.version");
+                    jxmppVersion.ifPresent(versionProperty -> {
+                        Comment comment = versionProperty.nextSiblingCommentNode();
+                        if (comment != null) {
+                            comment.setData(comment.getData().replace("camel.version", "camel-community-version"));
+                        }
+                    });
 
                     /*
                      * Set cq-plugin.version to the version of the currently executing mojo if it is newer than than the
