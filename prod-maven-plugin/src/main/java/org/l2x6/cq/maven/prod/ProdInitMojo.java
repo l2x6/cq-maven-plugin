@@ -26,8 +26,9 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -228,16 +229,23 @@ public class ProdInitMojo extends AbstractMojo {
                     getLog().info("Setting camel-quarkus.extension.finder.strict = false in pom.xml");
                     props.addOrSetChildTextElement("camel-quarkus.extension.finder.strict", "false");
 
-                    Optional<ContainerElement> jxmppVersion = props.getChildContainerElement("jxmpp.version");
-                    jxmppVersion.ifPresent(versionProperty -> {
-                        Comment comment = versionProperty.nextSiblingCommentNode();
+                    /* Fix known problematic version properties in @sync comments */
+                    Consumer<ContainerElement> syncCommentVersionTransformer = element -> {
+                        Comment comment = element.nextSiblingCommentNode();
                         if (comment != null) {
-                            comment.setData(comment.getData().replace("camel.version", "camel-community-version"));
+                            String commentData = comment.getData();
+                            String updatedCommentData = commentData.replace("camel.version", "camel-community-version");
+                            updatedCommentData = updatedCommentData.replace("quarkus.version", "quarkus-community.version");
+                            comment.setData(updatedCommentData);
                         }
-                    });
+                    };
+
+                    Stream.of("caffeine.version", "graalvm-docs.version", "jxmpp.version", "sshd.version")
+                            .map(props::getChildContainerElement)
+                            .forEach(property -> property.ifPresent(syncCommentVersionTransformer));
 
                     /*
-                     * Set cq-plugin.version to the version of the currently executing mojo if it is newer than than the
+                     * Set cq-plugin.version to the version of the currently executing mojo if it is newer than the
                      * one on pom.xml
                      */
                     final String currentCqVersion = pluginDescriptor.getVersion();
