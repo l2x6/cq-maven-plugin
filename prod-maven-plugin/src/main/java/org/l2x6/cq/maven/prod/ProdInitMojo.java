@@ -228,11 +228,20 @@ public class ProdInitMojo extends AbstractMojo {
                     getLog().info("Setting camel-quarkus.extension.finder.strict = false in pom.xml");
                     props.addOrSetChildTextElement("camel-quarkus.extension.finder.strict", "false");
 
+                    /* Fix known problematic version properties in @sync comments */
                     Optional<ContainerElement> jxmppVersion = props.getChildContainerElement("jxmpp.version");
                     jxmppVersion.ifPresent(versionProperty -> {
                         Comment comment = versionProperty.nextSiblingCommentNode();
                         if (comment != null) {
                             comment.setData(comment.getData().replace("camel.version", "camel-community-version"));
+                        }
+                    });
+
+                    Optional<ContainerElement> graalVMDocsVersion = props.getChildContainerElement("graalvm-docs.version");
+                    graalVMDocsVersion.ifPresent(versionProperty -> {
+                        Comment comment = versionProperty.nextSiblingCommentNode();
+                        if (comment != null) {
+                            comment.setData(comment.getData().replace("quarkus.version", "quarkus-community.version"));
                         }
                     });
 
