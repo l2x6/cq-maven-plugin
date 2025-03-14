@@ -162,6 +162,14 @@ public class ProdInitMojo extends AbstractMojo {
     @Parameter(defaultValue = "${camel-sap.version}")
     String camelSapVersion;
 
+    /**
+     * Camel Kamelets version
+     *
+     * @since 4.17.2
+     */
+    @Parameter(defaultValue = "${camel-kamelets.version}")
+    String camelKameletsVersion;
+
     /** {@inheritDoc} */
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
@@ -202,6 +210,13 @@ public class ProdInitMojo extends AbstractMojo {
 
                     getLog().info("Adding to pom.xml: camel-quarkus-community.version property");
                     props.addChildTextElementIfNeeded("camel-quarkus-community.version", version,
+                            Comparator.comparing(Map.Entry::getKey, Comparators.before("cassandra-quarkus.version")));
+
+                    if (camelKameletsVersion == null) {
+                        camelKameletsVersion = "${camel.version}";
+                    }
+                    getLog().info("Adding to pom.xml: camel-kamelets.version property");
+                    props.addChildTextElementIfNeeded("camel-kamelets.version", camelKameletsVersion,
                             Comparator.comparing(Map.Entry::getKey, Comparators.before("cassandra-quarkus.version")));
 
                     if (camelSapVersion == null) {
@@ -381,6 +396,9 @@ public class ProdInitMojo extends AbstractMojo {
                     config.addChildTextElementIfNeeded("resolutionEntryPointInclude", "io.quarkiverse.artemis:*",
                             Comparator.comparing(Map.Entry::getValue, Comparators.before("io.quarkiverse.cxf:*")));
 
+                    /* Add camel-kamelets dependency */
+                    dependencyManagementDeps
+                            .addGavtcs(new Gavtcs("org.apache.camel.kamelets", "camel-kamelets", "${camel-kamelets.version}"));
                 });
 
         /* Edit poms/bom-test/pom.xml */
