@@ -158,12 +158,12 @@ public class ProdInitMojo extends AbstractMojo {
     String quarkiverseCxfVersion;
 
     /**
-     * Camel Sap version
+     * Camel fusesource (sap &cics) version
      *
      * @since 4.4.6
      */
-    @Parameter(defaultValue = "${camel-sap.version}")
-    String camelSapVersion;
+    @Parameter(defaultValue = "${camel-fusesource.version}")
+    String camelFusesourceVersion;
 
     /**
      * Camel Kamelets version
@@ -222,12 +222,24 @@ public class ProdInitMojo extends AbstractMojo {
                     props.addChildTextElementIfNeeded("camel-kamelets.version", camelKameletsVersion,
                             Comparator.comparing(Map.Entry::getKey, Comparators.before("cassandra-quarkus.version")));
 
-                    if (camelSapVersion == null) {
-                        camelSapVersion = "${camel.version}";
+                    if (camelFusesourceVersion == null) {
+                        camelFusesourceVersion = "${camel.version}";
                     }
-                    getLog().info("Adding to pom.xml: camel-sap.version property " + camelSapVersion);
-                    props.addChildTextElementIfNeeded("camel-sap.version", camelSapVersion,
-                            Comparator.comparing(Map.Entry::getKey, Comparators.before("cassandra-quarkus.version")));
+                    getLog().info("Adding to pom.xml: camel-fusesource.version property " + camelFusesourceVersion);
+                    props.addChildTextElementIfNeeded("camel-fusesource.version", camelFusesourceVersion,
+                            Comparator.comparing(Map.Entry::getKey, Comparators.before("camel-kamelets.version")));
+
+                    //ctgClient.version is hardcoded as 9.2, we do nor expect this value to be changed in the future
+                    getLog().info("Adding to pom.xml: ctgClient.version property 9.2 ");
+                    props.addChildTextElementIfNeeded("ctgClient.version", "9.2",
+                            Comparator.comparing(Map.Entry::getKey, Comparators.before("commons-validator.version")));
+
+                    //value for cics.container.image is hardcoded, if change is required - manual fix has to be done in the prod branch
+                    getLog().info(
+                            "Adding to pom.xml: cics.container.image property images.paas.redhat.com/fuseqe/ibm-cicstg-container-linux-x86-trial:10.1");
+                    props.addChildTextElementIfNeeded("cics.container.image",
+                            "images.paas.redhat.com/fuseqe/ibm-cicstg-container-linux-x86-trial:10.1",
+                            Comparator.comparing(Map.Entry::getKey, Comparators.before("cassandra.container.image")));
 
                     getLog().info("Adding to pom.xml: quarkus-community.version property");
                     props.addChildTextElementIfNeeded("quarkus-community.version", quarkusVersion,
@@ -410,12 +422,24 @@ public class ProdInitMojo extends AbstractMojo {
                             .forEach(node -> node.getNode().setVersion("${graalvm-community.version}"));
 
                     /* Add camel-sap and camel-quarkus-sap dependencies */
-                    dependencyManagementDeps.addGavtcs(new Gavtcs("org.fusesource", "camel-sap", "${camel-sap.version}",
+                    dependencyManagementDeps.addGavtcs(new Gavtcs("org.fusesource", "camel-sap", "${camel-fusesource.version}",
                             "", "", "", Ga.of("org.eclipse:osgi")));
                     dependencyManagementDeps
                             .addGavtcs(new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-sap", "${camel-quarkus.version}"));
                     dependencyManagementDeps.addGavtcs(
                             new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-sap-deployment", "${camel-quarkus.version}"));
+
+                    /** Add camel-cics, camel-quarkus-cics and ctgClient dependencies */
+                    dependencyManagementDeps.addGavtcs(new Gavtcs("org.fusesource", "camel-cics", "${camel-fusesource.version}",
+                            null, null, null, Ga.of("org.eclipse:osgi")));
+                    dependencyManagementDeps
+                            .addGavtcs(
+                                    new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-cics", "${camel-quarkus.version}"));
+                    dependencyManagementDeps.addGavtcs(
+                            new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-cics-deployment",
+                                    "${camel-quarkus.version}"));
+                    dependencyManagementDeps.addGavtcs(
+                            new Gavtcs("com.ibm", "ctgclient", "${ctgClient.version}"));
 
                     /* Add quarkus-artemis-bom */
                     Gavtcs qpidBom = new Gavtcs("org.amqphub.quarkus", "quarkus-qpid-jms-bom", "${quarkus-qpid-jms.version}",
@@ -485,22 +509,24 @@ public class ProdInitMojo extends AbstractMojo {
                     context.removeManagedDependency(artemisBom, true, true);
                 });
 
-        /* Edit extensions-jvm/pom.xml to add sap extension */
+        /* Edit extensions-jvm/pom.xml to add cics & sap extension */
         new PomTransformer(basedir.toPath().resolve("extensions-jvm/pom.xml"), charset, simpleElementWhitespace).transform(
                 (Document document, TransformationContext context) -> {
                     final ContainerElement profileParent = context.getOrAddProfileParent(null);
                     final ContainerElement modules = profileParent.getOrAddChildContainerElement("modules");
 
+                    modules.addChildTextElement("module", "cics");
                     modules.addChildTextElement("module", "sap");
                 });
 
-        /* Edit integration-tests-jvm/pom.xml to add sap test */
+        /* Edit integration-tests-jvm/pom.xml to add cics & sap test */
         new PomTransformer(basedir.toPath().resolve("integration-tests-jvm/pom.xml"), charset, simpleElementWhitespace)
                 .transform(
                         (Document document, TransformationContext context) -> {
                             final ContainerElement profileParent = context.getOrAddProfileParent(null);
                             final ContainerElement modules = profileParent.getOrAddChildContainerElement("modules");
 
+                            modules.addChildTextElement("module", "cics");
                             modules.addChildTextElement("module", "sap");
                         });
 
@@ -530,7 +556,9 @@ public class ProdInitMojo extends AbstractMojo {
                 "product/src/main/resources/quarkus-cxf-product-source.json",
                 "product/src/main/resources/camel-quarkus-product-source.json",
                 "extensions-jvm/sap/",
-                "integration-tests-jvm/sap/");
+                "integration-tests-jvm/sap/",
+                "extensions-jvm/cics/",
+                "integration-tests-jvm/cics/");
 
         try (Repository repo = new FileRepositoryBuilder()
                 .readEnvironment() // scan environment GIT_* variables
