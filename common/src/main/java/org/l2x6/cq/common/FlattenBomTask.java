@@ -503,7 +503,8 @@ public class FlattenBomTask {
             try {
                 Files.readAllLines(prodArtifacts, charset).stream()
                         .filter(line -> !line.isBlank())
-                        .map(line -> new BomEntryTransformation(line, "(\\.fuse)?(\\.temporary)?[\\-\\.]redhat-\\d+$/", null,
+                        .map(line -> new BomEntryTransformation(line, "(\\.(fuse|rbac))?(\\.temporary)?[\\-\\.]redhat-\\d+$/",
+                                null,
                                 null))
                         .forEach(result::add);
             } catch (IOException e) {
