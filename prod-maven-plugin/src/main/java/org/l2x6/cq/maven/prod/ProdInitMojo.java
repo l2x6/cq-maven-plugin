@@ -241,6 +241,11 @@ public class ProdInitMojo extends AbstractMojo {
                     props.addChildTextElementIfNeeded("graalvm-community.version", "${graalvm.version}",
                             Comparator.comparing(Map.Entry::getKey, Comparators.after("graalvm.version")));
 
+                    // Explicitly use the following version for xalan as it has a CVE fix and a class loading fix currently unreleased in community.
+                    props.getChildContainerElement("xalan.version").ifPresent(xalanVersion -> {
+                        xalanVersion.getNode().setTextContent("2.7.3.redhat-00001");
+                    });
+
                     getLog().info("Setting camel-quarkus.extension.finder.strict = false in pom.xml");
                     props.addOrSetChildTextElement("camel-quarkus.extension.finder.strict", "false");
 
