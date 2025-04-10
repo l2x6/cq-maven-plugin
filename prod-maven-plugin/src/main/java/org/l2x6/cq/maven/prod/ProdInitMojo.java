@@ -336,6 +336,32 @@ public class ProdInitMojo extends AbstractMojo {
                     final ContainerElement goals = execution.getOrAddChildContainerElement("goals");
                     goals.addChildTextElement("goal", "prod-excludes-check");
 
+                    /* Change quarkus-enforcer-rules to use the community version in full profile*/
+                    final ContainerElement profileFull = context.getOrAddProfileParent("full");
+                    final ContainerElement fullPlugins = profileFull.getOrAddChildContainerElement("build")
+                            .getOrAddChildContainerElement("plugins");
+                    final ContainerElement enforcerPlugin = fullPlugins.childElementsStream()
+                            .map(ContainerElement::asGavtcs)
+                            .filter(gavtcs -> "org.apache.maven.plugins".equals(gavtcs.getGroupId())
+                                    && "maven-enforcer-plugin".equals(gavtcs.getArtifactId()))
+                            .findFirst()
+                            .orElseThrow()
+                            .getNode();
+                    final ContainerElement quarkusEnforcerRulesDep = enforcerPlugin
+                            .getOrAddChildContainerElement("dependencies")
+                            .childElementsStream()
+                            .map(ContainerElement::asGavtcs)
+                            .filter(gavtcs -> "io.quarkus".equals(gavtcs.getGroupId())
+                                    && "quarkus-enforcer-rules".equals(gavtcs.getArtifactId()))
+                            .findFirst()
+                            .orElseThrow()
+                            .getNode();
+                    final String quarkusCommunityVersion = "${quarkus-community.version}";
+                    getLog().info("Setting version in pom.xml: quarkus-enforcer-rules "
+                            + quarkusEnforcerRulesDep.getChildContainerElement("version").get().getNode().getTextContent()
+                            + " -> "
+                            + quarkusCommunityVersion);
+                    quarkusEnforcerRulesDep.setVersion(quarkusCommunityVersion);
                 });
 
         /* Edit catalog/pom.xml */
@@ -419,9 +445,17 @@ public class ProdInitMojo extends AbstractMojo {
                     config.addChildTextElementIfNeeded("resolutionEntryPointInclude", "io.quarkiverse.artemis:*",
                             Comparator.comparing(Map.Entry::getValue, Comparators.before("io.quarkiverse.cxf:*")));
 
+                    /* Change quarkus-enforcer-rules to use the community */
+                    final String quarkusCommunityVersion = "${quarkus-community.version}";
+                    ContainerElement quarkusEnforcerRulesDep = cqPluginNode.getNode()
+                            .getChildContainerElement("dependencies", "dependency")
+                            .get();
+                    quarkusEnforcerRulesDep.setVersion(quarkusCommunityVersion);
+
                     /* Add camel-kamelets dependency */
                     dependencyManagementDeps
                             .addGavtcs(new Gavtcs("org.apache.camel.kamelets", "camel-kamelets", "${camel-kamelets.version}"));
+
                 });
 
         /* Edit poms/bom-test/pom.xml */
