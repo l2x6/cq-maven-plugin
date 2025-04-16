@@ -260,7 +260,7 @@ public class ProdInitMojo extends AbstractMojo {
                         }
                     };
 
-                    Stream.of("caffeine.version", "graalvm-docs.version", "jxmpp.version", "sshd.version")
+                    Stream.of("assertj.version", "caffeine.version", "graalvm-docs.version", "jxmpp.version", "sshd.version")
                             .map(props::getChildContainerElement)
                             .forEach(property -> property.ifPresent(syncCommentVersionTransformer));
 
