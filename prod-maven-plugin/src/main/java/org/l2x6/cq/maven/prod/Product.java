@@ -427,7 +427,8 @@ public class Product {
         community(null),
         devSupport("dev-support"),
         techPreview("tech-preview"),
-        supported("supported");
+        supported("supported"),
+        deprecated("deprecated");
 
         private ModeSupportStatus(String quarkusSupportLevel) {
             this.quarkusSupportLevel = quarkusSupportLevel;
@@ -440,6 +441,7 @@ public class Product {
             case devSupport:
             case techPreview:
             case supported:
+            case deprecated:
                 return true;
             case community:
                 return false;
