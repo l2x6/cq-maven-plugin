@@ -137,9 +137,9 @@ public class BannedDependencyResource {
             transformer.transform(new DOMSource(sourceDocument), result);
             return (Document) result.getNode();
         } catch (IOException e) {
-            throw new RuntimeException("Could not open resource " + xsltLocation);
+            throw new RuntimeException("Could not open resource " + xsltLocation, e);
         } catch (TransformerException e) {
-            throw new RuntimeException("Could not transform " + sourceLocation + " usinng XSLT " + xsltLocation);
+            throw new RuntimeException("Could not transform " + sourceLocation + " usinng XSLT " + xsltLocation, e);
         }
     }
 
