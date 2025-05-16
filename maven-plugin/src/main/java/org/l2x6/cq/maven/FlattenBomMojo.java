@@ -387,7 +387,7 @@ public class FlattenBomMojo extends AbstractMojo {
         }
 
         final Builder bannedDeps = GavSet.unionBuilder().defaultResult(GavSet.excludeAll());
-        if (bannedDependencyResources != null) {
+        if (bannedDependencyResources != null && !quickly) {
             bannedDependencyResources.stream()
                     .map(resource -> resource.getBannedSet(charset))
                     .forEach(bannedDeps::union);
