@@ -21,7 +21,7 @@
     <parent>
         <groupId>org.l2x6.cq</groupId>
         <artifactId>cq</artifactId>
-        <version>4.17.9</version>
+        <version>4.17.10-SNAPSHOT</version>
     </parent>
 
     <artifactId>cq-test-utils</artifactId>
