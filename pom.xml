@@ -50,8 +50,8 @@
     </prerequisites>
 
     <scm>
-        <connection>scm:git:git@github.com:l2x6/cq-maven-plugin.git</connection>
-        <developerConnection>scm:git:git@github.com:l2x6/cq-maven-plugin.git</developerConnection>
+        <connection>scm:git:https://github.com/l2x6/cq-maven-plugin</connection>
+        <developerConnection>scm:git:https://github.com/l2x6/cq-maven-plugin.git</developerConnection>
         <url>https://github.com/l2x6/cq-maven-plugin</url>
         <tag>head</tag>
     </scm>
@@ -577,7 +577,8 @@ limitations under the License.</inlineHeader>
                     <configuration>
                         <publishingServerId>central</publishingServerId>
                         <autoPublish>true</autoPublish>
-                        <waitUntil>validated</waitUntil>
+                        <waitUntil>published</waitUntil>
+                        <waitMaxTime>7200</waitMaxTime>
                     </configuration>
                 </plugin>
 
