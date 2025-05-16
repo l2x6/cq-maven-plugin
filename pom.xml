@@ -122,7 +122,7 @@
         <maven-site-plugin.version>3.21.0</maven-site-plugin.version>
         <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
         <maven-surefire-plugin.version>3.5.3</maven-surefire-plugin.version>
-        <nexus-staging-maven-plugin.version>1.7.0</nexus-staging-maven-plugin.version>
+        <central-publishing-maven-plugin.version>0.7.0</central-publishing-maven-plugin.version>
         <sisu-maven-plugin.version>0.9.0.M3</sisu-maven-plugin.version>
         <site-maven-plugin.version>0.12</site-maven-plugin.version>
 
@@ -140,14 +140,6 @@
 
         <!-- -Xdoclint:none disables javadoc validation -->
         <javadoc.doclint>-Xdoclint:none</javadoc.doclint>
-
-        <!-- nexus-staging-maven-plugin -->
-        <autoReleaseAfterClose>true</autoReleaseAfterClose>
-
-        <!-- Repository Deployment URLs -->
-        <oss.nexus.base.url>https://s01.oss.sonatype.org</oss.nexus.base.url>
-        <releases.repo.url>${oss.nexus.base.url}/service/local/staging/deploy/maven2/</releases.repo.url>
-        <snapshots.repo.url>${oss.nexus.base.url}/content/repositories/snapshots/</snapshots.repo.url>
 
         <!-- maven-plugin-plugin -->
         <plugin.goalPrefix /><!-- this needs to be overriden in every plugin submodule -->
@@ -579,17 +571,13 @@ limitations under the License.</inlineHeader>
                 </plugin>
 
                 <plugin>
-                    <groupId>org.sonatype.plugins</groupId>
-                    <artifactId>nexus-staging-maven-plugin</artifactId>
-                    <version>${nexus-staging-maven-plugin.version}</version>
+                    <groupId>org.sonatype.central</groupId>
+                    <artifactId>central-publishing-maven-plugin</artifactId>
+                    <version>${central-publishing-maven-plugin.version}</version>
                     <configuration>
-                        <nexusUrl>${oss.nexus.base.url}</nexusUrl>
-                        <!-- The server "id" element from settings.xml to use authentication from -->
-                        <serverId>ossrh</serverId>
-                        <autoDropAfterRelease>false</autoDropAfterRelease>
-                        <keepStagingRepositoryOnFailure>true</keepStagingRepositoryOnFailure>
-                        <keepStagingRepositoryOnCloseRuleFailure>true</keepStagingRepositoryOnCloseRuleFailure>
-                        <stagingProgressTimeoutMinutes>60</stagingProgressTimeoutMinutes>
+                        <publishingServerId>central</publishingServerId>
+                        <autoPublish>true</autoPublish>
+                        <waitUntil>published</waitUntil>
                     </configuration>
                 </plugin>
 
@@ -641,8 +629,8 @@ limitations under the License.</inlineHeader>
             </plugin>
 
             <plugin>
-                <groupId>org.sonatype.plugins</groupId>
-                <artifactId>nexus-staging-maven-plugin</artifactId>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
                 <extensions>true</extensions>
             </plugin>
 
