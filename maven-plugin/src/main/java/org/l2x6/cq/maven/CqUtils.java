@@ -160,6 +160,7 @@ public class CqUtils {
             String artifactIdBase,
             String titleBase,
             String description,
+            Set<String> configPrefixes,
             List<String> keywords,
             boolean unlisted,
             boolean deprecated,
@@ -215,6 +216,7 @@ public class CqUtils {
         return TemplateParams.builder()
                 .nameBase(titleBase)
                 .description(sanitizeDescription(description))
+                .configPrefixes(configPrefixes)
                 .keywords(keywords)
                 .unlisted(unlisted)
                 .deprecated(deprecated)

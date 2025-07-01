@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -108,6 +109,15 @@ public class CreateExtensionMojo extends CreateTestMojo {
      */
     @Parameter(property = "cq.metadata.description")
     String description;
+
+    /**
+     * The optional config prefixes of any configuration properties exposed by the extension to add into
+     * {@code quarkus-extension.yaml}.
+     *
+     * @since 4.17.10
+     */
+    @Parameter(property = "cq.metadata.configPrefixes")
+    Set<String> configPrefixes = new TreeSet<>();
 
     /**
      * A list of keywords to use in {@code quarkus-extension.yaml}. If the {@link #keywords} are not provided, the
@@ -263,7 +273,8 @@ public class CreateExtensionMojo extends CreateTestMojo {
         final boolean deprecated = models.stream().anyMatch(ArtifactModel::isDeprecated);
 
         final TemplateParams quarkusExtensionYamlParams = CqUtils.quarkusExtensionYamlParams(models, artifactIdBase, nameBase,
-                description, keywords, !nativeSupported, deprecated, nativeSupported, ExtensionStatus.of(nativeSupported),
+                description, configPrefixes, keywords, !nativeSupported, deprecated, nativeSupported,
+                ExtensionStatus.of(nativeSupported),
                 runtimeBomPath.getParent().getParent().getParent(), getLog(), new ArrayList<>());
         final Path metaInfDir = extensionRuntimeBaseDir.resolve("src/main/resources/META-INF");
         try {

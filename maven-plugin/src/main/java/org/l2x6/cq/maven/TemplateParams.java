@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.camel.tooling.model.ArtifactModel;
@@ -53,6 +54,7 @@ public class TemplateParams {
     private final boolean runtimeBomPathSet;
     private final String bomEntryVersion;
     private final String description;
+    private final Set<String> configPrefixes;
     private final List<String> keywords;
     private final String guideUrl;
     private final List<String> categories;
@@ -119,6 +121,7 @@ public class TemplateParams {
         this.kind = builder.kind;
         this.status = builder.status != null ? builder.status : ExtensionStatus.of(builder.nativeSupported);
         this.models = new ArrayList<>(builder.models);
+        this.configPrefixes = builder.configPrefixes;
     }
 
     public boolean isNativeSupported() {
@@ -197,6 +200,10 @@ public class TemplateParams {
         return description;
     }
 
+    public Set<String> getConfigPrefixes() {
+        return configPrefixes;
+    }
+
     public List<String> getKeywords() {
         return keywords;
     }
@@ -262,6 +269,7 @@ public class TemplateParams {
         private boolean runtimeBomPathSet;
         private String bomEntryVersion;
         private String description;
+        private Set<String> configPrefixes;
         private Collection<String> keywords = new ArrayList<>();
         private String guideUrl;
         private List<String> categories = new ArrayList<>();
@@ -367,6 +375,11 @@ public class TemplateParams {
 
         public Builder description(String description) {
             this.description = description;
+            return this;
+        }
+
+        public Builder configPrefixes(Set<String> configPrefixes) {
+            this.configPrefixes = configPrefixes;
             return this;
         }
 

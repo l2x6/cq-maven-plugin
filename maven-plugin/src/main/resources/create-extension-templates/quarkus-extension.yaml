@@ -39,4 +39,9 @@ metadata:
 [/#if]
   status:
   - "[=status]"
+[#if configPrefixes?size > 0 ]  config:
+[#list configPrefixes as configPrefix]
+  - "[=configPrefix]"
+[/#list]
+[/#if]
 [#if deprecated ]  - "deprecated"[/#if]
