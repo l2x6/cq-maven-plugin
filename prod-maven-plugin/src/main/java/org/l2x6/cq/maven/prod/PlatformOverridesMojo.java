@@ -147,7 +147,7 @@ public class PlatformOverridesMojo extends AbstractMojo {
                 extModel.put("artifact-id", ga.getArtifactId());
 
                 final Map<String, Object> md = new LinkedHashMap<>();
-                md.put("redhat-support", Arrays.asList(redhatSupportLevel));
+                md.put(product.getPlatformOverridesSupportAttributeName(), Arrays.asList(redhatSupportLevel));
 
                 if (overrideGuide) {
                     md.put("guide", product.getExtensionDocPageUrl(ga));
