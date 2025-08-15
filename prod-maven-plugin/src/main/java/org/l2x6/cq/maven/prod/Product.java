@@ -17,7 +17,6 @@
 package org.l2x6.cq.maven.prod;
 
 import com.google.gson.Gson;
-import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
@@ -28,6 +27,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeMap;
@@ -158,6 +158,8 @@ public class Product {
             ((List<String>) json.getOrDefault("ignoredTransitiveDependencies",
                     Collections.emptyList())).forEach(ignoredTransitiveDependencies::include);
 
+            final String platformOverridesSupportAttributeName = (String) json.get("platformOverridesSupportAttributeName");
+
             return new Product(
                     Collections.unmodifiableMap(extensionsMap),
                     groupId,
@@ -180,8 +182,9 @@ public class Product {
                     Collections.unmodifiableMap(additionalDependenciesMap),
                     bannedDeps.build(),
                     Collections.unmodifiableMap(transitiveDependencyReplacements),
-                    ignoredTransitiveDependencies.build());
-        } catch (IOException e) {
+                    ignoredTransitiveDependencies.build(),
+                    platformOverridesSupportAttributeName);
+        } catch (Exception e) {
             throw new RuntimeException("Could not read " + absProdJson, e);
         }
     }
@@ -208,6 +211,20 @@ public class Product {
     private final GavSet bannedDependencies;
     private final Map<Ga, Ga> transitiveDependencyReplacements;
     private final GavSet ignoredTransitiveDependencies;
+    /**
+     * The name of attribute under `<extension>.metadata` in platform overrides files
+     * (`org.apache.camel.quarkus:camel-quarkus-product::json:${version}`,
+     * `org.apache.camel.quarkus:camel-quarkus-product:cxf:json:${version}`).
+     * Used when transforming product files `camel-quarkus-product-source.json` and `quarkus-cxf-product-source.json` to
+     * platform overrides files.
+     * For CEQ versions before 3.27.0, the value `redhat-support` should be used.
+     * For 3.27.0+ versions, the name for the Red Hat CEQ product should be `redhat-camel-support`.
+     * See also https://github.com/l2x6/cq-maven-plugin/issues/717.
+     *
+     * @asciidoclet
+     * @since       4.18.0
+     */
+    private final String platformOverridesSupportAttributeName;
 
     public Product(
             Map<Ga, Product.Extension> extensions,
@@ -228,7 +245,8 @@ public class Product {
             Map<String, GavSet> additionalExtensionDependencies,
             GavSet bannedDependencies,
             Map<Ga, Ga> transitiveDependencyReplacements,
-            GavSet ignoredTransitiveDependencies) {
+            GavSet ignoredTransitiveDependencies,
+            String platformOverridesSupportAttributeName) {
         this.extensions = extensions;
         this.groupId = groupId;
         this.prodGuideUrlTemplate = prodGuideUrlTemplate;
@@ -251,6 +269,8 @@ public class Product {
         this.bannedDependencies = bannedDependencies;
         this.transitiveDependencyReplacements = transitiveDependencyReplacements;
         this.ignoredTransitiveDependencies = ignoredTransitiveDependencies;
+        this.platformOverridesSupportAttributeName = Objects.requireNonNull(platformOverridesSupportAttributeName,
+                "platformOverridesSupportAttributeName must be set");
     }
 
     /**
@@ -382,6 +402,10 @@ public class Product {
 
     public Map<String, String> getVersionTransformations() {
         return versionTransformations;
+    }
+
+    public String getPlatformOverridesSupportAttributeName() {
+        return platformOverridesSupportAttributeName;
     }
 
     /**

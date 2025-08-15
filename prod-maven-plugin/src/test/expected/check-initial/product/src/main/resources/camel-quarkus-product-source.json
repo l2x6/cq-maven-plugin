@@ -24,5 +24,6 @@
                 "integration-tests/*-grouped/pom.xml"
             ]
         }
-    ]
+    ],
+    "platformOverridesSupportAttributeName": "redhat-support"
 }
