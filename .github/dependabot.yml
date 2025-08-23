@@ -21,6 +21,9 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    ignore:
+      - dependency-name: "org.apache.maven.resolver:*"
+        versions: [ ">=2.0.0" ]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
