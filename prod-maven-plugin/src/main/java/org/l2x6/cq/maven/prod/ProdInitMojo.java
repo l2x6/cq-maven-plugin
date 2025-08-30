@@ -56,6 +56,7 @@ import org.l2x6.pom.tuner.PomTunerUtils;
 import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gavtcs;
+import org.l2x6.pom.tuner.model.GavtcsPattern;
 import org.l2x6.pom.tuner.model.Profile;
 import org.w3c.dom.Comment;
 import org.w3c.dom.Document;
@@ -68,7 +69,7 @@ import org.w3c.dom.Document;
 @Mojo(name = "prod-init", threadSafe = true, requiresProject = false, inheritByDefault = false)
 public class ProdInitMojo extends AbstractMojo {
 
-    private static final String FUSE_SNAPSHOT_SUFFIX = ".fuse-SNAPSHOT";
+    private static final String RHBAC_SNAPSHOT_SUFFIX = ".rhbac-SNAPSHOT";
 
     /**
      * The basedir
@@ -184,20 +185,21 @@ public class ProdInitMojo extends AbstractMojo {
 
         final String majorVersion = version.split("\\.")[0];
 
-        if (version.endsWith(FUSE_SNAPSHOT_SUFFIX)) {
+        if (version.endsWith(RHBAC_SNAPSHOT_SUFFIX)) {
             throw new IllegalStateException(
-                    "This branch seems to have been initialized already, because it already has a version ending with '.fuse-SNAPSHOT'");
+                    "This branch seems to have been initialized already, because it already has a version ending with '"
+                            + RHBAC_SNAPSHOT_SUFFIX + "'");
         }
         if (version.endsWith("-SNAPSHOT")) {
             throw new IllegalStateException(
                     "Cannot initialize a -SNAPSHOT version; expecting a release version, such as 2.7.1");
         }
 
-        /* Add .fuse-SNAPSHOT suffix to the version */
+        /* Add .rhbac-SNAPSHOT suffix to the version */
         final Predicate<Profile> profiles = ActiveProfiles.of();
         final Path pomXmlPath = basedir.toPath().resolve("pom.xml");
         final MavenSourceTree t = MavenSourceTree.of(pomXmlPath, charset, Dependency::isVirtual);
-        t.setVersions(version + FUSE_SNAPSHOT_SUFFIX, profiles, simpleElementWhitespace);
+        t.setVersions(version + RHBAC_SNAPSHOT_SUFFIX, profiles, simpleElementWhitespace);
 
         /* Edit root pom.xml */
         new PomTransformer(pomXmlPath, charset, simpleElementWhitespace).transform(
@@ -309,8 +311,7 @@ public class ProdInitMojo extends AbstractMojo {
                             "plugins");
                     final ContainerElement licensePlugin = managedPlugins.childElementsStream()
                             .map(ContainerElement::asGavtcs)
-                            .filter(gavtcs -> "com.mycila".equals(gavtcs.getGroupId())
-                                    && "license-maven-plugin".equals(gavtcs.getArtifactId()))
+                            .filter(GavtcsPattern.of("com.mycila:license-maven-plugin"))
                             .findFirst()
                             .orElseThrow()
                             .getNode();
@@ -602,13 +603,19 @@ public class ProdInitMojo extends AbstractMojo {
         }
 
         /* Adjust the version in product/pom.xml */
-        final String newVersion = version + FUSE_SNAPSHOT_SUFFIX;
-        getLog().info("Setting versions to " + newVersion);
+        final String newVersion = version + RHBAC_SNAPSHOT_SUFFIX;
+        getLog().info("Setting version to " + newVersion + " in product/pom.xml");
+        getLog().info("Removing <modules>...</modules> from product/pom.xml");
         new PomTransformer(basedir.toPath().resolve("product/pom.xml"), charset, simpleElementWhitespace)
                 .transform((Document document, TransformationContext context) -> {
                     ContainerElement parent = context.getContainerElement("project", "parent")
                             .orElseThrow(() -> new IllegalStateException("No parent element in " + context.getPomXmlPath()));
                     parent.setVersion(newVersion);
+
+                    context.getOrAddProfileParent(null)
+                            .getChildContainerElement("modules")
+                            .ifPresent(modules -> modules.remove(false, true));
+
                 });
     }
 
