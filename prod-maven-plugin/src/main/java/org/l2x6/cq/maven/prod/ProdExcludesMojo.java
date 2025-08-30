@@ -412,7 +412,8 @@ public class ProdExcludesMojo extends AbstractMojo {
         final Predicate<Profile> profiles = ActiveProfiles.of();
 
         /* Re-link any previously commented modules */
-        final MavenSourceTree fullTree = initialTree.relinkModules(charset, simpleElementWhitespace, MODULE_COMMENT);
+        final MavenSourceTree fullTree = initialTree.relinkModules(charset, simpleElementWhitespace, MODULE_COMMENT,
+                ActiveProfiles.of("standard-build"));
 
         /* Add the modules required by the includes */
         final Set<Ga> expandedIncludesWithoutTests = Collections
