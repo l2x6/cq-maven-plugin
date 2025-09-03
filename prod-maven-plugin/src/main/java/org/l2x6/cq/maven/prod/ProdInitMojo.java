@@ -51,6 +51,7 @@ import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
 import org.l2x6.pom.tuner.PomTransformer.NodeGavtcs;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.PomTransformer.TextElement;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.PomTunerUtils;
 import org.l2x6.pom.tuner.model.Dependency;
@@ -509,6 +510,31 @@ public class ProdInitMojo extends AbstractMojo {
                             "pom", null, "import");
                     context.removeManagedDependency(artemisBom, true, true);
                 });
+
+        /* Edit extensions-core/core/runtime/pom.xml to change the versions under <conditionalDevDependencies> */
+        new PomTransformer(basedir.toPath().resolve("extensions-core/core/runtime/pom.xml"), charset, simpleElementWhitespace)
+                .transform(
+                        (Document document, TransformationContext context) -> {
+                            final ContainerElement managedPlugins = context.getOrAddContainerElements("build", "plugins");
+                            final ContainerElement quarkusExtensionPlugin = managedPlugins.childElementsStream()
+                                    .map(ContainerElement::asGavtcs)
+                                    .filter(GavtcsPattern.of("io.quarkus:quarkus-extension-maven-plugin"))
+                                    .findFirst()
+                                    .orElseThrow(() -> new RuntimeException(
+                                            "Could not find io.quarkus:quarkus-extension-maven-plugin"))
+                                    .getNode();
+                            quarkusExtensionPlugin.getChildContainerElement("configuration", "conditionalDevDependencies")
+                                    .orElseThrow(() -> new RuntimeException(
+                                            "Could not find configuration/conditionalDevDependencies under io.quarkus:quarkus-extension-maven-plugin"))
+                                    .childTextElementsStream()
+                                    .map(TextElement::getNode)
+                                    .filter(n -> n.getTextContent().startsWith("org.apache.camel.quarkus:camel-quarkus-debug:"))
+                                    .findFirst()
+                                    .orElseThrow(() -> new RuntimeException(
+                                            "Could not find org.apache.camel.quarkus:camel-quarkus-debug under configuration/conditionalDevDependencies of io.quarkus:quarkus-extension-maven-plugin"))
+                                    .setTextContent(
+                                            "org.apache.camel.quarkus:camel-quarkus-debug:${camel-quarkus-community.version}");
+                        });
 
         /* Edit extensions-jvm/pom.xml to add cics & sap extension */
         new PomTransformer(basedir.toPath().resolve("extensions-jvm/pom.xml"), charset, simpleElementWhitespace).transform(
