@@ -456,6 +456,10 @@ public class ProdInitMojo extends AbstractMojo {
                                     null, "import"),
                             qpidBomNode.getNode().previousSiblingInsertionRefNode());
 
+                    /* Add camel-kamelets dependency */
+                    dependencyManagementDeps
+                            .addGavtcs(new Gavtcs("org.apache.camel.kamelets", "camel-kamelets", "${camel-kamelets.version}"));
+
                     /* Add io.quarkuiverse.artemis.* in resolutionEntryPointInclude */
                     final ContainerElement plugins = context.getOrAddContainerElements(
                             "build", "plugins");
@@ -470,6 +474,8 @@ public class ProdInitMojo extends AbstractMojo {
                             .get();
                     config.addChildTextElementIfNeeded("resolutionEntryPointInclude", "io.quarkiverse.artemis:*",
                             Comparator.comparing(Map.Entry::getValue, Comparators.before("io.quarkiverse.cxf:*")));
+                    config.addChildTextElementIfNeeded("resolutionEntryPointInclude", "org.apache.camel.kamelets:*",
+                            Comparator.comparing(Map.Entry::getValue, Comparators.after("org.apache.camel.quarkus:*")));
 
                     /* Change quarkus-enforcer-rules to use the community */
                     final String quarkusCommunityVersion = "${quarkus-community.version}";
@@ -477,10 +483,6 @@ public class ProdInitMojo extends AbstractMojo {
                             .getChildContainerElement("dependencies", "dependency")
                             .get();
                     quarkusEnforcerRulesDep.setVersion(quarkusCommunityVersion);
-
-                    /* Add camel-kamelets dependency */
-                    dependencyManagementDeps
-                            .addGavtcs(new Gavtcs("org.apache.camel.kamelets", "camel-kamelets", "${camel-kamelets.version}"));
 
                 });
 
