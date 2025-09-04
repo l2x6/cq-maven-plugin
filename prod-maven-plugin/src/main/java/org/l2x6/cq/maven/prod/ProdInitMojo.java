@@ -275,7 +275,13 @@ public class ProdInitMojo extends AbstractMojo {
                         }
                     };
 
-                    Stream.of("assertj.version", "caffeine.version", "graalvm-docs.version", "jxmpp.version", "sshd.version")
+                    Stream.of(
+                            "assertj.version",
+                            "caffeine.version",
+                            "graalvm.version",
+                            "graalvm-docs.version",
+                            "jxmpp.version",
+                            "sshd.version")
                             .map(props::getChildContainerElement)
                             .forEach(property -> property.ifPresent(syncCommentVersionTransformer));
 
@@ -414,15 +420,9 @@ public class ProdInitMojo extends AbstractMojo {
         new PomTransformer(basedir.toPath().resolve("poms/bom/pom.xml"), charset, simpleElementWhitespace).transform(
                 (Document document, TransformationContext context) -> {
 
-                    /* Change the version of org.graalvm.js:* from ${graalvm.version} to ${graalvm-community.version} */
                     final ContainerElement dependencyManagementDeps = context.getOrAddContainerElements(
                             "dependencyManagement",
                             "dependencies");
-                    dependencyManagementDeps.childElementsStream()
-                            .map(ContainerElement::asGavtcs)
-                            .filter(gavtcs -> gavtcs.getGroupId().equals("org.graalvm.js"))
-                            .forEach(node -> node.getNode().setVersion("${graalvm-community.version}"));
-
                     /* Add camel-sap and camel-quarkus-sap dependencies */
                     dependencyManagementDeps.addGavtcs(new Gavtcs("org.fusesource", "camel-sap", "${camel-fusesource.version}",
                             "", "", "", Ga.of("org.eclipse:osgi")));
