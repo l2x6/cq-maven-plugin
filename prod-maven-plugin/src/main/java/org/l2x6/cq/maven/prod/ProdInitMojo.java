@@ -51,6 +51,7 @@ import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
 import org.l2x6.pom.tuner.PomTransformer.NodeGavtcs;
 import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.PomTransformer.TextElement;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.PomTunerUtils;
 import org.l2x6.pom.tuner.model.Dependency;
@@ -60,6 +61,7 @@ import org.l2x6.pom.tuner.model.GavtcsPattern;
 import org.l2x6.pom.tuner.model.Profile;
 import org.w3c.dom.Comment;
 import org.w3c.dom.Document;
+import org.w3c.dom.Element;
 
 /**
  * Initialize a CEQ product branch.
@@ -230,6 +232,21 @@ public class ProdInitMojo extends AbstractMojo {
                     getLog().info("Adding to pom.xml: camel-fusesource.version property " + camelFusesourceVersion);
                     props.addChildTextElementIfNeeded("camel-fusesource.version", camelFusesourceVersion,
                             Comparator.comparing(Map.Entry::getKey, Comparators.before("camel-kamelets.version")));
+
+                    addProperty(
+                            props,
+                            "sapidoc",
+                            "3.1.4",
+                            " @sync org.fusesource:camel-sap-parent:${camel-fusesource.version} dep:com.sap.conn.idoc:sapidoc3 ",
+                            Comparators.after("camel-fusesource.version"),
+                            getLog()::info);
+                    addProperty(
+                            props,
+                            "sapjco3",
+                            "3.1.12",
+                            " @sync org.fusesource:camel-sap-parent:${camel-fusesource.version} dep:com.sap.conn.jco:sapjco3 ",
+                            Comparators.after("camel-fusesource.version"),
+                            getLog()::info);
 
                     //ctgClient.version is hardcoded as 9.2, we do nor expect this value to be changed in the future
                     getLog().info("Adding to pom.xml: ctgClient.version property 9.2 ");
@@ -619,6 +636,24 @@ public class ProdInitMojo extends AbstractMojo {
                             .ifPresent(modules -> modules.remove(false, true));
 
                 });
+    }
+
+    static void addProperty(
+            final ContainerElement props,
+            final String artifactId,
+            final String initialVersion,
+            final String trailingComment,
+            final Comparator<String> where,
+            Consumer<String> log) {
+
+        log.accept("Adding to pom.xml: " + artifactId + ".version property " + initialVersion);
+        final TextElement textElement = props.addChildTextElementIfNeeded(artifactId + ".version", initialVersion,
+                Comparator.comparing(Map.Entry::getKey, where));
+        if (trailingComment != null) {
+            final Element n = textElement.getNode();
+            final Comment cmt = n.getOwnerDocument().createComment(trailingComment);
+            n.getParentNode().insertBefore(cmt, n.getNextSibling());
+        }
     }
 
 }
