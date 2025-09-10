@@ -573,6 +573,7 @@ public class ProdInitMojo extends AbstractMojo {
                 "product/jenkinsfile-stage-template.txt",
                 "product/pom.xml",
                 "product/README.adoc",
+                "product/settings.xml",
                 "product/src/main/resources/quarkus-cxf-product-source.json",
                 "product/src/main/resources/camel-quarkus-product-source.json",
                 "extensions-jvm/sap/",
