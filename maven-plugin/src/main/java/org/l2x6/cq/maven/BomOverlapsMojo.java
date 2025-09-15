@@ -131,13 +131,16 @@ public class BomOverlapsMojo extends AbstractMojo {
         final Path baseBomPath;
         final Path compareBomPath;
         final Gav baseGav;
+        final Gav compareGav;
         if (compare == null || compare.isEmpty()) {
             baseBomPath = this.baseBomPath.toPath();
             compareBomPath = CqCommonUtils.resolveArtifact(localRepositoryPath, "io.quarkus", "quarkus-bom",
                     quarkusVersion,
                     "pom", repositories, repoSystem, repoSession);
-            final Model pom = CqCommonUtils.readPom(baseBomPath, charset);
-            baseGav = new Gav(pom.getGroupId(), pom.getArtifactId(), pom.getVersion());
+            final Model basePomModel = CqCommonUtils.readPom(baseBomPath, charset);
+            baseGav = new Gav(basePomModel.getGroupId(), basePomModel.getArtifactId(), basePomModel.getVersion());
+            final Model comparePomModel = CqCommonUtils.readPom(baseBomPath, charset);
+            compareGav = new Gav(comparePomModel.getGroupId(), comparePomModel.getArtifactId(), comparePomModel.getVersion());
         } else {
             final String delim = "..";
             final int delimPos = compare.indexOf(delim);
@@ -145,7 +148,7 @@ public class BomOverlapsMojo extends AbstractMojo {
                 throw new IllegalStateException("Expected compare delimited by '..': found '" + compare + "'");
             }
             baseGav = Gav.of(compare.substring(0, delimPos));
-            final Gav compareGav = Gav.of(compare.substring(delimPos + delim.length()));
+            compareGav = Gav.of(compare.substring(delimPos + delim.length()));
             baseBomPath = CqCommonUtils.resolveArtifact(localRepositoryPath, baseGav.getGroupId(), baseGav.getArtifactId(),
                     baseGav.getVersion(),
                     "pom", repositories, repoSystem, repoSession);
@@ -186,16 +189,15 @@ public class BomOverlapsMojo extends AbstractMojo {
                 .forEach(en -> {
                     final String baseVersion = en.getValue();
                     final String compareVersion = compareGas.get(en.getKey());
-                    sb.append(
-                            "\n - "
-                                    + en.getKey()
-                                    + " "
-                                    + (baseVersion.equals(compareVersion)
-                                            ? ("✅ " + baseVersion)
-                                            : (" " + baseVersion + " ❌ " + compareVersion)));
+                    sb.append("\n - ")
+                            .append(en.getKey())
+                            .append(" ").append(baseVersion)
+                            .append(baseVersion.equals(compareVersion) ? " ✅ " : " ❌ ")
+                            .append(compareVersion);
                 });
 
-        final String msg = "\n\nThe following artifacts are managed in both BOMs:" + sb.toString()
+        final String msg = "\n\nThe following artifacts are managed in both " + baseGav + " and " + compareGav + ":"
+                + sb.toString()
                 + "\n\nYou may want to either remove the listed artifacts from " + baseGav
                 + " or add them to <ignoredOverlaps>\n\n";
         if (sb.length() > 0) {
