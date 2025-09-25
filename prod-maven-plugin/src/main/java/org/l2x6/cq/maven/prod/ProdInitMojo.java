@@ -257,7 +257,7 @@ public class ProdInitMojo extends AbstractMojo {
                     getLog().info(
                             "Adding to pom.xml: cics.container.image property images.paas.redhat.com/fuseqe/ibm-cicstg-container-linux-x86-trial:10.1");
                     props.addChildTextElementIfNeeded("cics.container.image",
-                            "images.paas.redhat.com/fuseqe/ibm-cicstg-container-linux-x86-trial:10.1",
+                            "images.paas.redhat.com/fuseqe/ibm-cicstg-container-linux-x86-trial:10.1trial",
                             Comparator.comparing(Map.Entry::getKey, Comparators.before("cassandra.container.image")));
 
                     getLog().info("Adding to pom.xml: quarkus-community.version property");
