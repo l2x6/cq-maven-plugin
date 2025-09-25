@@ -57,6 +57,7 @@ class SyncExamplesFromUpstreamMojoTest {
     private static final Path EXAMPLES = Paths.get("src/test/examples/community");
     private static final Path EXAMPLE_FOO = EXAMPLES.resolve("foo");
     private static final Path EXAMPLE_BAR = EXAMPLES.resolve("bar");
+    private static final Path EXAMPLE_BAZ = EXAMPLES.resolve("baz");
 
     @BeforeEach
     public void beforeEach() {
@@ -65,6 +66,7 @@ class SyncExamplesFromUpstreamMojoTest {
             Files.createDirectories(PRODUCT_EXAMPLES_DIR);
             FileUtils.copyDirectory(EXAMPLE_FOO.toFile(), UPSTREAM_EXAMPLES_DIR.resolve("foo").toFile());
             FileUtils.copyDirectory(EXAMPLE_BAR.toFile(), UPSTREAM_EXAMPLES_DIR.resolve("bar").toFile());
+            FileUtils.copyDirectory(EXAMPLE_BAZ.toFile(), UPSTREAM_EXAMPLES_DIR.resolve("baz").toFile());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -88,6 +90,7 @@ class SyncExamplesFromUpstreamMojoTest {
         Map<String, Set<SyncExamplesFromUpstreamMojo.GAV>> projectDependencies = new TreeMap<>();
         resolveDependencies(EXAMPLE_FOO, projectDependencies, isTemporaryVersion);
         resolveDependencies(EXAMPLE_BAR, projectDependencies, isTemporaryVersion);
+        resolveDependencies(EXAMPLE_BAZ, projectDependencies, isTemporaryVersion);
         Files.walkFileTree(UPSTREAM_EXAMPLES_DIR, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
@@ -165,6 +168,16 @@ class SyncExamplesFromUpstreamMojoTest {
         // Only OpenShift manifests should remain
         assertFalse(Files.exists(projectFoo.resolve("src/main/resources/kubernetes/kubernetes.yml")));
         assertTrue(Files.exists(projectFoo.resolve("src/main/resources/kubernetes/openshift.yml")));
+
+        // submodule version
+        // foo should be synced as all dependencies are productized
+        Path projectBaz = PRODUCT_EXAMPLES_DIR.resolve("baz");
+        assertTrue(Files.exists(projectBaz));
+        Model bazModel = CqCommonUtils.readPom(projectBaz.resolve("pom.xml"), StandardCharsets.UTF_8);
+        assertEquals("3.8.0.redhat-00001", bazModel.getVersion());
+        Model baz1Model = CqCommonUtils.readPom(projectBaz.resolve("baz-1/pom.xml"), StandardCharsets.UTF_8);
+        assertEquals("3.8.0.redhat-00001", baz1Model.getParent().getVersion());
+
     }
 
     @ParameterizedTest
