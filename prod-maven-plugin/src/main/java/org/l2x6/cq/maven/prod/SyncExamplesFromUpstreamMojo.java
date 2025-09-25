@@ -73,6 +73,7 @@ import org.eclipse.aether.resolution.DependencyResult;
 import org.eclipse.aether.util.artifact.JavaScopes;
 import org.eclipse.aether.util.filter.DependencyFilterUtils;
 import org.l2x6.cq.common.CqCommonUtils;
+import org.l2x6.pom.tuner.MavenSourceTree;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
@@ -566,17 +567,17 @@ public class SyncExamplesFromUpstreamMojo extends AbstractMojo {
 
             @Override
             public void apply(Path source) {
+
+                /* Set versions in the top pom.xml and in submodules if there are any */
+                MavenSourceTree t = MavenSourceTree.of(source, StandardCharsets.UTF_8);
+                t.setVersions(getCamelQuarkusExamplesVersion(), p -> true, PomTransformer.SimpleElementWhitespace.SPACE);
+
                 PomTransformer pomTransformer = new PomTransformer(source, StandardCharsets.UTF_8,
                         PomTransformer.SimpleElementWhitespace.SPACE);
 
                 pomTransformer.transform(new PomTransformer.Transformation() {
                     @Override
                     public void perform(Document document, TransformationContext context) {
-                        ContainerElement project = context.getContainerElement("project").orElseThrow();
-
-                        // Update the example project version to a productized scheme
-                        project.addOrSetChildTextElement("version", getCamelQuarkusExamplesVersion());
-
                         // Update BOM version properties
                         ContainerElement properties = context.getOrAddContainerElement("properties");
                         properties.addOrSetChildTextElement("quarkus.platform.group-id", quarkusPlatformGroupId);
