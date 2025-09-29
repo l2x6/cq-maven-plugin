@@ -119,7 +119,7 @@ public class TemplateParams {
         this.guideUrl = builder.guideUrl;
         this.categories = new ArrayList<>(builder.categories);
         this.kind = builder.kind;
-        this.status = builder.status != null ? builder.status : ExtensionStatus.of(builder.nativeSupported);
+        this.status = builder.status != null ? builder.status : ExtensionStatus.stable;
         this.models = new ArrayList<>(builder.models);
         this.configPrefixes = builder.configPrefixes;
     }

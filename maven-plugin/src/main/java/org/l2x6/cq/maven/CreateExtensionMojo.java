@@ -274,7 +274,7 @@ public class CreateExtensionMojo extends CreateTestMojo {
 
         final TemplateParams quarkusExtensionYamlParams = CqUtils.quarkusExtensionYamlParams(models, artifactIdBase, nameBase,
                 description, configPrefixes, keywords, !nativeSupported, deprecated, nativeSupported,
-                ExtensionStatus.of(nativeSupported),
+                ExtensionStatus.stable,
                 runtimeBomPath.getParent().getParent().getParent(), getLog(), new ArrayList<>());
         final Path metaInfDir = extensionRuntimeBaseDir.resolve("src/main/resources/META-INF");
         try {

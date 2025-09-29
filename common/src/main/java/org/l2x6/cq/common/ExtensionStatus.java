@@ -25,10 +25,6 @@ public enum ExtensionStatus {
 
     private final String capitalized;
 
-    public static ExtensionStatus of(boolean nativeSupported) {
-        return nativeSupported ? stable : preview;
-    }
-
     public String getCapitalized() {
         return capitalized;
     }
