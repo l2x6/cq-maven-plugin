@@ -23,8 +23,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.Enumeration;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -32,7 +36,6 @@ import java.util.TreeSet;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import org.apache.maven.execution.MavenSession;
@@ -177,7 +180,9 @@ public class FindDependencyMojo extends AbstractMojo {
         final Glob resourceRegExPattern = resourcePattern == null ? null : new Glob(resourcePattern);
         final Path localRepositoryPath = Paths.get(localRepository);
 
-        listRoots()
+        final Set<Gav> roots = listRoots();
+        final Results results = new Results(roots);
+        roots
                 .forEach(extension -> {
                     final org.eclipse.aether.artifact.Artifact rootArtifact = new DefaultArtifact(
                             extension.getGroupId(),
@@ -211,24 +216,13 @@ public class FindDependencyMojo extends AbstractMojo {
                                 if (gavPattern != null
                                         && gavPatternMatcher.matches(a.getGroupId(), a.getArtifactId(), a.getVersion())) {
 
-                                    final String resourcePath;
+                                    String resourcePath = null;
                                     if (resourceRegExPattern != null) {
                                         final Path jarPath = CqCommonUtils.resolveJar(localRepositoryPath, a.getGroupId(),
                                                 a.getArtifactId(), a.getVersion(), repositories, repoSystem, repoSession);
                                         resourcePath = findResource(jarPath, resourceRegExPattern);
-                                    } else {
-                                        resourcePath = "";
                                     }
-                                    if (resourcePath != null) {
-                                        final String msg = "Found "
-                                                + StreamSupport
-                                                        .stream(((Iterable<Gavtcs>) (() -> stack.descendingIterator()))
-                                                                .spliterator(), false)
-                                                        .map(Gavtcs::toString)
-                                                        .collect(Collectors.joining("\n        -> "))
-                                                + resourcePath;
-                                        getLog().warn(msg);
-                                    }
+                                    results.add(stack, resourcePath);
                                 }
                                 return true;
                             }
@@ -238,7 +232,16 @@ public class FindDependencyMojo extends AbstractMojo {
                     }
 
                 });
-
+        if (results.results().isEmpty()) {
+            getLog().info("No transitive depdendencies found matching " + gavPattern);
+        } else {
+            getLog().info(
+                    "\n\nTransitive dependencies matching '" + gavPattern + "':\n\n"
+                            + results.results().stream()
+                                    .map(Result::toString)
+                                    .collect(Collectors.joining("\n\n"))
+                            + "\n\n.");
+        }
     }
 
     static String findResource(Path jarPath, Glob classPattern) {
@@ -259,7 +262,7 @@ public class FindDependencyMojo extends AbstractMojo {
         return null;
     }
 
-    public Stream<Gav> listRoots() {
+    public Set<Gav> listRoots() {
         final Predicate<Profile> profiles = ActiveProfiles.of(
                 session.getCurrentProject().getActiveProfiles().stream()
                         .map(org.apache.maven.model.Profile::getId)
@@ -269,10 +272,12 @@ public class FindDependencyMojo extends AbstractMojo {
         case TREE:
             final MavenSourceTree tree = MavenSourceTree.of(basedir.toPath().resolve("pom.xml"), charset,
                     Dependency::isVirtual, profiles);
-            return tree.getModulesByGa().entrySet().stream()
+            final Set<Gav> result = tree.getModulesByGa().entrySet().stream()
                     .filter(en -> !en.getValue().getPackaging().equals("pom"))
                     .map(Map.Entry::getKey)
-                    .map(ga -> new Gav(ga.getGroupId(), ga.getArtifactId(), version));
+                    .map(ga -> new Gav(ga.getGroupId(), ga.getArtifactId(), version))
+                    .collect(Collectors.toCollection(TreeSet::new));
+            return Collections.unmodifiableSet(result);
         case PLATFORM_BOMS:
             final Path membersDir = basedir.toPath().resolve("generated-platform-project");
             final Set<Gav> allDeployments = new TreeSet<>();
@@ -291,9 +296,127 @@ public class FindDependencyMojo extends AbstractMojo {
             } catch (IOException e) {
                 throw new RuntimeException("Could not list " + membersDir, e);
             }
-            return allDeployments.stream();
+            return Collections.unmodifiableSet(allDeployments);
         default:
             throw new IllegalStateException("Unexpected " + RootsSourceType.class.getSimpleName() + ": " + rootsSourceType);
+        }
+
+    }
+
+    static class Results {
+        final Set<Result> results = new TreeSet<>();
+        final Set<Gav> roots;
+
+        Results(Set<Gav> roots) {
+            this.roots = roots;
+        }
+
+        void add(Deque<Gavtcs> stack, String matchingResourcePath) {
+            results.add(Result.of(roots, stack, matchingResourcePath));
+        }
+
+        public Set<Result> results() {
+            return Collections.unmodifiableSet(results);
+        }
+    }
+
+    static class Result implements Comparable<Result> {
+        static Comparator<Gavtcs> GAVTCS_COMPARATOR = Gavtcs.groupFirstComparator();
+        static Comparator<List<Gavtcs>> PATH_COMPARATOR = (a, b) -> {
+            int size = Math.min(a.size(), b.size());
+            for (int i = 0; i < size; i++) {
+                int cmp = GAVTCS_COMPARATOR.compare(a.get(i), b.get(i));
+                if (cmp != 0)
+                    return cmp;
+            }
+            return Integer.compare(a.size(), b.size());
+        };
+        private static final Comparator<String> SAFE_STRING_COMPARATOR = (a, b) -> a == b
+                ? 0
+                : (a != null ? a.compareTo(b) : -1);
+        static Comparator<Result> RESULT_COMPARATOR = Comparator.comparing(Result::getPath, PATH_COMPARATOR)
+                .thenComparing(Result::getMatchingResourcePath, SAFE_STRING_COMPARATOR);
+
+        final List<Gavtcs> path;
+        final String matchingResourcePath;
+
+        Result(List<Gavtcs> path, String matchingResourcePath) {
+            this.path = path;
+            this.matchingResourcePath = matchingResourcePath;
+        }
+
+        static Result of(Set<Gav> roots, Deque<Gavtcs> stack, String matchingResourcePath) {
+            final Iterator<Gavtcs> it = stack.descendingIterator();
+            final List<Gavtcs> result = new ArrayList<>(stack.size());
+            while (it.hasNext()) {
+                final Gavtcs g = it.next();
+                if (roots.contains(new Gav(g.getGroupId(), g.getArtifactId(), g.getVersion()))) {
+                    if (result.size() > 0) {
+                        result.set(0, g);
+                    } else {
+                        result.add(g);
+                    }
+                } else {
+                    result.add(g);
+                    break;
+                }
+            }
+            while (it.hasNext()) {
+                result.add(it.next());
+            }
+            return new Result(Collections.unmodifiableList(result), matchingResourcePath);
+        }
+
+        @Override
+        public int compareTo(Result o) {
+            return RESULT_COMPARATOR.compare(this, o);
+        }
+
+        @Override
+        public String toString() {
+            return path.stream()
+                    .map(Gavtcs::toString)
+                    .collect(Collectors.joining("\n    -> "))
+                    + (matchingResourcePath != null ? matchingResourcePath : "");
+        }
+
+        @Override
+        public int hashCode() {
+            final int prime = 31;
+            int result = 1;
+            result = prime * result + ((matchingResourcePath == null) ? 0 : matchingResourcePath.hashCode());
+            result = prime * result + ((path == null) ? 0 : path.hashCode());
+            return result;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj)
+                return true;
+            if (obj == null)
+                return false;
+            if (getClass() != obj.getClass())
+                return false;
+            Result other = (Result) obj;
+            if (matchingResourcePath == null) {
+                if (other.matchingResourcePath != null)
+                    return false;
+            } else if (!matchingResourcePath.equals(other.matchingResourcePath))
+                return false;
+            if (path == null) {
+                if (other.path != null)
+                    return false;
+            } else if (!path.equals(other.path))
+                return false;
+            return true;
+        }
+
+        public List<Gavtcs> getPath() {
+            return path;
+        }
+
+        public String getMatchingResourcePath() {
+            return matchingResourcePath;
         }
 
     }
