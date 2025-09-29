@@ -99,7 +99,7 @@ public class UpdateQuarkusMetadataMojo extends AbstractExtensionListMojo {
                             .parseBoolean(runtimePom.getProperties().getProperty("quarkus.metadata.deprecated", "false"));
 
                     final ExtensionStatus status = ExtensionStatus.valueOf(runtimePom.getProperties().getProperty(
-                            "quarkus.metadata.status", ExtensionStatus.of(extModule.isNativeSupported()).toString()));
+                            "quarkus.metadata.status", ExtensionStatus.stable.toString()));
 
                     final TemplateParams templateParams = CqUtils.quarkusExtensionYamlParams(models, artifactIdBase, titleBase,
                             runtimePom.getDescription(), configPrefixes, keywords, unlisted, deprecated,
