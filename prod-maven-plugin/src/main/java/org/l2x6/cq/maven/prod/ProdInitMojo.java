@@ -122,7 +122,7 @@ public class ProdInitMojo extends AbstractMojo {
      *
      * @since 3.0.0
      */
-    @Parameter(defaultValue = "${cq.fromBranch}", required = true)
+    @Parameter(property = "cq.fromBranch", required = true)
     String fromBranch;
 
     /**
@@ -130,7 +130,7 @@ public class ProdInitMojo extends AbstractMojo {
      *
      * @since 3.0.0
      */
-    @Parameter(defaultValue = "${maven.multiModuleProjectDirectory}", readonly = true)
+    @Parameter(property = "maven.multiModuleProjectDirectory", readonly = true)
     File multiModuleProjectDirectory;
 
     @Parameter(defaultValue = "${plugin}", readonly = true)
@@ -149,7 +149,7 @@ public class ProdInitMojo extends AbstractMojo {
      *
      * @since 3.0.0
      */
-    @Parameter(defaultValue = "${quarkus.version}", readonly = true)
+    @Parameter(property = "quarkus.version", required = true)
     String quarkusVersion;
 
     /**
@@ -157,7 +157,7 @@ public class ProdInitMojo extends AbstractMojo {
      *
      * @since 3.3.0
      */
-    @Parameter(defaultValue = "${quarkiverse-cxf.version}", readonly = true)
+    @Parameter(property = "quarkiverse-cxf.version", required = true)
     String quarkiverseCxfVersion;
 
     /**
@@ -165,7 +165,7 @@ public class ProdInitMojo extends AbstractMojo {
      *
      * @since 4.4.6
      */
-    @Parameter(defaultValue = "${camel-fusesource.version}")
+    @Parameter(property = "camel-fusesource.version")
     String camelFusesourceVersion;
 
     /**
@@ -173,8 +173,16 @@ public class ProdInitMojo extends AbstractMojo {
      *
      * @since 4.17.2
      */
-    @Parameter(defaultValue = "${camel-kamelets.version}")
+    @Parameter(property = "camel-kamelets.version")
     String camelKameletsVersion;
+
+    /**
+     * Version of {@code tools.profiler:async-profiler} used by Flink
+     *
+     * @since 4.21.0
+     */
+    @Parameter(defaultValue = "${asprof.version}", required = true)
+    String asyncProfilerVersion;
 
     /** {@inheritDoc} */
     @Override
@@ -232,6 +240,10 @@ public class ProdInitMojo extends AbstractMojo {
                     getLog().info("Adding to pom.xml: camel-fusesource.version property " + camelFusesourceVersion);
                     props.addChildTextElementIfNeeded("camel-fusesource.version", camelFusesourceVersion,
                             Comparator.comparing(Map.Entry::getKey, Comparators.before("camel-kamelets.version")));
+
+                    getLog().info("Adding to pom.xml: async-profiler.version property " + asyncProfilerVersion);
+                    props.addChildTextElementIfNeeded("async-profiler.version", asyncProfilerVersion,
+                            Comparator.comparing(Map.Entry::getKey, Comparators.after("camel-kamelets.version")));
 
                     addProperty(
                             props,
@@ -475,6 +487,10 @@ public class ProdInitMojo extends AbstractMojo {
                     /* Add camel-kamelets dependency */
                     dependencyManagementDeps
                             .addGavtcs(new Gavtcs("org.apache.camel.kamelets", "camel-kamelets", "${camel-kamelets.version}"));
+
+                    /* Add tools.profiler:async-profiler dependency */
+                    dependencyManagementDeps
+                            .addGavtcs(new Gavtcs("tools.profiler", "async-profiler", "${async-profiler.version}"));
 
                     /* Add io.quarkuiverse.artemis.* in resolutionEntryPointInclude */
                     final ContainerElement plugins = context.getOrAddContainerElements(
