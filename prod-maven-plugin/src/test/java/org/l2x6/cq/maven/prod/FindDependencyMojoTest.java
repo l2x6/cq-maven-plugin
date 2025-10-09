@@ -36,6 +36,9 @@ public class FindDependencyMojoTest {
     static final Gavtcs bar1 = Gavtcs.of("org.bar:bar1:2.3.4");
     static final Gavtcs bar2 = Gavtcs.of("org.bar:bar2:3.4.5");
 
+    static final Gavtcs jffiNative = Gavtcs.of("com.github.jnr:jffi:1.3.10:jar:native");
+    static final Gavtcs jffi = Gavtcs.of("com.github.jnr:jffi:1.3.10:jar");
+
     @Test
     void result() {
         Assertions.assertThat(result(roots).getPath()).isEqualTo(List.of());
@@ -101,6 +104,13 @@ public class FindDependencyMojoTest {
             Assertions.assertThat(it.next().getPath()).isEqualTo(List.of(foo1, bar1, foo2));
             Assertions.assertThat(it.next().getPath()).isEqualTo(List.of(foo1, bar2));
         }
+
+    }
+
+    @Test
+    void comparators() {
+        Assertions.assertThat(Result.GAVTCS_COMPARATOR.compare(jffi, jffiNative)).isEqualTo(-1);
+        Assertions.assertThat(Result.GAVTCS_COMPARATOR.compare(jffiNative, jffi)).isEqualTo(1);
 
     }
 }
