@@ -72,7 +72,7 @@
         <maven.shared.invoker>3.3.0</maven.shared.invoker>
         <maven.shared.utils>3.4.2</maven.shared.utils>
         <mockito.version>5.20.0</mockito.version>
-        <pom-tuner.version>4.7.0</pom-tuner.version>
+        <pom-tuner.version>4.7.1</pom-tuner.version>
         <javax.inject.version>1</javax.inject.version>
         <jdom2.version>2.0.6.1</jdom2.version>
         <jgit.version>7.4.0.202509020913-r</jgit.version>
