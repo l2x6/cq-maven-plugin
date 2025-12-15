@@ -75,7 +75,7 @@
         <pom-tuner.version>4.8.0</pom-tuner.version>
         <javax.inject.version>1</javax.inject.version>
         <jdom2.version>2.0.6.1</jdom2.version>
-        <jgit.version>7.4.0.202509020913-r</jgit.version>
+        <jgit.version>7.5.0.202512021534-r</jgit.version>
         <junit.version>6.0.1</junit.version>
         <enforcer-api.version>3.6.2</enforcer-api.version>
         <google-client.version>1.35.0</google-client.version>
