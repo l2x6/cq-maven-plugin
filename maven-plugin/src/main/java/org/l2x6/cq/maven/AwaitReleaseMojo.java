@@ -17,6 +17,7 @@
 package org.l2x6.cq.maven;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -27,6 +28,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.List;
+import java.util.StringTokenizer;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -76,6 +80,17 @@ public class AwaitReleaseMojo extends AbstractExtensionListMojo {
     @Parameter(property = "cq.groupId", defaultValue = "${project.groupId}", required = true)
     String groupId;
 
+    /**
+     * A list of {@code artifactId}s or {@code artifactId} patterns (may contain zero, one or more {@code *} wildcards)
+     * to exclude from the set of artifacts that availablitity of which in {@link #remoteRepository} will be checked.
+     * <p>
+     * Examples: {@code *-docs}
+     *
+     * @since 4.21.0
+     */
+    @Parameter(property = "cq.excludeArtifactIdPatterns")
+    List<String> excludeArtifactIdPatterns;
+
     @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
     String localRepository;
 
@@ -89,6 +104,7 @@ public class AwaitReleaseMojo extends AbstractExtensionListMojo {
         final List<String> remotePaths;
         try (Stream<Path> artifactDirs = Files.list(localBasedir)) {
             remotePaths = artifactDirs
+                    .filter(artifactIdFilter(excludeArtifactIdPatterns))
                     .map(p -> p.resolve(version).resolve(p.getFileName().toString() + "-" + version + ".pom"))
                     .filter(Files::isRegularFile)
                     .map(localBasedir::relativize)
@@ -150,4 +166,75 @@ public class AwaitReleaseMojo extends AbstractExtensionListMojo {
         }
     }
 
+    static Predicate<Path> artifactIdFilter(final List<String> rawArtifactIdPatterns) {
+        final Predicate<Path> artifactIdFilter;
+        if (rawArtifactIdPatterns == null) {
+            artifactIdFilter = path -> true;
+        } else {
+            final List<GavSegmentPattern> excludeArtifactIdPatterns = rawArtifactIdPatterns.stream()
+                    .map(GavSegmentPattern::new)
+                    .toList();
+            artifactIdFilter = path -> {
+                final String artifactId = path.getFileName().toString();
+                return excludeArtifactIdPatterns.stream().noneMatch(pattern -> pattern.matches(artifactId));
+            };
+        }
+        return artifactIdFilter;
+    }
+
+    static class GavSegmentPattern implements Serializable {
+        static final String MULTI_WILDCARD = "*";
+        static final char MULTI_WILDCARD_CHAR = '*';
+        static final String MATCH_ALL_PATTERN_SOURCE = ".*";
+
+        private final transient Pattern pattern;
+        private final String source;
+
+        GavSegmentPattern(String wildcardSource) {
+            super();
+            final StringBuilder sb = new StringBuilder(wildcardSource.length() + 2);
+            final StringTokenizer st = new StringTokenizer(wildcardSource, MULTI_WILDCARD, true);
+            while (st.hasMoreTokens()) {
+                String token = st.nextToken();
+                if (MULTI_WILDCARD.equals(token)) {
+                    sb.append(MATCH_ALL_PATTERN_SOURCE);
+                } else {
+                    sb.append(Pattern.quote(token));
+                }
+            }
+            this.pattern = Pattern.compile(sb.toString());
+            this.source = wildcardSource;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == null)
+                return false;
+            if (getClass() != obj.getClass())
+                return false;
+            GavSegmentPattern other = (GavSegmentPattern) obj;
+            return source.equals(other.source);
+        }
+
+        /**
+         * @return the wildcard source of the {@link #pattern}
+         */
+        public String getSource() {
+            return source;
+        }
+
+        @Override
+        public int hashCode() {
+            return source.hashCode();
+        }
+
+        public boolean matches(String input) {
+            return MATCH_ALL_PATTERN_SOURCE.equals(source) || pattern.matcher(input == null ? "" : input).matches();
+        }
+
+        @Override
+        public String toString() {
+            return source;
+        }
+    }
 }
