@@ -24,10 +24,12 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeMap;
@@ -158,7 +160,11 @@ public class Product {
             ((List<String>) json.getOrDefault("ignoredTransitiveDependencies",
                     Collections.emptyList())).forEach(ignoredTransitiveDependencies::include);
 
-            final String platformOverridesSupportAttributeName = (String) json.get("platformOverridesSupportAttributeName");
+            final Set<String> platformOverridesSupportAttributeNames = new LinkedHashSet<>();
+            Optional.of((String) json.get("platformOverridesSupportAttributeName"))
+                    .ifPresent(platformOverridesSupportAttributeNames::add);
+            ((List<String>) json.getOrDefault("platformOverridesSupportAttributeNames", new ArrayList<>()))
+                    .forEach(platformOverridesSupportAttributeNames::add);
 
             return new Product(
                     Collections.unmodifiableMap(extensionsMap),
@@ -183,7 +189,7 @@ public class Product {
                     bannedDeps.build(),
                     Collections.unmodifiableMap(transitiveDependencyReplacements),
                     ignoredTransitiveDependencies.build(),
-                    platformOverridesSupportAttributeName);
+                    platformOverridesSupportAttributeNames);
         } catch (Exception e) {
             throw new RuntimeException("Could not read " + absProdJson, e);
         }
@@ -224,7 +230,7 @@ public class Product {
      * @asciidoclet
      * @since       4.18.0
      */
-    private final String platformOverridesSupportAttributeName;
+    private final Set<String> platformOverridesSupportAttributeNames;
 
     public Product(
             Map<Ga, Product.Extension> extensions,
@@ -246,7 +252,7 @@ public class Product {
             GavSet bannedDependencies,
             Map<Ga, Ga> transitiveDependencyReplacements,
             GavSet ignoredTransitiveDependencies,
-            String platformOverridesSupportAttributeName) {
+            Set<String> platformOverridesSupportAttributeNames) {
         this.extensions = extensions;
         this.groupId = groupId;
         this.prodGuideUrlTemplate = prodGuideUrlTemplate;
@@ -269,8 +275,11 @@ public class Product {
         this.bannedDependencies = bannedDependencies;
         this.transitiveDependencyReplacements = transitiveDependencyReplacements;
         this.ignoredTransitiveDependencies = ignoredTransitiveDependencies;
-        this.platformOverridesSupportAttributeName = Objects.requireNonNull(platformOverridesSupportAttributeName,
+        this.platformOverridesSupportAttributeNames = Objects.requireNonNull(platformOverridesSupportAttributeNames,
                 "platformOverridesSupportAttributeName must be set");
+        if (platformOverridesSupportAttributeNames.isEmpty()) {
+            throw new IllegalArgumentException("platformOverridesSupportAttributeName must be set");
+        }
     }
 
     /**
@@ -404,8 +413,8 @@ public class Product {
         return versionTransformations;
     }
 
-    public String getPlatformOverridesSupportAttributeName() {
-        return platformOverridesSupportAttributeName;
+    public Set<String> getPlatformOverridesSupportAttributeNames() {
+        return platformOverridesSupportAttributeNames;
     }
 
     /**
