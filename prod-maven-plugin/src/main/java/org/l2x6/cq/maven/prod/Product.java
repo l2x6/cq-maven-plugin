@@ -180,6 +180,10 @@ public class Product {
             ((List<String>) json.getOrDefault("ignoredTransitiveDependencies",
                     Collections.emptyList())).forEach(ignoredTransitiveDependencies::include);
 
+            @SuppressWarnings("unchecked")
+            final Map<String, String> artifactVersionOverrides = (Map<String, String>) json
+                    .getOrDefault("artifactVersionOverrides", Collections.emptyMap());
+
             return new Product(
                     Collections.unmodifiableMap(extensionsMap),
                     groupId,
@@ -203,7 +207,8 @@ public class Product {
                     bannedDeps.build(),
                     Collections.unmodifiableMap(transitiveDependencyReplacements),
                     ignoredTransitiveDependencies.build(),
-                    platformOverridesSupportAttributeNames);
+                    platformOverridesSupportAttributeNames,
+                    Collections.unmodifiableMap(artifactVersionOverrides));
         } catch (Exception e) {
             throw new RuntimeException("Could not read " + absProdJson, e);
         }
@@ -245,6 +250,15 @@ public class Product {
      * @since       4.18.0
      */
     private final Set<String> platformOverridesSupportAttributeNames;
+    /**
+     * Artifact-specific version property mappings.
+     * Maps from artifactId to the version property expression that should be used.
+     * This allows specific artifacts to use custom version properties instead of the default edition-based versions.
+     * For example: {"camel-launcher": "${camel.launcher.version}"}
+     *
+     * @since 4.24.0
+     */
+    private final Map<String, String> artifactVersionOverrides;
 
     public Product(
             Map<Ga, Product.Extension> extensions,
@@ -266,7 +280,8 @@ public class Product {
             GavSet bannedDependencies,
             Map<Ga, Ga> transitiveDependencyReplacements,
             GavSet ignoredTransitiveDependencies,
-            Set<String> platformOverridesSupportAttributeNames) {
+            Set<String> platformOverridesSupportAttributeNames,
+            Map<String, String> artifactVersionOverrides) {
         this.extensions = extensions;
         this.groupId = groupId;
         this.prodGuideUrlTemplate = prodGuideUrlTemplate;
@@ -294,6 +309,8 @@ public class Product {
         if (platformOverridesSupportAttributeNames.isEmpty()) {
             throw new IllegalArgumentException("platformOverridesSupportAttributeName must be set");
         }
+        this.artifactVersionOverrides = Objects.requireNonNull(artifactVersionOverrides,
+                "artifactVersionOverrides must not be null");
     }
 
     /**
@@ -429,6 +446,10 @@ public class Product {
 
     public Set<String> getPlatformOverridesSupportAttributeNames() {
         return platformOverridesSupportAttributeNames;
+    }
+
+    public Map<String, String> getArtifactVersionOverrides() {
+        return artifactVersionOverrides;
     }
 
     /**

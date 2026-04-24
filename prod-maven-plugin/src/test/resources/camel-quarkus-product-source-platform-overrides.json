@@ -48,5 +48,8 @@
             "excludes": []
         }
     ],
-    "platformOverridesSupportAttributeNames": ["redhat-support"]
+    "platformOverridesSupportAttributeNames": ["redhat-support"],
+    "artifactVersionOverrides": {
+        "camel-launcher": "${camel.launcher.version}"
+    }
 }

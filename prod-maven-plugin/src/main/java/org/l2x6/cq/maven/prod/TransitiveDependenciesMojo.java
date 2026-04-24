@@ -376,9 +376,15 @@ public class TransitiveDependenciesMojo {
                             .filter(gavtcs -> gavtcs.getGroupId().equals("org.apache.camel"))
                             .forEach(gavtcs -> {
                                 final Ga ga = new Ga(gavtcs.getGroupId(), gavtcs.getArtifactId());
-                                final String expectedVersion = prodCamelGas.contains(ga)
-                                        ? CamelEdition.PRODUCT.getVersionExpression()
-                                        : CamelEdition.COMMUNITY.getVersionExpression();
+                                // Check for artifact-specific version override from product JSON first
+                                final Map<String, String> overrides = product != null
+                                        ? product.getArtifactVersionOverrides()
+                                        : Collections.emptyMap();
+                                final String expectedVersion = overrides.getOrDefault(
+                                        gavtcs.getArtifactId(),
+                                        prodCamelGas.contains(ga)
+                                                ? CamelEdition.PRODUCT.getVersionExpression()
+                                                : CamelEdition.COMMUNITY.getVersionExpression());
                                 if (!expectedVersion.equals(gavtcs.getVersion())) {
                                     gavtcs.getNode().setVersion(expectedVersion);
                                 }
