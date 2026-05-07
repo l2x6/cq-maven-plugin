@@ -439,6 +439,10 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                             "${camel-community-version}"));
         });
 
+        /* Update test-infra metadata.json if it exists - we do not build productized
+            versions of the test-infra artifacts, so we want to maintain the community version within the test-infra catalog for camel-launcher */
+        updateTestInfraMetadataJson(workRoot, camelCommunityVersion);
+
         if (isChecking() && onCheckFailure != OnFailure.IGNORE) {
             final MavenSourceTree finalTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
             CqCommonUtils.assertPomsMatch(
@@ -454,6 +458,33 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                     "org.l2x6.cq:cq-camel-prod-maven-plugin:camel-prod-excludes");
         }
 
+    }
+
+    void updateTestInfraMetadataJson(final Path workRoot, final String communityVersion) {
+        final Path metadataJsonPath = workRoot
+                .resolve("test-infra/camel-test-infra-all/src/generated/resources/META-INF/metadata.json");
+
+        if (!Files.isRegularFile(metadataJsonPath)) {
+            getLog().debug("Skipping metadata.json update - file does not exist: " + metadataJsonPath);
+            return;
+        }
+
+        getLog().info("Updating " + metadataJsonPath + " version fields to " + communityVersion);
+
+        try {
+            String jsonContent = new String(Files.readAllBytes(metadataJsonPath), charset);
+
+            // Replace all "version": "..." with "version": "<communityVersion>"
+            // This regex matches "version": followed by any quoted string value
+            String updatedJson = jsonContent.replaceAll("\"version\"\\s*:\\s*\"[^\"]*\"",
+                    "\"version\" : \"" + communityVersion + "\"");
+
+            Files.write(metadataJsonPath, updatedJson.getBytes(charset));
+
+            getLog().info("Successfully updated metadata.json");
+        } catch (IOException e) {
+            throw new RuntimeException("Could not update metadata.json at " + metadataJsonPath, e);
+        }
     }
 
     void handleExcludedTargetDirectories(final Path basePath, final MavenSourceTree fullTree, final Set<Ga> excludes,
