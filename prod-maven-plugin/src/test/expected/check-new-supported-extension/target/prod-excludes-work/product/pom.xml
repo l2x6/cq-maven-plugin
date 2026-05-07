@@ -32,14 +32,6 @@
 
     <name>Camel Quarkus :: Product</name>
 
-    <modules>
-        <module>integration-tests-mixed-allowed</module>
-        <module>integration-tests-mixed-jvm</module>
-        <module>integration-tests-mixed-native</module>
-        <module>integration-tests-product</module>
-        <module>superapp</module>
-    </modules>
-
     <build>
         <plugins>
             <plugin>
@@ -85,4 +77,21 @@
             </plugin>
         </plugins>
     </build>
+    <profiles>
+        <profile>
+            <id>testModules</id>
+            <activation>
+                <property>
+                    <name>!itchTestModules</name>
+                </property>
+            </activation>
+            <modules>
+                <module>integration-tests-mixed-allowed</module>
+                <module>integration-tests-mixed-jvm</module>
+                <module>integration-tests-mixed-native</module>
+                <module>integration-tests-product</module>
+                <module>superapp</module>
+            </modules>
+        </profile>
+    </profiles>
 </project>
