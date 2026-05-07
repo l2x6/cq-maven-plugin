@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -393,7 +394,9 @@ public class ProdExcludesMojo extends AbstractMojo {
                 : basedir.toPath();
 
         new PomTransformer(workRoot.resolve("product/pom.xml"), charset, simpleElementWhitespace)
-                .transform(Transformation.removeAllModules(null, true, true));
+                .transform(
+                        Transformation.removeAllModules(null, true, true),
+                        Transformation.removeAllModules("testModules", true, true));
         for (TestCategory testCategory : TestCategory.values()) {
             final Path mixedModulePath = testCategory.resolveMixedModulePath(workRoot).getParent();
             CqCommonUtils.deleteDirectory(mixedModulePath);
@@ -620,7 +623,16 @@ public class ProdExcludesMojo extends AbstractMojo {
 
         final Path productPomPath = workRoot.resolve("product/pom.xml");
         new PomTransformer(productPomPath, charset, simpleElementWhitespace)
-                .transform(Transformation.addModuleIfNeeded("superapp", String::compareTo));
+                .transform((Document document, TransformationContext context) -> {
+                    /* Remove the module from the top <modules> element where we used to have it in the past */
+                    /* ... and add it under the testModules profile */
+                    context.getOrAddProfile("testModules")
+                            .getOrAddChildContainerElement("modules")
+                            .addChildTextElementIfNeeded(
+                                    "module",
+                                    "superapp",
+                                    Comparator.comparing(Map.Entry::getValue, Comparator.naturalOrder()));
+                });
 
         final Path pomXmlPath = workRoot.resolve("product/superapp/pom.xml");
         initializeMixedTestsPom(pomXmlPath, "camel-quarkus-build-parent-it", version,
@@ -1424,7 +1436,16 @@ public class ProdExcludesMojo extends AbstractMojo {
 
             final Path productPomPath = tree.getRootDirectory().resolve("product/pom.xml");
             new PomTransformer(productPomPath, charset, simpleElementWhitespace)
-                    .transform(Transformation.addModuleIfNeeded("integration-tests-" + category.getKey(), String::compareTo));
+                    .transform((Document document, TransformationContext context) -> {
+                        /* Remove the module from the top <modules> element where we used to have it in the past */
+                        /* ... and add it under the testModules profile */
+                        context.getOrAddProfile("testModules")
+                                .getOrAddChildContainerElement("modules")
+                                .addChildTextElementIfNeeded(
+                                        "module",
+                                        "integration-tests-" + category.getKey(),
+                                        Comparator.comparing(Map.Entry::getValue, Comparator.naturalOrder()));
+                    });
 
             /* Init the category pom */
             final Path categoryPomPath = category.resolveMixedModulePath(tree.getRootDirectory());
