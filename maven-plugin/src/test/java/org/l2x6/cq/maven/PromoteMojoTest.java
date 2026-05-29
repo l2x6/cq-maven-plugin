@@ -23,7 +23,6 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.junit.jupiter.api.Test;
 import org.l2x6.cq.test.utils.TestUtils;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 
 public class PromoteMojoTest {
 
@@ -33,7 +32,6 @@ public class PromoteMojoTest {
         mojo.multiModuleProjectDirectory = basePath.toFile();
         mojo.encoding = CqUtils.DEFAULT_ENCODING;
         mojo.camelQuarkusVersion = "0.1-SNAPSHOT";
-        mojo.simpleElementWhitespace = SimpleElementWhitespace.EMPTY;
         mojo.templatesUriBase = CqUtils.DEFAULT_TEMPLATES_URI_BASE;
         return mojo;
     }

@@ -28,7 +28,6 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.l2x6.cq.test.utils.TestUtils;
 import org.l2x6.pom.tuner.PomTransformer;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 
 public class PomSorterTest {
 
@@ -73,10 +72,11 @@ public class PomSorterTest {
                     .map(p -> p.resolve("pom.xml"))
                     .filter(p -> Files.exists(p))
                     .forEach(pomXmlPath -> {
-                        new PomTransformer(pomXmlPath, StandardCharsets.UTF_8, SimpleElementWhitespace.EMPTY)
-                                .transform(
+                        PomTransformer.builder().charset(StandardCharsets.UTF_8)
+                                .transformers(
                                         FormatPomsMojo.updateTestVirtualDependencies(
-                                                gavtcs -> aids.contains(gavtcs.getArtifactId())));
+                                                gavtcs -> aids.contains(gavtcs.getArtifactId())))
+                                .transform(pomXmlPath);
                     });
         }
 

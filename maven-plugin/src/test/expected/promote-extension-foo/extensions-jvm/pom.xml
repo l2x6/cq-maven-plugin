@@ -12,7 +12,6 @@
     <artifactId>camel-quarkus-extensions-jvm</artifactId>
 
     <modules>
-        <!-- extensions a..z; do not remove this comment, it is important when sorting via  mvn process-resources -Pformat -->
     </modules>
 
 </project>

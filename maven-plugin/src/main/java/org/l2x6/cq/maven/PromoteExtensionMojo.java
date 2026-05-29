@@ -16,12 +16,13 @@
  */
 package org.l2x6.cq.maven;
 
+import eu.maveniverse.domtrip.Document;
+import eu.maveniverse.domtrip.Element;
 import freemarker.template.Configuration;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
-import java.io.StringReader;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.Charset;
@@ -31,25 +32,16 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.TransformerFactoryConfigurationError;
-import javax.xml.transform.dom.DOMResult;
-import javax.xml.transform.stream.StreamSource;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.l2x6.pom.tuner.PomTransformer;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.Transformation;
-import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
-import org.w3c.dom.Document;
-import org.w3c.dom.DocumentFragment;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
+import org.l2x6.pom.tuner.transform.Modules;
+import org.l2x6.pom.tuner.transform.Parent;
+import org.l2x6.pom.tuner.transform.Properties;
 
 /**
  * Promotes an extension identified by {@link #artifactIdBase} from JVM-only to JVM+native state.
@@ -103,14 +95,6 @@ public class PromoteExtensionMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.version}", required = true, readonly = true)
     String camelQuarkusVersion;
 
-    /**
-     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
-     *
-     * @since 0.38.0
-     */
-    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "EMPTY")
-    SimpleElementWhitespace simpleElementWhitespace;
-
     private final static Pattern RELATIVE_PATH_PATTERN = Pattern.compile("[ \t\r\n]*<relativePath>([^<]+)</relativePath>");
     private final static Pattern NAME_PATTERN = Pattern.compile("<name>Camel Quarkus :: ([^<]+) :: Integration Test</name>");
     private final static Pattern ARTIFACT_ID_PATTERN = Pattern
@@ -149,16 +133,18 @@ public class PromoteExtensionMojo extends AbstractMojo {
 
         /* Remove the test module from the extension parent */
         final Path srcParentPomPath = jvmTestsDir.resolve("pom.xml");
-        new PomTransformer(srcParentPomPath, charset, simpleElementWhitespace)
-                .transform(Transformation.removeModule(true, true, artifactIdBase));
+        PomTransformer.builder().charset(charset)
+                .transformers(Modules.remove(artifactIdBase))
+                .transform(srcParentPomPath);
 
         /* Adjust the names in the test POM */
-        adjustTestPom(artifactIdBase, destItestDir.resolve("pom.xml"), charset, templatesUriBase, simpleElementWhitespace);
+        adjustTestPom(artifactIdBase, destItestDir.resolve("pom.xml"), charset, templatesUriBase);
 
         /* Add the test module to its new parent module */
         final Path integrationTestsPomPath = sourceRootPath.resolve("integration-tests/pom.xml");
-        new PomTransformer(integrationTestsPomPath, charset, simpleElementWhitespace)
-                .transform(Transformation.addModule(artifactIdBase));
+        PomTransformer.builder().charset(charset)
+                .transformers(Modules.add(artifactIdBase))
+                .transform(integrationTestsPomPath);
         PomSorter.sortModules(integrationTestsPomPath);
 
         /* Move the extension */
@@ -170,26 +156,29 @@ public class PromoteExtensionMojo extends AbstractMojo {
 
         /* Remove the extension module from the extensions-jvm POM */
         final Path extensionsJvmPomPath = sourceRootPath.resolve("extensions-jvm/pom.xml");
-        new PomTransformer(extensionsJvmPomPath, charset, simpleElementWhitespace)
-                .transform(Transformation.removeModule(false, true, artifactIdBase));
+        PomTransformer.builder().charset(charset)
+                .transformers(Modules.remove(artifactIdBase))
+                .transform(extensionsJvmPomPath);
 
         /* Add the extension module to its new parent module */
         final Path destExtensionsPomPath = extensionsPath.resolve("pom.xml");
-        new PomTransformer(destExtensionsPomPath, charset, simpleElementWhitespace)
-                .transform(Transformation.addModule(artifactIdBase));
+        PomTransformer.builder().charset(charset)
+                .transformers(Modules.add(artifactIdBase))
+                .transform(destExtensionsPomPath);
         PomSorter.sortModules(destExtensionsPomPath);
 
         /* Update the extension's parent */
         final Path extensionPomPath = destParentDir.resolve("pom.xml");
-        new PomTransformer(extensionPomPath, charset, simpleElementWhitespace)
-                .transform(Transformation.setParent("camel-quarkus-extensions", "../pom.xml"));
+        PomTransformer.builder().charset(charset)
+                .transformers(Parent.setArtifactId("camel-quarkus-extensions").setRelativePath("../pom.xml"))
+                .transform(extensionPomPath);
 
         /* Set the camel.quarkus.nativeSince property in the runtime POM */
         final Path runtimePomPath = destParentDir.resolve("runtime/pom.xml");
         final String camelQuarkusNativeSinceVersion = camelQuarkusVersion.replaceAll("-SNAPSHOT", "");
-        Transformation addNativeSinceProperty = Transformation.addProperty("camel.quarkus.nativeSince",
+        Transformation addNativeSinceProperty = Properties.set("camel.quarkus.nativeSince",
                 camelQuarkusNativeSinceVersion);
-        new PomTransformer(runtimePomPath, charset, simpleElementWhitespace).transform(addNativeSinceProperty);
+        PomTransformer.builder().charset(charset).transformers(addNativeSinceProperty).transform(runtimePomPath);
 
         // Remove the warning build step from
         // extensions/${EXT}/deployment/src/main/java/org/apache/camel/quarkus/component/${EXT}/deployment/${EXT}Processor.java:
@@ -234,16 +223,20 @@ public class PromoteExtensionMojo extends AbstractMojo {
 
     }
 
-    static void adjustTestPom(String baseArtifactId, Path path, Charset charset, String templatesUriBase,
-            SimpleElementWhitespace simpleElementWhitespace) {
+    static void adjustTestPom(String baseArtifactId, Path path, Charset charset, String templatesUriBase) {
         /* Add the native profile at the end of integration-tests/${EXT}/pom.xml: */
-        final DocumentFragment nativeProfile = loadNativeProfile(charset, templatesUriBase + "/integration-test-pom.xml");
-        new PomTransformer(path, charset, simpleElementWhitespace)
-                .transform(Transformation.addFragment(nativeProfile, "profiles"));
+        final Element nativeProfile = loadNativeProfile(charset, templatesUriBase + "/integration-test-pom.xml");
+        PomTransformer.builder().charset(charset)
+                .transformers(
+                        context -> {
+                            context.getOrAddContainerElement("profiles")
+                                    .getNode().addChild(nativeProfile);
+                        })
+                .transform(path);
 
     }
 
-    static DocumentFragment loadNativeProfile(Charset charset, String uri) {
+    static Element loadNativeProfile(Charset charset, String uri) {
         final URL url;
         if (uri.startsWith(CqUtils.CLASSPATH_PREFIX)) {
             final String resourcePath = uri.substring(CqUtils.CLASSPATH_PREFIX.length());
@@ -273,31 +266,11 @@ public class PromoteExtensionMojo extends AbstractMojo {
         final Pattern pattern = Pattern.compile("<profiles>.*</profiles>", Pattern.DOTALL);
         final Matcher m = pattern.matcher(src);
         if (m.find()) {
-
             final String profilesSource = m.group().replace("<profiles>",
                     "<profiles xmlns=\"http://maven.apache.org/POM/4.0.0\">");
-            final Document document;
-            try {
-                final DOMResult domResult = new DOMResult();
-                TransformerFactory.newInstance().newTransformer()
-                        .transform(new StreamSource(new StringReader(profilesSource)), domResult);
-                document = (Document) domResult.getNode();
-
-                Element profiles = document.getDocumentElement();
-                final NodeList children = profiles.getChildNodes();
-                final DocumentFragment result = document.createDocumentFragment();
-                while (children.getLength() > 0) {
-                    result.appendChild(children.item(0));
-                }
-                final Node lastChild = result.getLastChild();
-                if (TransformationContext.isWhiteSpaceNode(lastChild)) {
-                    result.removeChild(lastChild);
-                }
-                return result;
-            } catch (TransformerException | TransformerFactoryConfigurationError e) {
-                throw new RuntimeException(String.format("Could not read DOM from [%s]", profilesSource), e);
-            }
-
+            final Document document = Document.of(profilesSource);
+            Element profiles = document.root();
+            return profiles.childElements().findFirst().orElseThrow();
         } else {
             throw new IllegalStateException("Could not find " + pattern.pattern() + " in " + uri);
         }

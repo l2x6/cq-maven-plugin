@@ -40,6 +40,8 @@ import org.l2x6.cq.maven.TemplateParams.Builder;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.Transformation;
 import org.l2x6.pom.tuner.model.Gavtcs;
+import org.l2x6.pom.tuner.transform.DependencyManagement;
+import org.l2x6.pom.tuner.transform.Modules;
 
 /**
  * Scaffolds a new Camel Quarkus extension.
@@ -189,7 +191,8 @@ public class CreateExtensionMojo extends CreateTestMojo {
         generateExtensionProjects(cfg, templateParams);
         if (!extensionsModel.getModules().contains(artifactIdBase)) {
             getLog().info(String.format("Adding module [%s] to [%s]", artifactIdBase, extensionsPomPath));
-            pomTransformer(extensionsPomPath).transform(Transformation.addModule(artifactIdBase));
+            PomTransformer.builder().charset(getCharset()).transformers(Modules.add(artifactIdBase))
+                    .transform(extensionsPomPath);
         }
         PomSorter.sortModules(extensionsPomPath);
 
@@ -199,20 +202,21 @@ public class CreateExtensionMojo extends CreateTestMojo {
                     String.format("Adding [%s] to dependencyManagement in [%s]", templateParams.getArtifactId(),
                             runtimeBomPath));
             transformations
-                    .add(Transformation.addManagedDependency(templateParams.getGroupId(), templateParams.getArtifactId(),
-                            templateParams.getBomEntryVersion()));
+                    .add(
+                            DependencyManagement.add(new Gavtcs(templateParams.getGroupId(), templateParams.getArtifactId(),
+                                    templateParams.getBomEntryVersion())));
 
             final String aId = templateParams.getArtifactId() + "-deployment";
             getLog().info(String.format("Adding [%s] to dependencyManagement in [%s]", aId, runtimeBomPath));
             transformations
-                    .add(Transformation.addManagedDependency(templateParams.getGroupId(), aId,
-                            templateParams.getBomEntryVersion()));
+                    .add(DependencyManagement.add(new Gavtcs(templateParams.getGroupId(), aId,
+                            templateParams.getBomEntryVersion())));
 
             for (Gavtcs gavtcs : templateParams.getAdditionalRuntimeDependencies()) {
                 getLog().info(String.format("Adding [%s] to dependencyManagement in [%s]", gavtcs, runtimeBomPath));
-                transformations.add(Transformation.addManagedDependency(gavtcs));
+                transformations.add(DependencyManagement.add(gavtcs));
             }
-            pomTransformer(runtimeBomPath).transform(transformations);
+            PomTransformer.builder().charset(getCharset()).transformers(transformations).transform(runtimeBomPath);
             PomSorter.sortDependencyManagement(runtimeBomPath);
         }
 
@@ -222,7 +226,7 @@ public class CreateExtensionMojo extends CreateTestMojo {
                 .map(e -> new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-" + e.getArtifactIdBase(), null))
                 .collect(Collectors.toSet());
         FormatPomsMojo.updateVirtualDependenciesAllExtensions(updateVirtualDependenciesAllExtensions, allExtensions,
-                getCharset(), simpleElementWhitespace);
+                getCharset());
 
     }
 

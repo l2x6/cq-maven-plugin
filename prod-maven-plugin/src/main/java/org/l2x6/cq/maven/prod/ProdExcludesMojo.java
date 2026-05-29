@@ -16,6 +16,7 @@
  */
 package org.l2x6.cq.maven.prod;
 
+import eu.maveniverse.domtrip.Element;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -81,13 +82,14 @@ import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.common.FlattenBomTask;
 import org.l2x6.cq.common.FlattenBomTask.BomEntryTransformation;
 import org.l2x6.cq.common.OnFailure;
+import org.l2x6.pom.tuner.Comparators;
 import org.l2x6.pom.tuner.ExpressionEvaluator;
 import org.l2x6.pom.tuner.MavenSourceTree;
 import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
 import org.l2x6.pom.tuner.PomTransformer.NodeGavtcs;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.PomTransformer.TextElement;
 import org.l2x6.pom.tuner.PomTransformer.Transformation;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.PomTunerUtils;
@@ -98,9 +100,13 @@ import org.l2x6.pom.tuner.model.Gav;
 import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.model.Module;
 import org.l2x6.pom.tuner.model.Profile;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
+import org.l2x6.pom.tuner.transform.AddElementTransformer;
+import org.l2x6.pom.tuner.transform.Dependencies;
+import org.l2x6.pom.tuner.transform.DependencyManagement;
+import org.l2x6.pom.tuner.transform.Modules;
+import org.l2x6.pom.tuner.transform.Parent;
+import org.l2x6.pom.tuner.transform.Profiles;
+import org.l2x6.pom.tuner.transform.Properties;
 
 /**
  * Unlink modules that should not be productized from Camel Quarkus source tree based on
@@ -256,14 +262,6 @@ public class ProdExcludesMojo extends AbstractMojo {
     boolean skip;
 
     /**
-     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
-     *
-     * @since 1.1.0
-     */
-    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "SPACE")
-    SimpleElementWhitespace simpleElementWhitespace;
-
-    /**
      * @since 2.6.0
      */
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
@@ -393,29 +391,25 @@ public class ProdExcludesMojo extends AbstractMojo {
                         additionalFiles)
                 : basedir.toPath();
 
-        new PomTransformer(workRoot.resolve("product/pom.xml"), charset, simpleElementWhitespace)
-                .transform(
-                        Transformation.removeAllModules(null, true, true),
-                        Transformation.removeAllModules("testModules", true, true));
+        PomTransformer.builder().charset(charset).transformers(
+                Modules.removeAll().from("testModules"))
+                .transform(workRoot.resolve("product/pom.xml"));
         for (TestCategory testCategory : TestCategory.values()) {
             final Path mixedModulePath = testCategory.resolveMixedModulePath(workRoot).getParent();
             CqCommonUtils.deleteDirectory(mixedModulePath);
         }
         final Path catalogPomPath = workRoot.resolve("catalog/pom.xml");
         /* Remove all virtual deps from the Catalog */
-        new PomTransformer(catalogPomPath, charset, simpleElementWhitespace)
-                .transform(Transformation.removeDependencies(
-                        null,
-                        false,
-                        true,
-                        gavtcs -> gavtcs.isVirtual()));
+        PomTransformer.builder().charset(charset).transformers(
+                Dependencies.remove(gavtcs -> gavtcs.isVirtual()))
+                .transform(catalogPomPath);
 
         final Path rootPomPath = workRoot.resolve("pom.xml");
         final MavenSourceTree initialTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
         final Predicate<Profile> profiles = ActiveProfiles.of();
 
         /* Re-link any previously commented modules */
-        final MavenSourceTree fullTree = initialTree.relinkModules(charset, simpleElementWhitespace, MODULE_COMMENT,
+        final MavenSourceTree fullTree = initialTree.relinkModules(charset, MODULE_COMMENT,
                 ActiveProfiles.of("standard-build"));
 
         /* Add the modules required by the includes */
@@ -451,7 +445,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                 .map(ga -> new Gavtcs(ga.getGroupId(), ga.getArtifactId(), null))
                 .map(gavtcs -> gavtcs.toVirtual())
                 .collect(Collectors.toSet());
-        CqCommonUtils.updateVirtualDependencies(charset, simpleElementWhitespace, allVirtualExtensions, catalogPomPath);
+        CqCommonUtils.updateVirtualDependencies(charset, allVirtualExtensions, catalogPomPath);
 
         /* Enable the mixed tests in special modules */
         final TreeSet<Ga> expandedIncludesWithAllTests = updateMixedTests(fullTree, expandedIncludesWithProdTests, tests,
@@ -468,9 +462,12 @@ public class ProdExcludesMojo extends AbstractMojo {
                 fullTree.getRootModule().getGav().getVersion().asConstant());
 
         /* Uncomment the product module and comment test modules */
-        new PomTransformer(workRoot.resolve("pom.xml"), charset, simpleElementWhitespace)
-                .transform(
-                        Transformation.uncommentModules(MODULE_COMMENT, m -> m.equals("product")));
+        PomTransformer.builder().charset(charset)
+                .transformers(
+                        Modules.selectComments(
+                                parsedComment -> parsedComment.getParsedContent().root().textContent().equals("product"))
+                                .uncomment())
+                .transform(workRoot.resolve("pom.xml"));
 
         /* Product guide links */
         updateProductGuideLinks(workRoot, product, fullTree, extensionYamlRelPath);
@@ -550,8 +547,8 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     void excludeTestsFromTestList(Path workRoot, MavenSourceTree fullTree, Path testListPomPath, Path integrationTestsDir,
             Set<Ga> excludeTests) {
-        new PomTransformer(testListPomPath, charset, simpleElementWhitespace).transform(
-                (Document document, TransformationContext context) -> {
+        PomTransformer.builder().charset(charset).transformers(
+                (TransformationContext context) -> {
                     final NodeGavtcs rpkgtestsPluginElement = context.getContainerElement("project", "build", "plugins").get()
                             .childElementsStream()
                             .map(ContainerElement::asGavtcs)
@@ -568,12 +565,12 @@ public class ProdExcludesMojo extends AbstractMojo {
                             .getChildContainerElement("configuration", "fileSets", "fileSet", "excludes").get();
                     excludesElement
                             .childElementsStream()
-                            .map(child -> child.getNode().getTextContent())
+                            .map(child -> child.getNode().textContent())
                             .forEach(excludesToAdd::remove);
                     if (!excludesToAdd.isEmpty()) {
                         excludesToAdd.forEach(path -> excludesElement.addChildTextElement("exclude", path));
                     }
-                });
+                }).transform(testListPomPath);
     }
 
     void updateProductGuideLinks(
@@ -622,8 +619,8 @@ public class ProdExcludesMojo extends AbstractMojo {
             String version) {
 
         final Path productPomPath = workRoot.resolve("product/pom.xml");
-        new PomTransformer(productPomPath, charset, simpleElementWhitespace)
-                .transform((Document document, TransformationContext context) -> {
+        PomTransformer.builder().charset(charset)
+                .transformers((TransformationContext context) -> {
                     /* Remove the module from the top <modules> element where we used to have it in the past */
                     /* ... and add it under the testModules profile */
                     context.getOrAddProfile("testModules")
@@ -632,18 +629,19 @@ public class ProdExcludesMojo extends AbstractMojo {
                                     "module",
                                     "superapp",
                                     Comparator.comparing(Map.Entry::getValue, Comparator.naturalOrder()));
-                });
+                })
+                .transform(productPomPath);
 
         final Path pomXmlPath = workRoot.resolve("product/superapp/pom.xml");
         initializeMixedTestsPom(pomXmlPath, "camel-quarkus-build-parent-it", version,
                 "../../poms/build-parent-it/pom.xml", "camel-quarkus-superapp",
                 "Camel Quarkus :: Superapp");
 
-        new PomTransformer(pomXmlPath, charset, simpleElementWhitespace)
-                .transform(
-                        Transformation.addOrSetProperty("allow-findbugs", "true"),
-                        Transformation.removeDependencies(null, true, true, gavtcs -> true),
-                        (Document document, TransformationContext context) -> {
+        PomTransformer.builder().charset(charset)
+                .transformers(
+                        Properties.set("allow-findbugs", "true"),
+                        Dependencies.removeAll(),
+                        (TransformationContext context) -> {
                             ContainerElement deps = context.getOrAddContainerElements("dependencies");
 
                             Stream.concat(
@@ -653,10 +651,11 @@ public class ProdExcludesMojo extends AbstractMojo {
                                     .forEach(ga -> {
                                         deps.addGavtcs(new Gavtcs(ga.getGroupId(), ga.getArtifactId(), null));
                                     });
-                        });
+                        })
+                .transform(pomXmlPath);
     }
 
-    void updateVersions(MavenSourceTree fullTree, Predicate<Profile> profiles, Map<String, String> versionTransformations) {
+    void updateVersions(MavenSourceTree fullTree, Predicate<Profile> profiles, Map<String, String> versionTransformers) {
         /* Check that all modules have the same version - another version may have slipped in when backporting */
         final ExpressionEvaluator evaluator = fullTree.getExpressionEvaluator(profiles);
         final Module rootModule = fullTree.getRootModule();
@@ -666,14 +665,15 @@ public class ProdExcludesMojo extends AbstractMojo {
                 final String moduleVersion = module.getParentGav().getVersion().asConstant();
                 if (!expectedVersion.equals(moduleVersion)) {
                     final Path pomPath = fullTree.getRootDirectory().resolve(module.getPomPath());
-                    new PomTransformer(pomPath, charset, simpleElementWhitespace)
-                            .transform(
-                                    (Document document, TransformationContext context) -> {
+                    PomTransformer.builder().charset(charset)
+                            .transformers(
+                                    (TransformationContext context) -> {
                                         context
                                                 .getContainerElement("project", "parent")
                                                 .ifPresent(
                                                         parent -> parent.addOrSetChildTextElement("version", expectedVersion));
-                                    });
+                                    })
+                            .transform(pomPath);
                 }
             }
         }
@@ -686,8 +686,9 @@ public class ProdExcludesMojo extends AbstractMojo {
                     .getProperties().get("camel-quarkus.version");
             if (cqVersion != null && cqVersion.isConstant() && !cqVersion.asConstant().equals(expectedVersion)) {
                 final Path absPath = fullTree.getRootDirectory().resolve(relPath);
-                new PomTransformer(absPath, charset, simpleElementWhitespace)
-                        .transform(Transformation.addOrSetProperty("camel-quarkus.version", expectedVersion));
+                PomTransformer.builder().charset(charset)
+                        .transformers(Properties.set("camel-quarkus.version", expectedVersion))
+                        .transform(absPath);
             }
         }
 
@@ -698,7 +699,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                 .evaluate(Expression.of("${camel.version}", evaluator.evaluateGa(rootModule.getGav())));
         if (!camelParentVersion.equals(camelVersion)) {
             transformations.add(
-                    (Document document, TransformationContext context) -> {
+                    (TransformationContext context) -> {
                         context
                                 .getContainerElement("project", "parent")
                                 .ifPresent(parent -> parent.addOrSetChildTextElement("version", camelVersion));
@@ -706,15 +707,16 @@ public class ProdExcludesMojo extends AbstractMojo {
         }
         final Path rootPomPath = fullTree.getRootDirectory().resolve(rootModule.getPomPath());
         if (!transformations.isEmpty()) {
-            new PomTransformer(rootPomPath, charset, simpleElementWhitespace)
-                    .transform(transformations);
+            PomTransformer.builder().charset(charset)
+                    .transformers(transformations)
+                    .transform(rootPomPath);
         }
 
         if (mojoDescriptorCreator != null) {
             /* Do not test this */
-            CqCommonUtils.syncVersions(rootPomPath, mojoDescriptorCreator, session, project, charset, simpleElementWhitespace,
+            CqCommonUtils.syncVersions(rootPomPath, mojoDescriptorCreator, session, project, charset,
                     localRepositoryPath,
-                    getLog(), versionTransformations, repositories, repoSession, repoSystem);
+                    getLog(), versionTransformers, repositories, repoSession, repoSystem);
         }
 
     }
@@ -728,16 +730,17 @@ public class ProdExcludesMojo extends AbstractMojo {
                 "integration-tests-jvm");
 
         final Path rootPomPath = workRoot.resolve("pom.xml");
-        new PomTransformer(rootPomPath, charset, simpleElementWhitespace)
-                .transform(Transformation.commentModules(testParents, MODULE_COMMENT));
-        new PomTransformer(rootPomPath, charset, simpleElementWhitespace)
-                .transform(Transformation.commentModulesInProfile("standard-build", modulesFromStandardBuild, MODULE_COMMENT));
+        PomTransformer.builder().charset(charset)
+                .transformers(
+                        Modules.select(testParents::contains)
+                                .from("standard-build")
+                                .commentOut(textElement -> MODULE_COMMENT))
+                .transform(rootPomPath);
         final Set<Ga> expandedIncludesWithoutTests = expandedIncludes.stream()
                 .filter(ga -> !tests.containsKey(ga) && !testParentArtifactIds.contains(ga.getArtifactId()))
                 .collect(Collectors.toCollection(LinkedHashSet<Ga>::new));
         final MavenSourceTree tree = MavenSourceTree.of(rootPomPath, charset);
-        tree.unlinkModules(expandedIncludesWithoutTests, profiles, charset, simpleElementWhitespace,
-                (Set<String> unlinkModules) -> Transformation.commentModules(unlinkModules, MODULE_COMMENT));
+        tree.unlinkModules(expandedIncludesWithoutTests, profiles, charset, MODULE_COMMENT);
     }
 
     TreeSet<Ga> updateMixedTests(final MavenSourceTree fullTree, Set<Ga> expandedIncludes, final Map<Ga, TestCategory> tests,
@@ -816,11 +819,6 @@ public class ProdExcludesMojo extends AbstractMojo {
         }
     }
 
-    void removeAllModules(final Path pomXml) {
-        new PomTransformer(pomXml, charset, simpleElementWhitespace)
-                .transform(Transformation.removeAllModules("mixed", true, true));
-    }
-
     Set<Ga> updateBoms(MavenSourceTree tree, Set<Ga> expandedIncludes, Predicate<Profile> profiles,
             Set<Ga> requiredCamelArtifacts) {
         final ExpressionEvaluator evaluator = tree.getExpressionEvaluator(profiles);
@@ -883,11 +881,12 @@ public class ProdExcludesMojo extends AbstractMojo {
                                          * Add quarkus-bom productized version before quarkus-bom-test community
                                          * if not already there
                                          */
-                                        transformations.add((Document document, TransformationContext context) -> {
+                                        transformations.add((TransformationContext context) -> {
                                             final ContainerElement dependencyManagementDeps = context.getOrAddContainerElements(
                                                     "dependencyManagement",
                                                     "dependencies");
-                                            final Node refNode = dependencyManagementDeps.childElementsStream()
+                                            final eu.maveniverse.domtrip.Node refNode = dependencyManagementDeps
+                                                    .childElementsStream()
                                                     .map(ContainerElement::asGavtcs)
                                                     .filter(gavtcs -> gavtcs.toGa().equals(IO_QUARKUS_QUARKUS_BOM_TEST))
                                                     .findFirst()
@@ -906,13 +905,17 @@ public class ProdExcludesMojo extends AbstractMojo {
                         gasByNewVersion.entrySet().stream()
                                 .filter(en -> !en.getValue().isEmpty())
                                 .forEach(en -> transformations
-                                        .add(Transformation.setManagedDependencyVersion(profile.getId(),
-                                                en.getKey(), en.getValue())));
+                                        .add(
+                                                DependencyManagement
+                                                        .select(gavtcs -> en.getValue().contains(gavtcs.toGa()))
+                                                        .from(profile.getId())
+                                                        .forEach(gavtcsElement -> gavtcsElement.setVersion(en.getKey()))));
                     }
                 }
                 if (!transformations.isEmpty()) {
-                    new PomTransformer(tree.getRootDirectory().resolve(module.getPomPath()), charset, simpleElementWhitespace)
-                            .transform(transformations);
+                    PomTransformer.builder().charset(charset)
+                            .transformers(transformations)
+                            .transform(tree.getRootDirectory().resolve(module.getPomPath()));
                 }
             }
         }
@@ -932,7 +935,7 @@ public class ProdExcludesMojo extends AbstractMojo {
     }
 
     Transformation addMixedProfile(String bomArtifactId) {
-        return (Document document, TransformationContext context) -> {
+        return (TransformationContext context) -> {
             ContainerElement profile = context.getOrAddContainerElements("profiles").addChildContainerElement("profile");
             profile.addChildTextElement("id", "mixed");
             ContainerElement deps = profile.addChildContainerElement("dependencyManagement")
@@ -942,16 +945,16 @@ public class ProdExcludesMojo extends AbstractMojo {
     }
 
     Transformation replaceManagedArtifactId(final String findArtifactId, final String replaceArtifactId) {
-        return (Document document, TransformationContext context) -> {
-            final NodeGavtcs bom = context.getManagedDependencies().stream()
+        return (TransformationContext context) -> {
+            final NodeGavtcs bom = context.getProject().getManagedDependencies().stream()
                     .filter(dep -> findArtifactId.equals(dep.getArtifactId()))
                     .findFirst()
                     .get();
             bom.getNode().childElementsStream()
                     .forEach(child -> {
                         final Element node = child.getNode();
-                        if ("artifactId".equals(node.getLocalName())) {
-                            node.setTextContent(replaceArtifactId);
+                        if ("artifactId".equals(node.localName())) {
+                            node.textContent(replaceArtifactId);
                         }
                     });
         };
@@ -968,8 +971,8 @@ public class ProdExcludesMojo extends AbstractMojo {
         }
 
         List<Transformation> transformationList = new ArrayList<>();
-        transformationList.add(Transformation.setParent("camel-quarkus-product", "../pom.xml"));
-        transformationList.add((Document document, TransformationContext context) -> {
+        transformationList.add(Parent.setArtifactId("camel-quarkus-product").setRelativePath("../pom.xml"));
+        transformationList.add((TransformationContext context) -> {
             ContainerElement project = context.getContainerElement("project").get();
             project.addOrSetChildTextElement("artifactId",
                     source.getGav().getArtifactId().getRawExpression().replace("camel-quarkus-", "camel-quarkus-product-"));
@@ -978,7 +981,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         });
         Stream.of(transformations).forEach(transformationList::add);
 
-        new PomTransformer(destinationPath, charset, simpleElementWhitespace).transform(transformationList);
+        PomTransformer.builder().charset(charset).transformers(transformationList).transform(destinationPath);
 
         return destinationPath.getParent().getFileName().toString();
     }
@@ -1198,7 +1201,6 @@ public class ProdExcludesMojo extends AbstractMojo {
                 workRoot.resolve(nonProductizedDependenciesPath),
                 product,
                 productCxf,
-                simpleElementWhitespace,
                 repositories,
                 repoSystem,
                 repoSession,
@@ -1228,9 +1230,9 @@ public class ProdExcludesMojo extends AbstractMojo {
                             cqBomRelPath + " should contain a org.l2x6.cq:cq-maven-plugin:flatten-bom mojo definition"))
                     .getConfiguration();
 
-            final List<BomEntryTransformation> bomEntryTransformations = new ArrayList<>();
-            addBomEntryTransformations(config.getChild("bomEntryTransformations"), bomEntryTransformations::add);
-            addBomEntryTransformations(config.getChild("autogeneratedBomEntryTransformations"), bomEntryTransformations::add);
+            final List<BomEntryTransformation> bomEntryTransformers = new ArrayList<>();
+            addBomEntryTransformers(config.getChild("bomEntryTransformers"), bomEntryTransformers::add);
+            addBomEntryTransformers(config.getChild("autogeneratedBomEntryTransformers"), bomEntryTransformers::add);
 
             List<String> requiredBomEntryIncludes = childList(config, "requiredBomEntryIncludes");
             if (requiredBomEntryIncludes == null) {
@@ -1243,7 +1245,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                     childList(config, "resolutionExcludes"),
                     childList(config, "resolutionSuspects"),
                     childList(config, "originExcludes"),
-                    bomEntryTransformations,
+                    bomEntryTransformers,
                     requiredBomEntryIncludes,
                     childList(config, "requiredBomEntryExcludes"),
                     onCheckFailure,
@@ -1258,7 +1260,6 @@ public class ProdExcludesMojo extends AbstractMojo {
                     repoSystem,
                     repoSession,
                     CqCommonUtils.getProfiles(session), !isChecking(),
-                    simpleElementWhitespace,
                     optionalChild(config, "installFlavor").map(FlattenBomTask.InstallFlavor::valueOf)
                             .orElse(FlattenBomTask.InstallFlavor.REDUCED),
                     false,
@@ -1275,7 +1276,7 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     }
 
-    static void addBomEntryTransformations(Xpp3Dom node, Consumer<BomEntryTransformation> consumer) {
+    static void addBomEntryTransformers(Xpp3Dom node, Consumer<BomEntryTransformation> consumer) {
         Stream.of(
                 Optional.ofNullable(node)
                         .flatMap(xpp3Dom -> Optional.ofNullable(xpp3Dom.getChildren()))
@@ -1435,8 +1436,8 @@ public class ProdExcludesMojo extends AbstractMojo {
             final List<TestGroup> groups = groupTests();
 
             final Path productPomPath = tree.getRootDirectory().resolve("product/pom.xml");
-            new PomTransformer(productPomPath, charset, simpleElementWhitespace)
-                    .transform((Document document, TransformationContext context) -> {
+            PomTransformer.builder().charset(charset)
+                    .transformers((TransformationContext context) -> {
                         /* Remove the module from the top <modules> element where we used to have it in the past */
                         /* ... and add it under the testModules profile */
                         context.getOrAddProfile("testModules")
@@ -1445,7 +1446,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                                         "module",
                                         "integration-tests-" + category.getKey(),
                                         Comparator.comparing(Map.Entry::getValue, Comparator.naturalOrder()));
-                    });
+                    }).transform(productPomPath);
 
             /* Init the category pom */
             final Path categoryPomPath = category.resolveMixedModulePath(tree.getRootDirectory());
@@ -1456,11 +1457,18 @@ public class ProdExcludesMojo extends AbstractMojo {
                     "Integration Tests :: " + category.getHumanName());
             /* Link the Group poms in the Category pom */
             final String profile = category.isMixed() ? "mixed" : null;
-            final List<String> groupPaths = groups.stream()
+            final List<Transformation> groupPaths = new ArrayList<>();
+            if (profile != null) {
+                groupPaths.add(Profiles.add(profile));
+            }
+            groups.stream()
                     .map(g -> "group-" + g.getHumanIndex())
-                    .collect(Collectors.toList());
-            new PomTransformer(categoryPomPath, charset, simpleElementWhitespace)
-                    .transform(Transformation.addModules(profile, groupPaths));
+                    .map(m -> addModule(profile, m))
+                    .forEach(groupPaths::add);
+            PomTransformer.builder().charset(charset)
+                    .transformers(
+                            groupPaths.stream().toList())
+                    .transform(categoryPomPath);
 
             /* Create the group poms */
             groups.stream()
@@ -1471,9 +1479,18 @@ public class ProdExcludesMojo extends AbstractMojo {
                         initializeMixedTestsPom(groupPomPath, categoryArtifactId, version, "../pom.xml",
                                 categoryArtifactId + "-" + g,
                                 "Integration Tests :: " + group.getHumanName());
-                        new PomTransformer(groupPomPath, charset, simpleElementWhitespace)
-                                .transform(Transformation.addModules(null, group.tests));
+                        final List<Transformation> transformers = group.tests.stream()
+                                .map(m -> addModule(null, m))
+                                .collect(Collectors.toList());
+                        PomTransformer.builder().charset(charset)
+                                .transformers(transformers)
+                                .transform(groupPomPath);
                     });
+        }
+
+        static AddElementTransformer<ContainerElement, TextElement, ?> addModule(final String profile, String m) {
+            AddElementTransformer<ContainerElement, TextElement, ?> result = Modules.add(m).at(Comparators.afterLast());
+            return profile == null ? result : result.intoProfile(profile);
         }
 
     }

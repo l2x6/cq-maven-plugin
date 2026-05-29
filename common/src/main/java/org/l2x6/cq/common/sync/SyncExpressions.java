@@ -79,7 +79,7 @@ public class SyncExpressions {
         private Map<String, SyncExpression> expressions = new LinkedHashMap<>();
 
         public Builder expression(SyncExpression expression) {
-            this.expressions.put(expression.getPropertyNode().getLocalName(), expression);
+            this.expressions.put(expression.getPropertyNode().localName(), expression);
             return this;
         }
 

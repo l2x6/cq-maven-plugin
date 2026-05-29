@@ -16,6 +16,9 @@
  */
 package org.l2x6.cq.maven;
 
+import eu.maveniverse.domtrip.Comment;
+import eu.maveniverse.domtrip.DomTripVisitor;
+import eu.maveniverse.domtrip.DomTripVisitor.Action;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
@@ -28,6 +31,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -44,12 +48,15 @@ import org.l2x6.pom.tuner.MavenSourceTree;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
 import org.l2x6.pom.tuner.PomTransformer.NodeGavtcs;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.PomTransformer.ProfileElement;
 import org.l2x6.pom.tuner.PomTransformer.Transformation;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gavtcs;
-import org.w3c.dom.Document;
+import org.l2x6.pom.tuner.transform.Dependencies;
+import org.l2x6.pom.tuner.transform.Siblings;
+
+import static org.l2x6.cq.common.CqCommonUtils.VIRTUAL_DEPS_INITIAL_COMMENT;
 
 /**
  * Formats the {@code pom.xml} files in the source tree.
@@ -120,14 +127,6 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
     FileSet removeEmptyApplicationProperties;
 
     /**
-     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
-     *
-     * @since 0.38.0
-     */
-    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "EMPTY")
-    SimpleElementWhitespace simpleElementWhitespace;
-
-    /**
      * A list of {@link PomSet}s
      *
      * <pre>
@@ -191,13 +190,14 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
                     }
                 }
 
-                transformers.add(Transformation.removeDependency(true, true, dep -> allDeps.contains(dep)));
+                transformers.add(Dependencies.remove(dep -> allDeps.contains(dep)));
                 allDeps.stream()
-                        .map(gavtcs -> Transformation.addDependencyIfNeeded(gavtcs, Gavtcs.scopeAndTypeFirstComparator()))
+                        .map(gavtcs -> (Transformation) Dependencies.add(gavtcs).at(Gavtcs.scopeAndTypeFirstComparator()))
                         .forEach(transformers::add);
 
                 final Path destPath = Paths.get(pomSet.getDestinationPom());
-                new PomTransformer(destPath, getCharset(), simpleElementWhitespace).transform(transformers);
+                PomTransformer.builder().charset(getCharset()).transformers(transformers).transform(destPath);
+                ;
 
             }
         }
@@ -214,16 +214,17 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
                 if (tree.getModuleByPath(pomXmlAbsolutePath) != null) {
                     /* Ignore unlinked modules */
 
-                    new PomTransformer(pomXmlAbsolutePath, getCharset(), simpleElementWhitespace)
-                            .transform(
+                    PomTransformer.builder().charset(getCharset())
+                            .transformers(
                                     updateTestVirtualDependencies(gavtcs -> allExtensions.contains(gavtcs)),
-                                    Transformation.keepFirst(CqCommonUtils.virtualDepsCommentXPath(), true));
+                                    keepFirstComment())
+                            .transform(pomXmlAbsolutePath);
+                    ;
                 }
             }
         }
 
-        updateVirtualDependenciesAllExtensions(updateVirtualDependenciesAllExtensions, allExtensions, getCharset(),
-                simpleElementWhitespace);
+        updateVirtualDependenciesAllExtensions(updateVirtualDependenciesAllExtensions, allExtensions, getCharset());
 
         if (removeEmptyApplicationProperties != null && removeEmptyApplicationProperties.getDirectory() != null) {
             final FileSetManager fileSetManager = new FileSetManager();
@@ -243,12 +244,30 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
 
     }
 
+    public static Transformation keepFirstComment() {
+        return context -> {
+            AtomicBoolean first = new AtomicBoolean(true);
+            context.getDocument().accept(new DomTripVisitor() {
+                public Action visitComment(Comment comment) {
+                    if (VIRTUAL_DEPS_INITIAL_COMMENT.equals(comment.content())) {
+                        if (first.get()) {
+                            first.set(false);
+                        } else {
+                            comment.parent().removeChild(comment);
+                        }
+                    }
+                    return Action.CONTINUE;
+                }
+            });
+        };
+    }
+
     public static Transformation updateTestVirtualDependencies(final Predicate<Gavtcs> isExtension) {
-        return (Document document, TransformationContext context) -> {
+        return (TransformationContext context) -> {
             final Comparator<Gavtcs> comparator = Gavtcs.scopeAndTypeFirstComparator();
             final Function<Gavtcs, Optional<Gavtcs>> dependencyMapper = Gavtcs
                     .deploymentVirtualMapper(isExtension);
-            final Set<? extends Gavtcs> deps = context.getDependencies();
+            final Set<? extends Gavtcs> deps = context.getProject().getDependencies();
             final Set<Gavtcs> newMappedDeps = new TreeSet<>(comparator);
 
             for (Gavtcs dep : deps) {
@@ -259,18 +278,13 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
                         });
             }
 
-            final Optional<ContainerElement> optionalProfile = context
-                    .getProfileParent("virtualDependencies");
+            final Optional<ProfileElement> optionalProfile = context.getProfile("virtualDependencies");
             if (!newMappedDeps.isEmpty()) {
                 final ContainerElement profile;
                 if (optionalProfile.isPresent()) {
                     profile = optionalProfile.get();
                 } else {
-                    profile = context
-                            .getOrAddContainerElement("profiles")
-                            .addChildContainerElement("profile");
-                    profile.addChildTextElement("id", "virtualDependencies",
-                            profile.getOrAddLastIndent());
+                    profile = context.getOrAddProfile("virtualDependencies");
                     profile
                             .addChildContainerElement("activation")
                             .addChildContainerElement("property")
@@ -282,7 +296,7 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
                 newMappedDeps.forEach(
                         mappedDep -> virtualDepsElement.addGavtcsIfNeeded(mappedDep, comparator));
 
-                virtualDepsElement.childElements().iterator().next()
+                profile.getOrAddChildContainerElement("dependencies").childElements().iterator().next()
                         .prependCommentIfNeeded(CqCommonUtils.VIRTUAL_DEPS_INITIAL_COMMENT);
             }
 
@@ -294,13 +308,13 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
                         .map(ContainerElement::asGavtcs)
                         .filter(dep -> !newMappedDeps.contains(dep))
                         .collect(Collectors.toList());
-                removeVirtualDeps.forEach(dep -> dep.getNode().remove(true, true));
+                removeVirtualDeps.forEach(dep -> dep.getNode().remove(Siblings.previous(Siblings.commentsOrWhitespace())));
             }
         };
     }
 
     public static void updateVirtualDependenciesAllExtensions(List<DirectoryScanner> updateVirtualDependenciesAllExtensions,
-            final Set<Gavtcs> allExtensions, Charset charset, SimpleElementWhitespace simpleElementWhitespace) {
+            final Set<Gavtcs> allExtensions, Charset charset) {
         if (updateVirtualDependenciesAllExtensions != null) {
             final Set<Gavtcs> allVirtualExtensions = allExtensions.stream()
                     .map(gavtcs -> gavtcs.toVirtual())
@@ -310,7 +324,7 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
                 final Path base = scanner.getBasedir().toPath();
                 for (String pomXmlRelPath : scanner.getIncludedFiles()) {
                     final Path pomXmlPath = base.resolve(pomXmlRelPath);
-                    CqCommonUtils.updateVirtualDependencies(charset, simpleElementWhitespace, allVirtualExtensions, pomXmlPath);
+                    CqCommonUtils.updateVirtualDependencies(charset, allVirtualExtensions, pomXmlPath);
                 }
             }
         }

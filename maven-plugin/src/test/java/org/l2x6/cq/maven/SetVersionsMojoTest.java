@@ -25,7 +25,6 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.junit.jupiter.api.Test;
 import org.l2x6.cq.test.utils.TestUtils;
 import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.model.Profile;
 
 public class SetVersionsMojoTest {
@@ -42,7 +41,6 @@ public class SetVersionsMojoTest {
         final Path basePath = projectDir.toAbsolutePath().normalize();
         mojo.basedir = basePath.toFile();
         mojo.encoding = "utf-8";
-        mojo.simpleElementWhitespace = SimpleElementWhitespace.SPACE;
         mojo.newVersion = "2.4.0-foo";
         return mojo;
     }

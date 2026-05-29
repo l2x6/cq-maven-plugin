@@ -77,7 +77,7 @@ import org.l2x6.pom.tuner.MavenSourceTree;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
-import org.w3c.dom.Document;
+import org.l2x6.pom.tuner.transform.Siblings;
 
 /**
  * Sync Camel Quarkus Example projects from an upstream GitHub branch to a local destination directory.
@@ -570,50 +570,47 @@ public class SyncExamplesFromUpstreamMojo extends AbstractMojo {
 
                 /* Set versions in the top pom.xml and in submodules if there are any */
                 MavenSourceTree t = MavenSourceTree.of(source, StandardCharsets.UTF_8);
-                t.setVersions(getCamelQuarkusExamplesVersion(), p -> true, PomTransformer.SimpleElementWhitespace.SPACE);
+                t.setVersions(getCamelQuarkusExamplesVersion(), p -> true);
 
-                PomTransformer pomTransformer = new PomTransformer(source, StandardCharsets.UTF_8,
-                        PomTransformer.SimpleElementWhitespace.SPACE);
+                PomTransformer.of((TransformationContext context) -> {
+                    // Update BOM version properties
+                    ContainerElement properties = context.getOrAddContainerElement("properties");
+                    properties.addOrSetChildTextElement("quarkus.platform.group-id", quarkusPlatformGroupId);
+                    properties.addOrSetChildTextElement("quarkus.platform.artifact-id", quarkusPlatformArtifactId);
+                    properties.addOrSetChildTextElement("quarkus.platform.version", quarkusPlatformVersion);
+                    properties.addOrSetChildTextElement("camel-quarkus.platform.group-id", camelQuarkusPlatformGroupId);
+                    properties.addOrSetChildTextElement("camel-quarkus.platform.artifact-id",
+                            camelQuarkusPlatformArtifactId);
+                    properties.addOrSetChildTextElement("camel-quarkus.platform.version", camelQuarkusPlatformVersion);
 
-                pomTransformer.transform(new PomTransformer.Transformation() {
-                    @Override
-                    public void perform(Document document, TransformationContext context) {
-                        // Update BOM version properties
-                        ContainerElement properties = context.getOrAddContainerElement("properties");
-                        properties.addOrSetChildTextElement("quarkus.platform.group-id", quarkusPlatformGroupId);
-                        properties.addOrSetChildTextElement("quarkus.platform.artifact-id", quarkusPlatformArtifactId);
-                        properties.addOrSetChildTextElement("quarkus.platform.version", quarkusPlatformVersion);
-                        properties.addOrSetChildTextElement("camel-quarkus.platform.group-id", camelQuarkusPlatformGroupId);
-                        properties.addOrSetChildTextElement("camel-quarkus.platform.artifact-id",
-                                camelQuarkusPlatformArtifactId);
-                        properties.addOrSetChildTextElement("camel-quarkus.platform.version", camelQuarkusPlatformVersion);
+                    // Add MRRC repositories
+                    ContainerElement repositories = context.getOrAddContainerElements("repositories");
+                    addRepository(repositories, "redhat-ga-repository", MRRC_GA_URL, false);
+                    addRepository(repositories, "redhat-earlyaccess-repository", MRRC_EARLYACCESS_URL, false);
 
-                        // Add MRRC repositories
-                        ContainerElement repositories = context.getOrAddContainerElements("repositories");
-                        addRepository(repositories, "redhat-ga-repository", MRRC_GA_URL, false);
-                        addRepository(repositories, "redhat-earlyaccess-repository", MRRC_EARLYACCESS_URL, false);
+                    ContainerElement pluginRepositories = context.getOrAddContainerElements("pluginRepositories");
+                    addRepository(pluginRepositories, "redhat-ga-repository", MRRC_GA_URL, true);
+                    addRepository(pluginRepositories, "redhat-earlyaccess-repository", MRRC_EARLYACCESS_URL, true);
 
-                        ContainerElement pluginRepositories = context.getOrAddContainerElements("pluginRepositories");
-                        addRepository(pluginRepositories, "redhat-ga-repository", MRRC_GA_URL, true);
-                        addRepository(pluginRepositories, "redhat-earlyaccess-repository", MRRC_EARLYACCESS_URL, true);
+                    // Remove kubernetes profile
+                    context.getProfile("kubernetes")
+                            .ifPresent(p -> p.remove(Siblings.previous(Siblings.commentsOrWhitespace())));
 
-                        // Remove kubernetes profile
-                        context.getOrAddProfileParent("kubernetes").remove(true, true);
-
-                        // Remove explicit version for quarkus-artemis-jms since these dependencies are in the productized platform BOMs
-                        if (camelQuarkusPlatformArtifactId.equals("quarkus-camel-bom")) {
-                            context.getDependencies()
-                                    .stream()
-                                    .filter(dependency -> dependency.getArtifactId().equals("quarkus-artemis-jms"))
-                                    .findFirst()
-                                    .ifPresent(quarkusArtemis -> {
-                                        quarkusArtemis.getNode()
-                                                .getChildContainerElement("version")
-                                                .ifPresent(containerElement -> containerElement.remove(true, true));
-                                    });
-                        }
+                    // Remove explicit version for quarkus-artemis-jms since these dependencies are in the productized platform BOMs
+                    if (camelQuarkusPlatformArtifactId.equals("quarkus-camel-bom")) {
+                        context.getProject().getDependencies()
+                                .stream()
+                                .filter(dependency -> dependency.getArtifactId().equals("quarkus-artemis-jms"))
+                                .findFirst()
+                                .ifPresent(quarkusArtemis -> {
+                                    quarkusArtemis.getNode()
+                                            .getChildContainerElement("version")
+                                            .ifPresent(containerElement -> containerElement
+                                                    .remove(Siblings.previous(Siblings.commentsOrWhitespace())));
+                                });
                     }
-                });
+                })
+                        .transform(source);
             }
 
             private void addRepository(ContainerElement parent, String id, String url, boolean isPluginRepository) {

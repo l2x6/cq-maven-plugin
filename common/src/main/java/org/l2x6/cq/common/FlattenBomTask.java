@@ -86,7 +86,6 @@ import org.l2x6.pom.tuner.MavenSourceTree;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
 import org.l2x6.pom.tuner.PomTransformer.NodeGavtcs;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gav;
@@ -96,7 +95,7 @@ import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.model.GavtcsSet;
 import org.l2x6.pom.tuner.model.Module;
 import org.l2x6.pom.tuner.model.Profile;
-import org.w3c.dom.Node;
+import org.l2x6.pom.tuner.transform.Siblings;
 
 import static java.util.stream.Collectors.joining;
 
@@ -354,7 +353,7 @@ public class FlattenBomTask {
                         existingExclusions.stream().map(Ga::toString).collect(Collectors.joining(",")));
                 final Optional<ContainerElement> exclusions = containerElement.getChildContainerElement("exclusions");
                 if (exclusions.isPresent()) {
-                    exclusions.get().remove(true, true);
+                    exclusions.get().remove(Siblings.previous(Siblings.commentsOrWhitespace()));
                 }
             }
         }
@@ -424,7 +423,6 @@ public class FlattenBomTask {
     private final RepositorySystemSession repoSession;
     private final Predicate<Profile> profiles;
     private final boolean format;
-    private final SimpleElementWhitespace simpleElementWhitespace;
     private final MavenProject project;
     private final FlattenBomTask.InstallFlavor installFlavor;
     private final boolean quickly;
@@ -452,7 +450,7 @@ public class FlattenBomTask {
             Path rootModuleDirectory, Path fullPomPath, Path reducedVerbosePamPath,
             Path reducedPomPath, Charset charset, Log log, List<RemoteRepository> repositories, RepositorySystem repoSystem,
             RepositorySystemSession repoSession, Predicate<Profile> profiles, boolean format,
-            SimpleElementWhitespace simpleElementWhitespace, FlattenBomTask.InstallFlavor installFlavor, boolean quickly,
+            FlattenBomTask.InstallFlavor installFlavor, boolean quickly,
             GavSet bannedDependencies, Path localRepositoryPath, List<Gav> additionalBoms) {
         this.resolutionEntryPointIncludes = resolutionEntryPointIncludes;
         this.resolutionEntryPointExcludes = resolutionEntryPointExcludes;
@@ -487,7 +485,6 @@ public class FlattenBomTask {
         this.repoSession = repoSession;
         this.profiles = profiles;
         this.format = format;
-        this.simpleElementWhitespace = simpleElementWhitespace;
         this.installFlavor = installFlavor;
         this.quickly = quickly;
         this.bannedDependencies = bannedDependencies;
@@ -1069,10 +1066,10 @@ public class FlattenBomTask {
             transformedPomPath = basePath.resolve("target/transformed-pom.xml");
             copyPom(basePath.resolve("pom.xml"), transformedPomPath);
         }
-        new PomTransformer(transformedPomPath, charset, simpleElementWhitespace)
-                .transform((org.w3c.dom.Document doc, TransformationContext context) -> {
+        PomTransformer.builder().charset(charset)
+                .transformers((TransformationContext context) -> {
 
-                    final Set<NodeGavtcs> deps = context.getManagedDependencies();
+                    final Set<NodeGavtcs> deps = context.getProject().getManagedDependencies();
                     final Set<Ga> doneMissingBannedDeps = new TreeSet<>();
                     deps.stream()
                             .forEach(dep -> {
@@ -1097,24 +1094,24 @@ public class FlattenBomTask {
                                     && pluginNode.getArtifactId().equals("cq-maven-plugin"))
                             .findFirst()
                             .orElseThrow(() -> new IllegalStateException(
-                                    "Could not find org.l2x6.cq:cq-maven-plugin in " + context.getXPath()))
+                                    "Could not find org.l2x6.cq:cq-maven-plugin in " + context.getPomXmlPath()))
                             .getNode();
 
                     final ContainerElement flattenBomExecutionNode = cqMavenPluginNode
                             .getChildContainerElement("executions")
                             .orElseThrow(() -> new IllegalStateException(
                                     "Could not find org.l2x6.cq:cq-maven-plugin/executions in "
-                                            + context.getXPath()))
+                                            + context.getPomXmlPath()))
                             .childElementsStream()
                             .filter(executionNode -> {
                                 Optional<ContainerElement> idNode = executionNode.getChildContainerElement("id");
                                 return idNode.isPresent()
-                                        && idNode.get().getNode().getTextContent().equals("flatten-bom");
+                                        && idNode.get().getTextContent().equals("flatten-bom");
                             })
                             .findFirst()
                             .orElseThrow(() -> new IllegalStateException(
                                     "Could not find flatten-bom execution of org.l2x6.cq:cq-maven-plugin in "
-                                            + context.getXPath()));
+                                            + context.getPomXmlPath()));
                     final ContainerElement bomEntryTransformationsNode = flattenBomExecutionNode
                             .getOrAddChildContainerElement("configuration")
                             .getOrAddChildContainerElement("autogeneratedBomEntryTransformations");
@@ -1131,16 +1128,16 @@ public class FlattenBomTask {
                                         new BomEntryTransformation(
                                                 bomEntryTransformationNode.getChildContainerElement("gavPattern")
                                                         .get()
-                                                        .getNode().getTextContent(),
+                                                        .getTextContent(),
                                                 bomEntryTransformationNode
                                                         .getChildContainerElement("versionReplacement")
-                                                        .map(node -> node.getNode().getTextContent())
+                                                        .map(node -> node.getTextContent())
                                                         .orElse(null),
                                                 bomEntryTransformationNode.getChildContainerElement("exclusions")
-                                                        .map(node -> node.getNode().getTextContent())
+                                                        .map(node -> node.getTextContent())
                                                         .orElse(null),
                                                 bomEntryTransformationNode.getChildContainerElement("addExclusions")
-                                                        .map(node -> node.getNode().getTextContent())
+                                                        .map(node -> node.getTextContent())
                                                         .orElse(null)),
                                         bomEntryTransformationNode)
 
@@ -1184,7 +1181,8 @@ public class FlattenBomTask {
                                     }
                                 });
                     }
-                });
+                })
+                .transform(transformedPomPath);
 
         try {
             final List<Delta<String>> diffs = DiffUtils
@@ -1248,25 +1246,8 @@ public class FlattenBomTask {
     }
 
     static void addExclusion(ContainerElement exclusions, Ga newExclusion) {
-        Node refNode = null;
-        for (ContainerElement dep : exclusions.childElements()) {
-            final Ga depGavtcs = dep.asGavtcs().toGa();
-            int comparison = newExclusion.compareTo(depGavtcs);
-            if (comparison == 0) {
-                /* the given exclusion is available, no need to add it */
-                return;
-            }
-            if (refNode == null && comparison < 0) {
-                refNode = dep.previousSiblingInsertionRefNode();
-            }
-        }
-
-        if (refNode == null) {
-            refNode = exclusions.getOrAddLastIndent();
-        }
-        final ContainerElement dep = exclusions.addChildContainerElement("exclusion", refNode, false, false);
-        dep.addChildTextElement("groupId", newExclusion.getGroupId());
-        dep.addChildTextElement("artifactId", newExclusion.getArtifactId());
+        exclusions.addGavIfNeeded(newExclusion.toGav(null),
+                Comparator.comparing(Gav::getGroupId).thenComparing(Gav::getArtifactId));
     }
 
     static boolean compare(String pomTunerValue, String mavenValue, String defaultValue) {

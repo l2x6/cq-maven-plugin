@@ -31,7 +31,4 @@
     <packaging>pom</packaging>
 
     <name>Camel Quarkus :: Integration Tests :: Mixed Allowed :: Group 01</name>
-
-    <modules>
-    </modules>
 </project>

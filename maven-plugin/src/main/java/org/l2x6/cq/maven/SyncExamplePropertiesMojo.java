@@ -38,7 +38,6 @@ import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.pom.tuner.PomTransformer;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.Transformation;
 
 /**
@@ -77,14 +76,6 @@ public class SyncExamplePropertiesMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
     String localRepository;
-
-    /**
-     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
-     *
-     * @since 0.38.0
-     */
-    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "EMPTY")
-    SimpleElementWhitespace simpleElementWhitespace;
 
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     List<RemoteRepository> repositories;
@@ -128,11 +119,11 @@ public class SyncExamplePropertiesMojo extends AbstractMojo {
         }
 
         if (!changeProps.isEmpty()) {
-            final List<Transformation> transformations = new ArrayList<PomTransformer.Transformation>(changeProps.size());
+            final List<Transformation> transformations = new ArrayList<>(changeProps.size());
             for (Entry<String, String> prop : changeProps.entrySet()) {
-                transformations.add(Transformation.addOrSetProperty(prop.getKey(), prop.getValue()));
+                transformations.add(org.l2x6.pom.tuner.transform.Properties.set(prop.getKey(), prop.getValue()));
             }
-            new PomTransformer(pomXmlPath, charset, simpleElementWhitespace).transform(transformations);
+            PomTransformer.builder().charset(charset).transformers(transformations).transform(pomXmlPath);
         }
 
     }

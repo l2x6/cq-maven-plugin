@@ -16,6 +16,8 @@
  */
 package org.l2x6.cq.maven.prod;
 
+import eu.maveniverse.domtrip.Comment;
+import eu.maveniverse.domtrip.Element;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -50,18 +52,17 @@ import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
 import org.l2x6.pom.tuner.PomTransformer.NodeGavtcs;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.PomTransformer.ProjectElement;
 import org.l2x6.pom.tuner.PomTransformer.TextElement;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
-import org.l2x6.pom.tuner.PomTunerUtils;
 import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.model.GavtcsPattern;
 import org.l2x6.pom.tuner.model.Profile;
-import org.w3c.dom.Comment;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
+import org.l2x6.pom.tuner.transform.Modules;
+import org.l2x6.pom.tuner.transform.Parent;
+import org.l2x6.pom.tuner.transform.Siblings;
 
 /**
  * Initialize a CEQ product branch.
@@ -100,14 +101,6 @@ public class ProdInitMojo extends AbstractMojo {
      */
     @Parameter(property = "cq.prod-init.skip", defaultValue = "false")
     boolean skip;
-
-    /**
-     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
-     *
-     * @since 3.0.0
-     */
-    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "SPACE")
-    SimpleElementWhitespace simpleElementWhitespace;
 
     /**
      * The current project's version
@@ -209,11 +202,11 @@ public class ProdInitMojo extends AbstractMojo {
         final Predicate<Profile> profiles = ActiveProfiles.of();
         final Path pomXmlPath = basedir.toPath().resolve("pom.xml");
         final MavenSourceTree t = MavenSourceTree.of(pomXmlPath, charset, Dependency::isVirtual);
-        t.setVersions(version + RHBAC_SNAPSHOT_SUFFIX, profiles, simpleElementWhitespace);
+        t.setVersions(version + RHBAC_SNAPSHOT_SUFFIX, profiles);
 
         /* Edit root pom.xml */
-        new PomTransformer(pomXmlPath, charset, simpleElementWhitespace).transform(
-                (Document document, TransformationContext context) -> {
+        PomTransformer.builder().charset(charset).transformers(
+                (TransformationContext context) -> {
 
                     /* Add some community props */
                     final ContainerElement props = context.getOrAddContainerElement("properties");
@@ -286,7 +279,7 @@ public class ProdInitMojo extends AbstractMojo {
 
                     // Explicitly use the following version for xalan as it has a CVE fix and a class loading fix currently unreleased in community.
                     props.getChildContainerElement("xalan.version").ifPresent(xalanVersion -> {
-                        xalanVersion.getNode().setTextContent("2.7.3.redhat-00001");
+                        xalanVersion.getNode().textContent("2.7.3.redhat-00001");
                     });
 
                     getLog().info("Setting camel-quarkus.extension.finder.strict = false in pom.xml");
@@ -296,10 +289,10 @@ public class ProdInitMojo extends AbstractMojo {
                     Consumer<ContainerElement> syncCommentVersionTransformer = element -> {
                         Comment comment = element.nextSiblingCommentNode();
                         if (comment != null) {
-                            String commentData = comment.getData();
+                            String commentData = comment.content();
                             String updatedCommentData = commentData.replace("camel.version", "camel-community-version");
                             updatedCommentData = updatedCommentData.replace("quarkus.version", "quarkus-community.version");
-                            comment.setData(updatedCommentData);
+                            comment.content(updatedCommentData);
                         }
                     };
 
@@ -321,7 +314,7 @@ public class ProdInitMojo extends AbstractMojo {
                     final String availableCqPluginVersion = props.getChildContainerElement("cq-plugin.version")
                             .orElseThrow(() -> new IllegalStateException(
                                     "Could not find cq-plugin.version property in the root pom.xml file"))
-                            .getNode().getTextContent();
+                            .getNode().textContent();
                     if (new ComparableVersion(availableCqPluginVersion)
                             .compareTo(new ComparableVersion(currentCqVersion)) < 0) {
                         getLog().info("Upgrading in pom.xml: cq-plugin.version " + availableCqPluginVersion + " -> "
@@ -330,12 +323,13 @@ public class ProdInitMojo extends AbstractMojo {
                     }
 
                     /* Remove docs module */
-                    getLog().info("Removing from pom.xml: docs module");
-                    final String xPath = PomTunerUtils.anyNs("project", "modules", "module") + "[text() = 'docs']";
-                    context.removeNode(xPath, true, true, false);
-
-                    final ContainerElement profileParent = context.getOrAddProfileParent(null);
+                    ProjectElement profileParent = context.getProject();
                     final ContainerElement modules = profileParent.getOrAddChildContainerElement("modules");
+                    getLog().info("Removing from pom.xml: docs module");
+                    modules.childTextElementsStream()
+                            .filter(module -> "docs".equals(module.getTextContent()))
+                            .findFirst()
+                            .ifPresent(module -> module.remove(Siblings.previous(Siblings.commentsOrWhitespace())));
 
                     /* Add product module */
                     getLog().info("Adding to pom.xml: product module");
@@ -355,9 +349,9 @@ public class ProdInitMojo extends AbstractMojo {
                             .getOrAddChildContainerElement("dependency");
                     final String camelCommunityVersion = "${camel-community-version}";
                     getLog().info("Setting version in pom.xml: camel-buildtools "
-                            + buildToolsDep.getChildContainerElement("version").get().getNode().getTextContent() + " -> "
+                            + buildToolsDep.getChildContainerElement("version").get().getNode().textContent() + " -> "
                             + camelCommunityVersion);
-                    buildToolsDep.setVersion(camelCommunityVersion);
+                    buildToolsDep.asGavtcsElement().setVersion(camelCommunityVersion);
 
                     ContainerElement mappingsElement = licensePlugin
                             .getChildContainerElement("configuration", "mapping")
@@ -406,15 +400,15 @@ public class ProdInitMojo extends AbstractMojo {
                             .getNode();
                     final String quarkusCommunityVersion = "${quarkus-community.version}";
                     getLog().info("Setting version in pom.xml: quarkus-enforcer-rules "
-                            + quarkusEnforcerRulesDep.getChildContainerElement("version").get().getNode().getTextContent()
+                            + quarkusEnforcerRulesDep.getChildContainerElement("version").get().getNode().textContent()
                             + " -> "
                             + quarkusCommunityVersion);
-                    quarkusEnforcerRulesDep.setVersion(quarkusCommunityVersion);
-                });
+                    quarkusEnforcerRulesDep.asGavtcsElement().setVersion(quarkusCommunityVersion);
+                }).transform(pomXmlPath);
 
         /* Edit catalog/pom.xml */
-        new PomTransformer(basedir.toPath().resolve("catalog/pom.xml"), charset, simpleElementWhitespace).transform(
-                (Document document, TransformationContext context) -> {
+        PomTransformer.builder().charset(charset).transformers(
+                (TransformationContext context) -> {
 
                     final ContainerElement plugins = context.getOrAddContainerElements(
                             "build", "plugins");
@@ -442,11 +436,11 @@ public class ProdInitMojo extends AbstractMojo {
                     ContainerElement config = camelQuarkusPluginNode.getNode()
                             .getChildContainerElement("executions", "execution", "configuration").get();
                     config.addOrSetChildTextElement("extendClassPathCatalog", "true");
-                });
+                }).transform(basedir.toPath().resolve("catalog/pom.xml"));
 
         /* Edit poms/bom/pom.xml */
-        new PomTransformer(basedir.toPath().resolve("poms/bom/pom.xml"), charset, simpleElementWhitespace).transform(
-                (Document document, TransformationContext context) -> {
+        PomTransformer.builder().charset(charset).transformers(
+                (TransformationContext context) -> {
 
                     final ContainerElement dependencyManagementDeps = context.getOrAddContainerElements(
                             "dependencyManagement",
@@ -514,13 +508,13 @@ public class ProdInitMojo extends AbstractMojo {
                     ContainerElement quarkusEnforcerRulesDep = cqPluginNode.getNode()
                             .getChildContainerElement("dependencies", "dependency")
                             .get();
-                    quarkusEnforcerRulesDep.setVersion(quarkusCommunityVersion);
+                    quarkusEnforcerRulesDep.asGavtcsElement().setVersion(quarkusCommunityVersion);
 
-                });
+                }).transform(basedir.toPath().resolve("poms/bom/pom.xml"));
 
         /* Edit poms/bom-test/pom.xml */
-        new PomTransformer(basedir.toPath().resolve("poms/bom-test/pom.xml"), charset, simpleElementWhitespace).transform(
-                (Document document, TransformationContext context) -> {
+        PomTransformer.builder().charset(charset).transformers(
+                (TransformationContext context) -> {
 
                     /*
                      * Change the version of io.quarkiverse.cxf:quarkus-cxf-bom-test from ${quarkiverse-cxf.version} to
@@ -536,40 +530,41 @@ public class ProdInitMojo extends AbstractMojo {
                             .filter(gavtcs -> gavtcs.equals(qcxfBom))
                             .findFirst()
                             .get();
-                    qcxfBomNode.getNode().setVersion("${quarkiverse-cxf-community.version}");
+                    qcxfBomNode.getNode().asGavtcsElement().setVersion("${quarkiverse-cxf-community.version}");
 
                     /* Remove quarkus-artemis-bom */
-                    Gavtcs artemisBom = new Gavtcs("io.quarkiverse.artemis", "quarkus-artemis-bom",
-                            "${quarkiverse-artemis.version}",
-                            "pom", null, "import");
-                    context.removeManagedDependency(artemisBom, true, true);
-                });
+                    GavtcsPattern artemisBom = GavtcsPattern.of("io.quarkiverse.artemis:quarkus-artemis-bom");
+                    dependencyManagementDeps.childElementsStream()
+                            .map(ContainerElement::asGavtcs)
+                            .filter(gavtcs -> artemisBom.matches(gavtcs))
+                            .findFirst()
+                            .ifPresent(dep -> dep.getNode().remove(Siblings.previous(Siblings.commentsOrWhitespace())));
+                }).transform(basedir.toPath().resolve("poms/bom-test/pom.xml"));
 
         /* Edit extensions-jvm/pom.xml to add cics & sap extension */
-        new PomTransformer(basedir.toPath().resolve("extensions-jvm/pom.xml"), charset, simpleElementWhitespace).transform(
-                (Document document, TransformationContext context) -> {
+        PomTransformer.builder().charset(charset).transformers(
+                (TransformationContext context) -> {
                     final ContainerElement profileParent = context.getOrAddProfileParent(null);
                     final ContainerElement modules = profileParent.getOrAddChildContainerElement("modules");
 
                     modules.addChildTextElement("module", "cics");
                     modules.addChildTextElement("module", "sap");
-                });
+                }).transform(basedir.toPath().resolve("extensions-jvm/pom.xml"));
 
         /* Edit integration-tests-jvm/pom.xml to add cics & sap test */
-        new PomTransformer(basedir.toPath().resolve("integration-tests-jvm/pom.xml"), charset, simpleElementWhitespace)
-                .transform(
-                        (Document document, TransformationContext context) -> {
-                            final ContainerElement profileParent = context.getOrAddProfileParent(null);
-                            final ContainerElement modules = profileParent.getOrAddChildContainerElement("modules");
+        PomTransformer.builder().charset(charset).transformers(
+                (TransformationContext context) -> {
+                    final ContainerElement profileParent = context.getOrAddProfileParent(null);
+                    final ContainerElement modules = profileParent.getOrAddChildContainerElement("modules");
 
-                            modules.addChildTextElement("module", "cics");
-                            modules.addChildTextElement("module", "sap");
-                        });
+                    modules.addChildTextElement("module", "cics");
+                    modules.addChildTextElement("module", "sap");
+                }).transform(basedir.toPath().resolve("integration-tests-jvm/pom.xml"));
 
         // Force Camel community version for unsupported Maven plugins
         final Path buildParentItPomPath = basedir.toPath().resolve("poms/build-parent-it/pom.xml");
-        new PomTransformer(buildParentItPomPath, charset, simpleElementWhitespace)
-                .transform((Document document, TransformationContext context) -> {
+        PomTransformer.builder().charset(charset).transformers(
+                (TransformationContext context) -> {
                     final ContainerElement managedPlugins = context.getOrAddContainerElements("build", "pluginManagement",
                             "plugins");
                     managedPlugins.childElementsStream()
@@ -579,8 +574,9 @@ public class ProdInitMojo extends AbstractMojo {
                             .peek(gavtcs -> getLog()
                                     .info("Updating " + gavtcs.getArtifactId() + " version to ${camel-community-version}"))
                             .map(PomTransformer.NodeGavtcs::getNode)
-                            .forEach(containerElement -> containerElement.setVersion("${camel-community-version}"));
-                });
+                            .forEach(containerElement -> containerElement.asGavtcsElement()
+                                    .setVersion("${camel-community-version}"));
+                }).transform(buildParentItPomPath);
 
         /*
          * Copy certain files from the older product branch
@@ -642,17 +638,10 @@ public class ProdInitMojo extends AbstractMojo {
         final String newVersion = version + RHBAC_SNAPSHOT_SUFFIX;
         getLog().info("Setting version to " + newVersion + " in product/pom.xml");
         getLog().info("Removing <modules>...</modules> from product/pom.xml");
-        new PomTransformer(basedir.toPath().resolve("product/pom.xml"), charset, simpleElementWhitespace)
-                .transform((Document document, TransformationContext context) -> {
-                    ContainerElement parent = context.getContainerElement("project", "parent")
-                            .orElseThrow(() -> new IllegalStateException("No parent element in " + context.getPomXmlPath()));
-                    parent.setVersion(newVersion);
-
-                    context.getOrAddProfileParent(null)
-                            .getChildContainerElement("modules")
-                            .ifPresent(modules -> modules.remove(false, true));
-
-                });
+        PomTransformer.builder().charset(charset).transformers(
+                Parent.setVersion(newVersion),
+                Modules.removeAll())
+                .transform(basedir.toPath().resolve("product/pom.xml"));
     }
 
     static void addProperty(
@@ -668,8 +657,8 @@ public class ProdInitMojo extends AbstractMojo {
                 Comparator.comparing(Map.Entry::getKey, where));
         if (trailingComment != null) {
             final Element n = textElement.getNode();
-            final Comment cmt = n.getOwnerDocument().createComment(trailingComment);
-            n.getParentNode().insertBefore(cmt, n.getNextSibling());
+            final Comment cmt = new Comment(trailingComment);
+            n.parent().insertChildBefore(n.nextSibling().orElse(null), cmt);
         }
     }
 
