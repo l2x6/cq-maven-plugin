@@ -40,7 +40,6 @@ import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.l2x6.cq.common.CqCommonUtils;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 
 /**
  * Synchronizes version properties tagged with <code>@sync</code>.
@@ -84,14 +83,6 @@ public class SyncVersionsMojo extends AbstractMojo {
     @Parameter(defaultValue = "${session}", readonly = true, required = true)
     protected MavenSession session;
 
-    /**
-     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
-     *
-     * @since 0.38.0
-     */
-    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "EMPTY")
-    SimpleElementWhitespace simpleElementWhitespace;
-
     @Component
     private RepositorySystem repoSystem;
 
@@ -106,7 +97,7 @@ public class SyncVersionsMojo extends AbstractMojo {
         localRepositoryPath = Paths.get(localRepository);
         Path pomXml = basePath.resolve("pom.xml");
 
-        CqCommonUtils.syncVersions(pomXml, mojoDescriptorCreator, session, project, charset, simpleElementWhitespace,
+        CqCommonUtils.syncVersions(pomXml, mojoDescriptorCreator, session, project, charset,
                 localRepositoryPath,
                 getLog(), versionTransformations(), repositories, repoSession, repoSystem);
 

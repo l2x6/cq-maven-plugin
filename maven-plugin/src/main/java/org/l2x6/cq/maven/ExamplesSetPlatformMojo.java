@@ -39,9 +39,7 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
-import org.w3c.dom.Document;
 
 /**
  * Sets either the just released Quarkus platform on all examples under the current directory via
@@ -113,14 +111,6 @@ public class ExamplesSetPlatformMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "${settings.localRepository}", readonly = true)
     String localRepository;
-
-    /**
-     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
-     *
-     * @since 2.10.0
-     */
-    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "EMPTY")
-    SimpleElementWhitespace simpleElementWhitespace;
 
     @Parameter(defaultValue = "${plugin}", readonly = true)
     private PluginDescriptor plugin;
@@ -232,11 +222,11 @@ public class ExamplesSetPlatformMojo extends AbstractMojo {
                                 assertRequiredProperty(pomXmlPath, props, "camel-quarkus.version", cqVersion, issues);
                             }
                         } else {
-                            new PomTransformer(pomXmlPath, charset, simpleElementWhitespace).transform(
-                                    (Document document, TransformationContext context) -> {
+                            PomTransformer.builder().charset(charset).transformers(
+                                    (TransformationContext context) -> {
                                         if (newVersion != null && !newVersion.isEmpty()) {
                                             context.getContainerElement("project", "version")
-                                                    .ifPresent(version -> version.getNode().setTextContent(newVersion));
+                                                    .ifPresent(version -> version.getNode().textContent(newVersion));
                                         }
                                         final ContainerElement props = context.getOrAddContainerElement("properties");
 
@@ -253,9 +243,10 @@ public class ExamplesSetPlatformMojo extends AbstractMojo {
                                                 cqBomVersion);
 
                                         props.getChildContainerElement("camel-quarkus.version")
-                                                .ifPresent(v -> v.getNode().setTextContent(cqVersion));
+                                                .ifPresent(v -> v.getNode().textContent(cqVersion));
 
-                                    });
+                                    })
+                                    .transform(pomXmlPath);
                         }
                     });
 
@@ -332,6 +323,6 @@ public class ExamplesSetPlatformMojo extends AbstractMojo {
         props
                 .getChildContainerElement(name)
                 .orElseThrow(() -> new RuntimeException("Could not find <" + name + "> property in " + pomXmlPath))
-                .getNode().setTextContent(value);
+                .getNode().textContent(value);
     }
 }

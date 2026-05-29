@@ -33,7 +33,6 @@ import org.apache.maven.project.MavenProject;
 import org.junit.jupiter.api.Test;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.test.utils.TestUtils;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -97,7 +96,6 @@ public class CreateExtensionMojoTest {
         mojo.javaPackageInfix = CreateExtensionMojo.CQ_JAVA_PACKAGE_INFIX;
         mojo.additionalRuntimeDependencies = Arrays.asList(CreateExtensionMojo.CQ_ADDITIONAL_RUNTIME_DEPENDENCIES.split(","));
         mojo.createConvenienceDirs = false;
-        mojo.simpleElementWhitespace = SimpleElementWhitespace.EMPTY;
 
         return mojo;
     }

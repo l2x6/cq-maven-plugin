@@ -44,12 +44,10 @@ import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
 import org.l2x6.pom.tuner.PomTransformer.NodeGavtcs;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.Transformation;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gav;
-import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
 /**
@@ -80,14 +78,6 @@ public class ReduceGeneratedPlatformBomsMojo extends AbstractMojo {
     @Parameter(defaultValue = "utf-8", required = true, property = "cq.encoding")
     String encoding;
     Charset charset;
-
-    /**
-     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
-     *
-     * @since 2.32.0
-     */
-    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "SPACE")
-    SimpleElementWhitespace simpleElementWhitespace;
 
     /**
      * Skip the execution of this mojo.
@@ -133,12 +123,14 @@ public class ReduceGeneratedPlatformBomsMojo extends AbstractMojo {
 
         charset = Charset.forName(encoding);
 
-        new PomTransformer(basedir.toPath().resolve("pom.xml"), charset, simpleElementWhitespace).transform(fixHiddenMembers());
+        PomTransformer.builder().charset(charset).transformers(fixHiddenMembers())
+                .transform(basedir.toPath().resolve("pom.xml"));
+        ;
 
     }
 
     Transformation fixHiddenMembers() {
-        return (Document document, TransformationContext context) -> {
+        return (TransformationContext context) -> {
             final ContainerElement platformConfig = context.getProfileParent(null).get()
                     .getChildContainerElement("build", "plugins").get()
                     .childElementsStream()
@@ -192,8 +184,9 @@ public class ReduceGeneratedPlatformBomsMojo extends AbstractMojo {
                         gasToStripSuffixesFrom.removeAll(member.getDependencyOverrides());
                         universeDependencyOverrides.addAll(member.getDependencyOverrides());
 
-                        new PomTransformer(member.getGeneratedBomPath(), charset, simpleElementWhitespace)
-                                .transform(removeSuffix(gasToStripSuffixesFrom, PROD_VERSION_PATTERN));
+                        PomTransformer.builder().charset(charset)
+                                .transformers(removeSuffix(gasToStripSuffixesFrom, PROD_VERSION_PATTERN))
+                                .transform(member.getGeneratedBomPath());
 
                     });
 
@@ -201,32 +194,23 @@ public class ReduceGeneratedPlatformBomsMojo extends AbstractMojo {
             final Set<Ga> gasToStripSuffixesFrom = new TreeSet<>(prodGasNotRequiredBySupportedMembers);
             gasToStripSuffixesFrom.removeAll(universeDependencyOverrides);
 
-            new PomTransformer(universeBomPath, charset, simpleElementWhitespace)
-                    .transform(removeSuffix(gasToStripSuffixesFrom, PROD_VERSION_PATTERN));
+            PomTransformer.builder().charset(charset).transformers(removeSuffix(gasToStripSuffixesFrom, PROD_VERSION_PATTERN))
+                    .transform(universeBomPath);
 
         };
     }
 
     public Transformation removeSuffix(Collection<Ga> gas, Pattern pattern) {
-        return (Document document, TransformationContext context) -> {
-            final ContainerElement profileParent = context.getProfileParent(null).get();
-            final ContainerElement dependencyManagementDeps = profileParent
-                    .getChildContainerElement("dependencyManagement").orElseThrow(
-                            () -> new IllegalStateException("dependencyManagement not found in " + context.getPomXmlPath()))
-                    .getChildContainerElement("dependencies").orElseThrow(
-                            () -> new IllegalStateException(
-                                    "dependencyManagement/dependencies not found in "
-                                            + context.getPomXmlPath()));
+        return (TransformationContext context) -> {
 
             getLog().info("Version replacements in " + basedir.toPath().relativize(context.getPomXmlPath()) + ":");
-            for (ContainerElement dep : dependencyManagementDeps.childElements()) {
-                final NodeGavtcs gav = dep.asGavtcs();
+            for (NodeGavtcs gav : context.getProject().getManagedDependencies()) {
                 final Ga ga = gav.toGa();
                 if (gas.contains(ga)) {
                     final String oldVersion = gav.getVersion();
                     final String newVersion = pattern.matcher(oldVersion).replaceFirst("");
                     getLog().info(" - " + ga + ":" + oldVersion + " -> " + newVersion);
-                    dep.setVersion(newVersion);
+                    gav.getNode().asGavtcsElement().setVersion(newVersion);
                 }
             }
         };
@@ -305,9 +289,9 @@ public class ReduceGeneratedPlatformBomsMojo extends AbstractMojo {
             this.hidden = node.getChildContainerElement("hidden")
                     .map(el -> el.getNode())
                     .filter(n -> n != null)
-                    .map(Element::getTextContent)
+                    .map(eu.maveniverse.domtrip.Element::textContent)
                     .map(Boolean::parseBoolean).orElse(false);
-            this.name = node.getChildContainerElement("name").get().getNode().getTextContent();
+            this.name = node.getChildContainerElement("name").get().getNode().textContent();
 
             final Member parent = mainContextMembers != null ? mainContextMembers.get(name) : null;
             this.key = parent != null ? parent.key : node.getChildContainerElement("release")
@@ -318,7 +302,7 @@ public class ReduceGeneratedPlatformBomsMojo extends AbstractMojo {
                     .orElseThrow(
                             () -> new IllegalStateException("No <next> element under member config having name '" + name + "'"))
                     .getNode()
-                    .getTextContent().split(":")[1].replace("-bom", "").replace("quarkus-hazelcast-client",
+                    .textContent().split(":")[1].replace("-bom", "").replace("quarkus-hazelcast-client",
                             "quarkus-hazelcast");
             this.memberConfig = memberConfigs == null ? null : memberConfigs.get(name);
 
@@ -326,16 +310,16 @@ public class ReduceGeneratedPlatformBomsMojo extends AbstractMojo {
             final Set<Ga> ownDependencyOverrides = node.getChildContainerElement("dependencyManagement")
                     .map(n -> n.childElementsStream()).orElseGet(() -> Stream.of())
                     .map(child -> {
-                        final Element domNode = child.getNode();
-                        switch (domNode.getLocalName()) {
+                        final eu.maveniverse.domtrip.Element domNode = child.getNode();
+                        switch (domNode.localName()) {
                         case "dependency":
-                            return Gav.of(domNode.getTextContent()).toGa();
+                            return Gav.of(domNode.textContent()).toGa();
                         case "dependencySpec":
-                            return Gav.of(child.getChildContainerElement("artifact").get().getNode().getTextContent()).toGa();
+                            return Gav.of(child.getChildContainerElement("artifact").get().getNode().textContent()).toGa();
                         default:
                             throw new IllegalStateException(
                                     "Only dependency or dependencySpec expected under <dependencyManagement> of member " + name
-                                            + "; found " + domNode.getLocalName());
+                                            + "; found " + domNode.localName());
                         }
                     })
                     .collect(Collectors.toCollection(TreeSet::new));

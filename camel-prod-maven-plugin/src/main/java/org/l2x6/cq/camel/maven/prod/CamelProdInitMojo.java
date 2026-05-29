@@ -35,12 +35,10 @@ import org.l2x6.pom.tuner.MavenSourceTree;
 import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.GavtcsPattern;
 import org.l2x6.pom.tuner.model.Profile;
-import org.w3c.dom.Document;
 
 /**
  * Initialize a Camel product branch.
@@ -76,14 +74,6 @@ public class CamelProdInitMojo extends AbstractMojo {
      */
     @Parameter(property = "cq.camel-prod-init.skip", defaultValue = "false")
     boolean skip;
-
-    /**
-     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
-     *
-     * @since 3.0.0
-     */
-    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "SPACE")
-    SimpleElementWhitespace simpleElementWhitespace;
 
     /**
      * The current project's version
@@ -135,11 +125,11 @@ public class CamelProdInitMojo extends AbstractMojo {
         final Predicate<Profile> profiles = ActiveProfiles.of();
         final Path pomXmlPath = basedir.toPath().resolve("pom.xml");
         final MavenSourceTree t = MavenSourceTree.of(pomXmlPath, charset, Dependency::isVirtual);
-        t.setVersions(version + RHBAC_SNAPSHOT_SUFFIX, profiles, simpleElementWhitespace);
+        t.setVersions(version + RHBAC_SNAPSHOT_SUFFIX, profiles);
 
         /* Edit root pom.xml */
-        new PomTransformer(pomXmlPath, charset, simpleElementWhitespace).transform(
-                (Document document, TransformationContext context) -> {
+        PomTransformer.builder().charset(charset).transformers(
+                (TransformationContext context) -> {
 
                     /* Add some community props */
                     final ContainerElement props = context.getOrAddContainerElement("properties");
@@ -156,7 +146,7 @@ public class CamelProdInitMojo extends AbstractMojo {
                     final String availableCqPluginVersion = props.getChildContainerElement("cq-plugin.version")
                             .orElseThrow(() -> new IllegalStateException(
                                     "Could not find cq-plugin.version property in the root pom.xml file"))
-                            .getNode().getTextContent();
+                            .getNode().textContent();
                     if (new ComparableVersion(availableCqPluginVersion)
                             .compareTo(new ComparableVersion(currentCqVersion)) < 0) {
                         getLog().info("Upgrading in pom.xml: cq-plugin.version " + availableCqPluginVersion + " -> "
@@ -185,7 +175,7 @@ public class CamelProdInitMojo extends AbstractMojo {
                                     "exclude",
                                     pattern,
                                     Comparator.comparing(Map.Entry::getValue, Comparators.beforeFirst())));
-                });
+                }).transform(pomXmlPath);
 
     }
 

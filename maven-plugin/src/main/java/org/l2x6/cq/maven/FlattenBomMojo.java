@@ -40,7 +40,6 @@ import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.common.FlattenBomTask;
 import org.l2x6.cq.common.FlattenBomTask.BomEntryTransformation;
 import org.l2x6.cq.common.OnFailure;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.model.Gav;
 import org.l2x6.pom.tuner.model.GavPattern;
 import org.l2x6.pom.tuner.model.GavSet;
@@ -301,14 +300,6 @@ public class FlattenBomMojo extends AbstractMojo {
     boolean format;
 
     /**
-     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
-     *
-     * @since 2.25.0
-     */
-    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "EMPTY")
-    SimpleElementWhitespace simpleElementWhitespace;
-
-    /**
      * A list of {@link BannedDependencyResource}s. Example:
      *
      * <pre>
@@ -415,7 +406,6 @@ public class FlattenBomMojo extends AbstractMojo {
                 repoSession,
                 CqCommonUtils.getProfiles(session),
                 format,
-                simpleElementWhitespace,
                 installFlavor,
                 quickly,
                 bannedDeps.build(),

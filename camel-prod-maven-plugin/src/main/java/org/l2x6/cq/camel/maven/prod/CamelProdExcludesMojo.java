@@ -64,15 +64,18 @@ import org.l2x6.cq.common.OnFailure;
 import org.l2x6.pom.tuner.MavenSourceTree;
 import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
 import org.l2x6.pom.tuner.PomTransformer;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.Transformation;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
-import org.l2x6.pom.tuner.PomTunerUtils;
 import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.Ga;
+import org.l2x6.pom.tuner.model.GavtcsPattern;
 import org.l2x6.pom.tuner.model.Module;
 import org.l2x6.pom.tuner.model.Profile;
-import org.w3c.dom.Document;
+import org.l2x6.pom.tuner.transform.Dependencies;
+import org.l2x6.pom.tuner.transform.DependencyManagement;
+import org.l2x6.pom.tuner.transform.Modules;
+import org.l2x6.pom.tuner.transform.PluginManagement;
+import org.l2x6.pom.tuner.transform.Plugins;
 
 /**
  * Unlink modules that should not be productized from Camel source tree based on
@@ -165,14 +168,6 @@ public class CamelProdExcludesMojo extends AbstractMojo {
      */
     @Parameter(property = "cq.onCheckFailure", defaultValue = "FAIL")
     OnFailure onCheckFailure;
-
-    /**
-     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
-     *
-     * @since 2.11.0
-     */
-    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "SPACE")
-    SimpleElementWhitespace simpleElementWhitespace;
 
     /**
      * {@code artifactId}s that need to get productized in addition to
@@ -295,22 +290,23 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                 ? CqCommonUtils.copyPoms(basePath, basePath.resolve("target/prod-excludes-work"), additionalFiles) : basePath;
 
         final Path rootPomPath = workRoot.resolve("pom.xml");
-        new PomTransformer(rootPomPath, charset, simpleElementWhitespace)
-                .transform(Transformation.addOrSetProperty("camel-community-version", camelCommunityVersion));
+        PomTransformer.builder().charset(charset)
+                .transformers(org.l2x6.pom.tuner.transform.Properties.set("camel-community-version", camelCommunityVersion))
+                .transform(rootPomPath);
 
         final MavenSourceTree initialTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
         final Predicate<Profile> profiles = ActiveProfiles.of();
 
         /* Re-link any previously commented modules */
-        final MavenSourceTree fullTree = initialTree.relinkModules(charset, simpleElementWhitespace, MODULE_COMMENT);
+        final MavenSourceTree fullTree = initialTree.relinkModules(charset, MODULE_COMMENT);
 
         /* Use community versions of the plugins */
         Stream.of("dsl/camel-yaml-dsl/camel-yaml-dsl/pom.xml").forEach(relPath -> {
-            new PomTransformer(workRoot.resolve(relPath), charset, simpleElementWhitespace)
-                    .transform(Transformation.setTextValue("/" +
-                            PomTunerUtils.anyNs("plugin", "version") + "[.." + PomTunerUtils.anyNs("groupId")
-                            + "/text() = 'org.apache.camel']",
-                            "${camel-community-version}"));
+            PomTransformer.builder().charset(charset)
+                    .transformers(
+                            PluginManagement.select("org.apache.camel:*")
+                                    .forEach(plugin -> plugin.setVersion("${camel-community-version}")))
+                    .transform(workRoot.resolve(relPath));
         });
 
         /* Make a copy of the originalFullTree */
@@ -330,16 +326,17 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                         "Could not find allcomponents module; searched in core/camel-allcomponents/pom.xml and catalog/camel-allcomponents/pom.xml"));
 
         /* Remove non-prod components from camel-allcomponents in the copy */
-        new PomTransformer(allComponents, charset,
-                simpleElementWhitespace)
-                .transform(
-                        Transformation.removeDependency(true, true, gavtcs -> !includes.contains(gavtcs.toGa())));
+        PomTransformer.builder().charset(charset)
+                .transformers(
+                        Dependencies.remove(gavtcs -> !includes.contains(gavtcs.toGa())))
+                .transform(allComponents);
 
         /* Remove own plugins from the copy */
         Stream.of("dsl/camel-yaml-dsl/camel-yaml-dsl/pom.xml").forEach(relPath -> {
-            new PomTransformer(originalFullTreeCopyDir.resolve(relPath), charset, simpleElementWhitespace)
-                    .transform(Transformation.removePlugins(null, true, true,
-                            gavtcs -> gavtcs.getGroupId().equals("org.apache.camel")));
+            PomTransformer.builder().charset(charset)
+                    .transformers(Plugins.remove(
+                            gavtcs -> gavtcs.getGroupId().equals("org.apache.camel")))
+                    .transform(originalFullTreeCopyDir.resolve(relPath));
         });
 
         /* Remove all own test deps and any camel-spring* deps in the copy */
@@ -349,14 +346,16 @@ public class CamelProdExcludesMojo extends AbstractMojo {
             module.getProfiles().stream()
                     .filter(profile -> !profile.getDependencies().isEmpty())
                     .forEach(profile -> {
-                        transformations.add(Transformation.removeDependencies(profile.getId(), true, true,
+                        transformations.add(Dependencies.remove(
                                 gavtcs -> "org.apache.camel".equals(gavtcs.getGroupId()) && ("test".equals(gavtcs.getScope())
-                                        || gavtcs.getArtifactId().startsWith("camel-spring"))));
+                                        || gavtcs.getArtifactId().startsWith("camel-spring")))
+                                .from(profile.getId()));
                     });
 
             if (!transformations.isEmpty()) {
-                new PomTransformer(originalFullTreeCopyDir.resolve(module.getPomPath()), charset, simpleElementWhitespace)
-                        .transform(transformations);
+                PomTransformer.builder().charset(charset)
+                        .transformers(transformations)
+                        .transform(originalFullTreeCopyDir.resolve(module.getPomPath()));
             }
         });
 
@@ -391,8 +390,9 @@ public class CamelProdExcludesMojo extends AbstractMojo {
         updateVersions(fullTree, profiles);
 
         /* Comment all non-productized modules in the tree */
-        fullTree.unlinkModules(expandedIncludes, profiles, charset, simpleElementWhitespace,
-                (Set<String> unlinkModules) -> Transformation.commentModules(unlinkModules, MODULE_COMMENT));
+        fullTree.unlinkModules(expandedIncludes, profiles, charset,
+                (Set<String> unlinkModules) -> Modules.select(unlinkModules::contains)
+                        .commentOut(te -> MODULE_COMMENT));
 
         /* Replace ${project.version} with ${camel-community-version} where necessary */
         final MavenSourceTree reducedTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
@@ -426,17 +426,19 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                 }
             }
             if (!transformations.isEmpty()) {
-                new PomTransformer(workRoot.resolve(module.getPomPath()), charset, simpleElementWhitespace)
-                        .transform(transformations);
+                PomTransformer.builder().charset(charset)
+                        .transformers(transformations)
+                        .transform(workRoot.resolve(module.getPomPath()));
             }
         });
 
         Stream.of("parent/pom.xml").forEach(relPath -> {
-            new PomTransformer(workRoot.resolve(relPath), charset, simpleElementWhitespace)
-                    .transform(Transformation.setTextValue("/" +
-                            PomTunerUtils.anyNs("dependency", "version") + "[.." + PomTunerUtils.anyNs("artifactId")
-                            + "/text() = 'camel-buildtools']",
-                            "${camel-community-version}"));
+            PomTransformer.builder().charset(charset)
+                    .transformers(
+                            Dependencies
+                                    .select(gavtcs -> gavtcs.getArtifactId().equals("camel-buildtools"))
+                                    .forEach(gavtcs -> gavtcs.setVersion("${camel-community-version}")))
+                    .transform(workRoot.resolve(relPath));
         });
 
         /* Update test-infra metadata.json if it exists - we do not build productized
@@ -568,14 +570,16 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                 final String moduleGroupId = module.getGav().getGroupId().asConstant();
                 if (!expectedVersion.equals(moduleVersion) && parentGroupId.equals(moduleGroupId)) {
                     final Path pomPath = fullTree.getRootDirectory().resolve(module.getPomPath());
-                    new PomTransformer(pomPath, charset, simpleElementWhitespace)
-                            .transform(
-                                    (Document document, TransformationContext context) -> {
+                    PomTransformer.builder().charset(charset)
+                            .transformers(
+                                    (TransformationContext context) -> {
                                         context
                                                 .getContainerElement("project", "parent")
                                                 .ifPresent(
                                                         parent -> parent.addOrSetChildTextElement("version", expectedVersion));
-                                    });
+                                    })
+                            .transform(pomPath);
+                    ;
                 }
             }
         }
@@ -704,12 +708,13 @@ public class CamelProdExcludesMojo extends AbstractMojo {
             if (Objects.equal(actualVersion, expectedVersion)) {
                 return Optional.empty();
             }
+            GavtcsPattern pat = GavtcsPattern.of(ga.toString());
             return Optional.of(
                     isManagement
-                            ? Transformation.setManagedDependencyVersion(profileId, expectedVersion,
-                                    Collections.singleton(ga))
-                            : Transformation.setDependencyVersion(profileId, expectedVersion,
-                                    Collections.singleton(ga)));
+                            ? DependencyManagement.select(pat::matches).from(profileId)
+                                    .forEach(dep -> dep.setVersion(expectedVersion))
+                            : Dependencies.select(pat::matches).from(profileId)
+                                    .forEach(dep -> dep.setVersion(expectedVersion)));
         }
     }
 }

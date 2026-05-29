@@ -38,7 +38,9 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -87,15 +89,15 @@ import org.l2x6.cq.common.sync.SyncExpressions.Builder;
 import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
+import org.l2x6.pom.tuner.PomTransformer.NodeGavtcs;
+import org.l2x6.pom.tuner.PomTransformer.ProjectElement;
 import org.l2x6.pom.tuner.PomTransformer.Transformation;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.PomTunerUtils;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.model.Profile;
-import org.w3c.dom.Comment;
-import org.w3c.dom.Document;
+import org.l2x6.pom.tuner.transform.Siblings;
 import org.w3c.dom.Element;
 
 import static java.util.stream.Collectors.joining;
@@ -246,21 +248,53 @@ public class CqCommonUtils {
         return sb.toString();
     }
 
-    public static void updateVirtualDependencies(Charset charset, SimpleElementWhitespace simpleElementWhitespace,
+    public static void updateVirtualDependencies(Charset charset,
             final Set<Gavtcs> allVirtualExtensions, final Path pomXmlPath) {
-        new PomTransformer(pomXmlPath, charset, simpleElementWhitespace)
-                .transform(
-                        Transformation.updateDependencySubset(
+        PomTransformer.builder().charset(charset)
+                .transformers(
+                        updateDependencySubset(
                                 gavtcs -> gavtcs.isVirtual(),
                                 allVirtualExtensions,
                                 Gavtcs.scopeAndTypeFirstComparator(),
                                 VIRTUAL_DEPS_INITIAL_COMMENT),
-                        Transformation.removeProperty(true, true, "mvnd.builder.rule"),
-                        Transformation.removeContainerElementIfEmpty(true, true, true, "properties"));
+                        org.l2x6.pom.tuner.transform.Properties.remove("mvnd.builder.rule"),
+                        org.l2x6.pom.tuner.transform.Properties.removeEmptyParent())
+                .transform(pomXmlPath);
     }
 
-    public static String virtualDepsCommentXPath() {
-        return "//comment()[contains(.,'" + VIRTUAL_DEPS_INITIAL_COMMENT + "')]";
+    public static Transformation updateDependencySubset(
+            Predicate<Gavtcs> isSubsetMember,
+            Collection<Gavtcs> newSubset,
+            Comparator<Gavtcs> comparator,
+            String initialComment) {
+        return (TransformationContext context) -> {
+            Set<Gavtcs> depsToAdd = new TreeSet<>(comparator);
+            depsToAdd.addAll(newSubset);
+
+            final Gavtcs firstSubsetNode = depsToAdd.isEmpty() ? null : depsToAdd.iterator().next();
+
+            final ProjectElement project = context.getProject();
+            Set<NodeGavtcs> deps = project.getDependencies();
+            for (NodeGavtcs dep : deps) {
+                if (isSubsetMember.test(dep)) {
+                    if (!newSubset.contains(dep)) {
+                        dep.getNode().remove(Siblings.previous(Siblings.commentsOrWhitespace()));
+                    } else {
+                        depsToAdd.remove(dep);
+                    }
+                }
+            }
+            for (Gavtcs dep : depsToAdd) {
+                project.getOrAddChildContainerElement("dependencies").addGavtcsIfNeeded(dep, comparator);
+            }
+
+            if (initialComment != null && firstSubsetNode != null) {
+                project.getDependencies().stream().filter(firstSubsetNode::equals).findFirst()
+                        .map(NodeGavtcs::getNode)
+                        .ifPresent(firstDepNode -> firstDepNode.prependCommentIfNeeded(initialComment));
+            }
+
+        };
     }
 
     /**
@@ -504,21 +538,23 @@ public class CqCommonUtils {
     }
 
     public static void syncVersions(Path pomXml, MojoDescriptorCreator mojoDescriptorCreator, MavenSession session,
-            MavenProject project, Charset charset, SimpleElementWhitespace simpleElementWhitespace,
+            MavenProject project, Charset charset,
             Path localRepositoryPath, Log log, Map<String, String> versionTransformations,
             List<RemoteRepository> repositories,
             RepositorySystemSession repoSession,
             RepositorySystem repoSystem) {
         try {
-            new PomTransformer(pomXml, charset, simpleElementWhitespace)
-                    .transform(
+            PomTransformer.builder().charset(charset)
+                    .transformers(
                             new UpdateVersionsTransformation(
                                     new PomModelCache(localRepositoryPath, repositories, repoSystem, repoSession,
                                             project.getModel()),
                                     session,
                                     mojoDescriptorCreator,
                                     log,
-                                    versionTransformations));
+                                    versionTransformations))
+                    .transform(pomXml);
+            ;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -543,13 +579,13 @@ public class CqCommonUtils {
         }
 
         @Override
-        public void perform(Document document, TransformationContext context) {
+        public void perform(TransformationContext context) {
             context.getContainerElement("project", "properties").ifPresent(props -> {
                 final Builder expressionsBuilder = SyncExpressions.builder();
                 for (ContainerElement prop : props.childElements()) {
-                    Comment nextComment = prop.nextSiblingCommentNode();
+                    eu.maveniverse.domtrip.Comment nextComment = prop.nextSiblingCommentNode();
                     if (nextComment != null) {
-                        final String commentText = nextComment.getNodeValue();
+                        final String commentText = nextComment.content();
                         SyncExpression.parse(prop.getNode(), commentText)
                                 .ifPresent(expr -> expressionsBuilder.expression(expr));
                     }
@@ -571,8 +607,8 @@ public class CqCommonUtils {
                 };
                 expressions.evaluate(mavenExpressionEvaluator, pomModels,
                         (SyncExpression syncExpression, String newValue) -> {
-                            final Element propertyNode = syncExpression.getPropertyNode();
-                            final String propertyName = propertyNode.getLocalName();
+                            final eu.maveniverse.domtrip.Element propertyNode = syncExpression.getPropertyNode();
+                            final String propertyName = propertyNode.localName();
 
                             final StringWriter out = new StringWriter();
                             final String transformedValue;
@@ -598,14 +634,14 @@ public class CqCommonUtils {
                                 transformedValue = newValue;
                             }
 
-                            final String oldValue = propertyNode.getTextContent();
+                            final String oldValue = propertyNode.textContent();
                             if (oldValue.equals(transformedValue)) {
                                 log.info(" ✓ " + propertyName + ": " + oldValue);
                             } else {
                                 log.info(" 🚀 " + propertyName + ": " + oldValue + " -> " + transformedValue);
                             }
 
-                            propertyNode.setTextContent(transformedValue);
+                            propertyNode.textContent(transformedValue);
                             session.getCurrentProject().getProperties().setProperty(propertyName, transformedValue);
                         });
 

@@ -28,7 +28,6 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.l2x6.pom.tuner.MavenSourceTree;
 import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.model.Profile;
 
 /**
@@ -67,21 +66,13 @@ public class SetVersionsMojo extends AbstractMojo {
     @Parameter(defaultValue = "${session}", readonly = true, required = true)
     protected MavenSession session;
 
-    /**
-     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
-     *
-     * @since 2.5.0
-     */
-    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "EMPTY")
-    SimpleElementWhitespace simpleElementWhitespace;
-
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         basePath = basedir.toPath();
         charset = Charset.forName(encoding);
 
         final Predicate<Profile> profiles = getProfiles();
-        MavenSourceTree.of(basePath.resolve("pom.xml"), charset).setVersions(newVersion, profiles, simpleElementWhitespace);
+        MavenSourceTree.of(basePath.resolve("pom.xml"), charset).setVersions(newVersion, profiles);
     }
 
     Predicate<Profile> getProfiles() {

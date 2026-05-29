@@ -27,7 +27,6 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.junit.jupiter.api.Test;
 import org.l2x6.cq.test.utils.TestUtils;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 
 public class ProdExcludesMojoTest {
 
@@ -38,7 +37,6 @@ public class ProdExcludesMojoTest {
         mojo.multiModuleProjectDirectory = basePath.toFile();
         mojo.encoding = "utf-8";
         mojo.productJson = basePath.resolve("product/src/main/resources/camel-quarkus-product-source.json").toFile();
-        mojo.simpleElementWhitespace = SimpleElementWhitespace.SPACE;
         final DirectoryScanner scanner = new DirectoryScanner();
         scanner.setBasedir(mojo.basedir);
         scanner.setIncludes(

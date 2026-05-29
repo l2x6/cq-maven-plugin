@@ -56,7 +56,7 @@ public class SyncExpression {
      * @return              an {@link Optional} containing a new {@link SyncExpression} if the comment text contains a valid
      *                      <code>@sync</code> expression; otherwise returns an empty {@link Optional}
      */
-    public static Optional<SyncExpression> parse(Element propertyNode, String commentText) {
+    public static Optional<SyncExpression> parse(eu.maveniverse.domtrip.Element propertyNode, String commentText) {
         final Matcher m = SYNC_INSTRUCTION_PATTERN.matcher(commentText);
         if (m.matches()) {
             final String groupId = m.group("groupId");
@@ -77,9 +77,10 @@ public class SyncExpression {
     private final String element;
     private final String method;
     private final Set<String> requiredProperties;
-    private final Element propertyNode;
+    private final eu.maveniverse.domtrip.Element propertyNode;
 
-    SyncExpression(Element propertyNode, String groupId, String artifactId, String rawVersion, String method,
+    SyncExpression(eu.maveniverse.domtrip.Element propertyNode, String groupId, String artifactId, String rawVersion,
+            String method,
             String element) {
         this.propertyNode = propertyNode;
         this.groupId = groupId;
@@ -171,7 +172,7 @@ public class SyncExpression {
     /**
      * @return the Maven property {@link Element} associated with this {@link SyncExpression}
      */
-    public Element getPropertyNode() {
+    public eu.maveniverse.domtrip.Element getPropertyNode() {
         return propertyNode;
     }
 

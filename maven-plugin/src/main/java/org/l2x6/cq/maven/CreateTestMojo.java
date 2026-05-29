@@ -33,8 +33,7 @@ import org.l2x6.cq.common.CqCatalog;
 import org.l2x6.cq.common.CqCatalog.Flavor;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.pom.tuner.PomTransformer;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
-import org.l2x6.pom.tuner.PomTransformer.Transformation;
+import org.l2x6.pom.tuner.transform.Modules;
 
 /**
  * Scaffolds a new test.
@@ -206,14 +205,6 @@ public class CreateTestMojo extends AbstractExtensionListMojo {
     @Parameter(property = "cq.nativeSupported", defaultValue = "true")
     boolean nativeSupported;
 
-    /**
-     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
-     *
-     * @since 0.38.0
-     */
-    @Parameter(property = "cq.simpleElementWhitespace", defaultValue = "EMPTY")
-    SimpleElementWhitespace simpleElementWhitespace;
-
     List<ArtifactModel<?>> models;
     ArtifactModel<?> model;
 
@@ -277,10 +268,6 @@ public class CreateTestMojo extends AbstractExtensionListMojo {
         return extensionsPath.resolve(artifactIdBase);
     }
 
-    PomTransformer pomTransformer(Path basePomXml) {
-        return new PomTransformer(basePomXml, getCharset(), simpleElementWhitespace);
-    }
-
     TemplateParams.Builder getTemplateParams() {
         final TemplateParams.Builder templateParams = TemplateParams.builder();
 
@@ -321,7 +308,8 @@ public class CreateTestMojo extends AbstractExtensionListMojo {
                             + itestParent.getPackaging() + " in " + itestParentPath);
         }
         getLog().info(String.format("Adding module [%s] to [%s]", itestDir.getFileName().toString(), itestParentPath));
-        pomTransformer(itestParentPath).transform(Transformation.addModule(itestDir.getFileName().toString()));
+        PomTransformer.builder().charset(getCharset()).transformers(Modules.add(itestDir.getFileName().toString()))
+                .transform(itestParentPath);
         PomSorter.sortModules(itestParentPath);
 
         model.itestParentGroupId(getGroupId(itestParent));
@@ -334,11 +322,11 @@ public class CreateTestMojo extends AbstractExtensionListMojo {
 
         final Set<String> extensionArtifactIds = findExtensions().map(e -> "camel-quarkus-" + e.getArtifactIdBase())
                 .collect(Collectors.toSet());
-        new PomTransformer(itestPomPath, getCharset(), simpleElementWhitespace)
-                .transform(
-                        FormatPomsMojo
-                                .updateTestVirtualDependencies(gavtcs -> extensionArtifactIds.contains(gavtcs.getArtifactId())),
-                        Transformation.keepFirst(CqCommonUtils.virtualDepsCommentXPath(), true));
+        PomTransformer.builder().charset(getCharset()).transformers(
+                FormatPomsMojo
+                        .updateTestVirtualDependencies(gavtcs -> extensionArtifactIds.contains(gavtcs.getArtifactId())),
+                FormatPomsMojo.keepFirstComment())
+                .transform(itestPomPath);
 
         if (nativeSupported) {
             evalTemplate(cfg, "integration-test-application.properties",

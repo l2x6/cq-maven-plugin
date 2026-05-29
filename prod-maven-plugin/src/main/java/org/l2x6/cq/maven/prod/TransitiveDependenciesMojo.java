@@ -64,12 +64,10 @@ import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.maven.prod.ProdExcludesMojo.CamelEdition;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
-import org.l2x6.pom.tuner.PomTransformer.SimpleElementWhitespace;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gav;
 import org.l2x6.pom.tuner.model.GavSet;
-import org.w3c.dom.Document;
 
 /**
  * List the transitive dependencies of all, of supported extensions and the rest that neither needs to get productized
@@ -134,13 +132,6 @@ public class TransitiveDependenciesMojo {
     private final Product product;
     private final Product productCxf;
 
-    /**
-     * How to format simple XML elements ({@code <elem/>}) - with or without space before the slash.
-     *
-     * @since 2.23.0
-     */
-    private final SimpleElementWhitespace simpleElementWhitespace;
-
     private final List<RemoteRepository> repositories;
 
     private final RepositorySystem repoSystem;
@@ -165,7 +156,6 @@ public class TransitiveDependenciesMojo {
             Path nonProductizedDependenciesFile,
             Product product,
             Product productCxf,
-            SimpleElementWhitespace simpleElementWhitespace,
             List<RemoteRepository> repositories,
             RepositorySystem repoSystem,
             RepositorySystemSession repoSession,
@@ -182,7 +172,6 @@ public class TransitiveDependenciesMojo {
         this.nonProductizedDependenciesFile = basedir.resolve(nonProductizedDependenciesFile);
         this.product = product;
         this.productCxf = productCxf;
-        this.simpleElementWhitespace = simpleElementWhitespace;
         this.repositories = repositories;
         this.repoSystem = repoSystem;
         this.repoSession = repoSession;
@@ -367,8 +356,8 @@ public class TransitiveDependenciesMojo {
 
         final Path bomPath = basedir.resolve("poms/bom/pom.xml");
         log.info("Updating Camel versions in " + bomPath);
-        new PomTransformer(bomPath, charset, simpleElementWhitespace)
-                .transform((Document document, TransformationContext context) -> {
+        PomTransformer.builder().charset(charset)
+                .transformers((TransformationContext context) -> {
 
                     context.getContainerElement("project", "dependencyManagement", "dependencies").get()
                             .childElementsStream()
@@ -386,10 +375,10 @@ public class TransitiveDependenciesMojo {
                                                 ? CamelEdition.PRODUCT.getVersionExpression()
                                                 : CamelEdition.COMMUNITY.getVersionExpression());
                                 if (!expectedVersion.equals(gavtcs.getVersion())) {
-                                    gavtcs.getNode().setVersion(expectedVersion);
+                                    gavtcs.getNode().asGavtcsElement().setVersion(expectedVersion);
                                 }
                             });
-                });
+                }).transform(bomPath);
     }
 
     static Set<Ga> toGas(Set<Gav> gavs) {
