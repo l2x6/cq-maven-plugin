@@ -170,6 +170,15 @@ public class FlattenBomMojo extends AbstractMojo {
     File flattenedReducedPomFile;
 
     /**
+     * Where to store the reduced and expanded (manages all transitive dependencies) flattened BOM. An absolute path or a
+     * path relative to <code>${basedir}</code>.
+     *
+     * @since 5.0.0
+     */
+    @Parameter(defaultValue = FlattenBomTask.DEFAULT_FLATTENED_REDUCED_EXPANDED_POM_FILE, property = "cq.flattenedReducedExpandedPomFile")
+    File flattenedReducedExpandedPomFile;
+
+    /**
      * Where to store the reduced flattened BOM with comments about the origin of individual entries. An absolute path
      * or a path relative to <code>${basedir}</code>.
      *
@@ -280,6 +289,7 @@ public class FlattenBomMojo extends AbstractMojo {
      * <ul>
      * <li>{@code FULL} - see {@link #flattenedFullPomFile}
      * <li>{@code REDUCED} (default) - see {@link #flattenedReducedPomFile}
+     * <li>{@code REDUCED_EXPANDED} - see {@link #flattenedReducedExpandedPomFile}
      * <li>{@code REDUCED_VERBOSE} - see {@link #flattenedReducedVerbosePomFile}
      * <li>{@code ORIGINAL} - the original non-flattened BOM gets installed; {@link #flattenedFullPomFile},
      * {@link #flattenedReducedPomFile} and {@link #flattenedReducedVerbosePomFile} are still written but none of them
@@ -367,6 +377,7 @@ public class FlattenBomMojo extends AbstractMojo {
         final Path fullPomPath = basedir.toPath().resolve(flattenedFullPomFile.toPath());
         final Path reducedVerbosePamPath = basedir.toPath().resolve(flattenedReducedVerbosePomFile.toPath());
         final Path reducedPomPath = basedir.toPath().resolve(flattenedReducedPomFile.toPath());
+        final Path reducedExpandedPomPath = basedir.toPath().resolve(flattenedReducedExpandedPomFile.toPath());
         if (bomEntryTransformations == null) {
             bomEntryTransformations = new ArrayList<>();
         }
@@ -399,6 +410,7 @@ public class FlattenBomMojo extends AbstractMojo {
                 fullPomPath,
                 reducedVerbosePamPath,
                 reducedPomPath,
+                reducedExpandedPomPath,
                 charset,
                 getLog(),
                 repositories,

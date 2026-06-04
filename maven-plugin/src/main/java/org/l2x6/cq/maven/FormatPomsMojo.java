@@ -51,7 +51,8 @@ import org.l2x6.pom.tuner.PomTransformer.NodeGavtcs;
 import org.l2x6.pom.tuner.PomTransformer.ProfileElement;
 import org.l2x6.pom.tuner.PomTransformer.Transformation;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
-import org.l2x6.pom.tuner.model.Ga;
+import org.l2x6.pom.tuner.model.GaPattern;
+import org.l2x6.pom.tuner.model.Gavtc.Type;
 import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.transform.Dependencies;
 import org.l2x6.pom.tuner.transform.Siblings;
@@ -168,11 +169,11 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
                                     dep.getGroupId(),
                                     dep.getArtifactId(),
                                     dep.getVersion(),
-                                    dep.getType(),
+                                    Type.of(dep.getType()),
                                     dep.getClassifier(),
                                     dep.getScope(),
                                     dep.getExclusions().stream()
-                                            .map(e -> new Ga(e.getGroupId(), e.getArtifactId()))
+                                            .map(e -> GaPattern.of(e.getGroupId(), e.getArtifactId()))
                                             .collect(Collectors.toList())))
                             .filter(gavtcs -> !gavtcs.isVirtual())
                             .forEach(allDeps::add);
