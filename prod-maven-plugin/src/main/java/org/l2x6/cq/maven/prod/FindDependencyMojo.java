@@ -60,6 +60,7 @@ import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
 import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.Gav;
 import org.l2x6.pom.tuner.model.GavPattern;
+import org.l2x6.pom.tuner.model.Gavtc.Type;
 import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.model.Glob;
 import org.l2x6.pom.tuner.model.Module;
@@ -210,7 +211,7 @@ public class FindDependencyMojo extends AbstractMojo {
                             public boolean visitEnter(DependencyNode node) {
                                 final Artifact a = node.getArtifact();
                                 final Gavtcs gav = new Gavtcs(a.getGroupId(), a.getArtifactId(), a.getVersion(),
-                                        a.getExtension(), a.getClassifier(), null);
+                                        Type.of(a.getExtension()), a.getClassifier(), null);
                                 stack.push(gav);
 
                                 if (gavPattern != null

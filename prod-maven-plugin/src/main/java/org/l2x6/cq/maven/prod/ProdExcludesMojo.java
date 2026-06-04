@@ -97,6 +97,7 @@ import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.Expression;
 import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gav;
+import org.l2x6.pom.tuner.model.Gavtc.Type;
 import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.model.Module;
 import org.l2x6.pom.tuner.model.Profile;
@@ -894,7 +895,8 @@ public class ProdExcludesMojo extends AbstractMojo {
                                                     .getNode()
                                                     .previousSiblingInsertionRefNode();
                                             dependencyManagementDeps.addGavtcs(
-                                                    new Gavtcs("io.quarkus", "quarkus-bom", "${quarkus.version}", "pom", null,
+                                                    new Gavtcs("io.quarkus", "quarkus-bom", "${quarkus.version}", Type.pom(),
+                                                            null,
                                                             "import"),
                                                     refNode);
                                         });
@@ -940,7 +942,8 @@ public class ProdExcludesMojo extends AbstractMojo {
             profile.addChildTextElement("id", "mixed");
             ContainerElement deps = profile.addChildContainerElement("dependencyManagement")
                     .addChildContainerElement("dependencies");
-            deps.addGavtcs(new Gavtcs("org.apache.camel.quarkus", bomArtifactId, "${project.version}", "pom", null, "import"));
+            deps.addGavtcs(
+                    new Gavtcs("org.apache.camel.quarkus", bomArtifactId, "${project.version}", Type.pom(), null, "import"));
         };
     }
 
@@ -1254,6 +1257,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                     optionalChild(config, "fullPomPath").map(Paths::get).orElse(null),
                     optionalChild(config, "reducedVerbosePamPath").map(Paths::get).orElse(null),
                     optionalChild(config, "reducedPomPath").map(Paths::get).orElse(null),
+                    optionalChild(config, "reducedExpandedPomPath").map(Paths::get).orElse(null),
                     charset,
                     getLog(),
                     repositories,

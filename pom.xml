@@ -72,7 +72,7 @@
         <maven.shared.invoker>3.3.0</maven.shared.invoker>
         <maven.shared.utils>3.4.2</maven.shared.utils>
         <mockito.version>5.23.0</mockito.version>
-        <pom-tuner.version>5.0.0.Alpha1</pom-tuner.version>
+        <pom-tuner.version>5.0.0.Alpha2</pom-tuner.version>
         <javax.inject.version>1</javax.inject.version>
         <jdom2.version>2.0.6.1</jdom2.version>
         <jgit.version>7.6.0.202603022253-r</jgit.version>
@@ -117,8 +117,7 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
         <!-- maven-compiler-plugin -->
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.release>17</maven.compiler.release>
         <maven.compiler.showWarnings>true</maven.compiler.showWarnings>
 
         <!-- license-maven-plugin -->

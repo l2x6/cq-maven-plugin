@@ -57,6 +57,7 @@ import org.l2x6.pom.tuner.PomTransformer.TextElement;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.Ga;
+import org.l2x6.pom.tuner.model.Gavtc.Type;
 import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.model.GavtcsPattern;
 import org.l2x6.pom.tuner.model.Profile;
@@ -447,7 +448,7 @@ public class ProdInitMojo extends AbstractMojo {
                             "dependencies");
                     /* Add camel-sap and camel-quarkus-sap dependencies */
                     dependencyManagementDeps.addGavtcs(new Gavtcs("org.fusesource", "camel-sap", "${camel-fusesource.version}",
-                            "", "", "", Ga.of("org.eclipse:osgi")));
+                            Type.empty(), "", "", Ga.of("org.eclipse:osgi").toGaPattern()));
                     dependencyManagementDeps
                             .addGavtcs(new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-sap", "${camel-quarkus.version}"));
                     dependencyManagementDeps.addGavtcs(
@@ -455,7 +456,7 @@ public class ProdInitMojo extends AbstractMojo {
 
                     /** Add camel-cics, camel-quarkus-cics and ctgClient dependencies */
                     dependencyManagementDeps.addGavtcs(new Gavtcs("org.fusesource", "camel-cics", "${camel-fusesource.version}",
-                            null, null, null, Ga.of("org.eclipse:osgi")));
+                            Type.empty(), null, null, Ga.of("org.eclipse:osgi").toGaPattern()));
                     dependencyManagementDeps
                             .addGavtcs(
                                     new Gavtcs("org.apache.camel.quarkus", "camel-quarkus-cics", "${camel-quarkus.version}"));
@@ -467,14 +468,15 @@ public class ProdInitMojo extends AbstractMojo {
 
                     /* Add quarkus-artemis-bom */
                     Gavtcs qpidBom = new Gavtcs("org.amqphub.quarkus", "quarkus-qpid-jms-bom", "${quarkus-qpid-jms.version}",
-                            "pom", null, "import");
+                            Type.pom(), null, "import");
                     final NodeGavtcs qpidBomNode = dependencyManagementDeps.childElementsStream()
                             .map(ContainerElement::asGavtcs)
                             .filter(gavtcs -> gavtcs.equals(qpidBom))
                             .findFirst()
                             .get();
                     dependencyManagementDeps.addGavtcs(
-                            new Gavtcs("io.quarkiverse.artemis", "quarkus-artemis-bom", "${quarkiverse-artemis.version}", "pom",
+                            new Gavtcs("io.quarkiverse.artemis", "quarkus-artemis-bom", "${quarkiverse-artemis.version}",
+                                    Type.pom(),
                                     null, "import"),
                             qpidBomNode.getNode().previousSiblingInsertionRefNode());
 
@@ -521,7 +523,7 @@ public class ProdInitMojo extends AbstractMojo {
                      * ${quarkiverse-cxf-community.version}
                      */
                     Gavtcs qcxfBom = new Gavtcs("io.quarkiverse.cxf", "quarkus-cxf-bom-test", "${quarkiverse-cxf.version}",
-                            "pom", null, "import");
+                            Type.pom(), null, "import");
                     final ContainerElement dependencyManagementDeps = context.getOrAddContainerElements(
                             "dependencyManagement",
                             "dependencies");
