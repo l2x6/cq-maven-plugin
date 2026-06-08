@@ -35,6 +35,8 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.l2x6.cq.common.CqCommonUtils;
+import org.l2x6.pom.tuner.PomTransformer;
+import org.l2x6.pom.tuner.transform.Modules;
 
 /**
  * Scaffolds a new Camel Quarkus example project.
@@ -147,6 +149,17 @@ public class CreateExampleMojo extends AbstractMojo {
                     exampleProjectTestDir.resolve(classNamePrefix + "Test.java"));
             generateFileFromTemplate(configuration, props, "IT.java",
                     exampleProjectTestDir.resolve(classNamePrefix + "IT.java"));
+
+            Path formatterConfig = basePath.resolve("eclipse-formatter-config.xml");
+            if (Files.exists(formatterConfig)) {
+                Files.copy(formatterConfig, exampleProjectBaseDir.resolve("eclipse-formatter-config.xml"));
+            }
+
+            Path parentPomXml = basePath.resolve("pom.xml");
+            if (Files.exists(parentPomXml)) {
+                PomTransformer.builder().charset(charset).transformers(Modules.add(artifactId)).transform(parentPomXml);
+                PomSorter.sortModules(parentPomXml);
+            }
 
             getLog().info("Generated example project " + artifactId
                     + "\n\n Run org.l2x6.cq:cq-maven-plugin:update-examples-json to update examples.json");

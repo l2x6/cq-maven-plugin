@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.apache.camel.quarkus.examples</groupId>
+    <artifactId>camel-quarkus-examples</artifactId>
+    <version>3.10.0</version>
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>cheese-wine</module>
+        <module>fake-example-project</module>
+    </modules>
+</project>
