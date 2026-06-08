@@ -665,7 +665,7 @@ public class FlattenBomTask {
                             .collect(Collectors.toCollection(() -> new TreeSet<Gavtcs>(Gavtcs.groupFirstComparator()))));
 
             final Set<Gavtcs> flatRequiredExpandedConstraints = Collections.unmodifiableSet(
-                    requiredConstraints.values().stream()
+                    requiredExpandedConstraints.values().stream()
                             .flatMap(BomEntryData::toGavtcs)
                             .collect(Collectors.toCollection(() -> new TreeSet<Gavtcs>(Gavtcs.groupFirstComparator()))));
 
