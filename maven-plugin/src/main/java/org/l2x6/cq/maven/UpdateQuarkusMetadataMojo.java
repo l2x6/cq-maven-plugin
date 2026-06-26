@@ -95,8 +95,14 @@ public class UpdateQuarkusMetadataMojo extends AbstractExtensionListMojo {
                     final boolean unlisted = runtimePom.getProperties().containsKey("quarkus.metadata.unlisted")
                             ? Boolean.parseBoolean(runtimePom.getProperties().getProperty("quarkus.metadata.unlisted"))
                             : !extModule.isNativeSupported();
-                    final boolean deprecated = models.stream().anyMatch(ArtifactModel::isDeprecated) || Boolean
-                            .parseBoolean(runtimePom.getProperties().getProperty("quarkus.metadata.deprecated", "false"));
+                    final boolean deprecated = models.stream()
+                            .filter(m -> m.getName().equals(artifactIdBase))
+                            .findFirst()
+                            .map(ArtifactModel::isDeprecated)
+                            .orElse(false)
+                            || Boolean
+                                    .parseBoolean(runtimePom.getProperties()
+                                            .getProperty("quarkus.metadata.deprecated", "false"));
 
                     final ExtensionStatus status = ExtensionStatus.valueOf(runtimePom.getProperties().getProperty(
                             "quarkus.metadata.status", ExtensionStatus.stable.toString()));
