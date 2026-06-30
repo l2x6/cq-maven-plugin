@@ -315,8 +315,12 @@ public class FlattenBomTask {
                         return BomEntryData.of(v, ga, a.getVersion(), Type.of(a.getExtension()),
                                 a.getClassifier(), exclusions);
                     } catch (DuplicateVersionException e) {
-                        throw new RuntimeException("Found duplicate versions at\n - "
-                                + stack.stream().map(Ga::toString).collect(Collectors.joining("\n - ")));
+                        throw new RuntimeException(
+                                "Found duplicate versions for " + ga + " within a single resolution tree:"
+                                        + "\n  existing version: " + (v != null ? v.version() : "?")
+                                        + "\n  new version:      " + a.getVersion()
+                                        + "\n  dependency path:  "
+                                        + stack.stream().map(Ga::toString).collect(Collectors.joining(" -> ")));
                     }
                 });
 
@@ -884,7 +888,14 @@ public class FlattenBomTask {
                             try {
                                 return bomEntry.merge(v);
                             } catch (DuplicateVersionException e) {
-                                throw new RuntimeException("Duplicate versions when resolving root artifact " + entry);
+                                throw new RuntimeException(
+                                        "Duplicate versions for " + e.getGa()
+                                                + " when merging transitives from resolution entry point "
+                                                + entry.getGroupId() + ":" + entry.getArtifactId() + ":"
+                                                + entry.getVersion()
+                                                + " — existing version " + e.getExistingVersion()
+                                                + " conflicts with version " + e.getNewVersion(),
+                                        e);
                             }
                         }));
             }
@@ -1434,9 +1445,28 @@ public class FlattenBomTask {
 
     static class DuplicateVersionException extends Exception {
 
-        private DuplicateVersionException(BomEntryData bomEntryData, Gavtc gavtcs) {
-            super("Duplicate versions:" + bomEntryData.toGavtcs().map(Gavtcs::toString).collect(Collectors.joining("\n - "))
-                    + "\n - " + gavtcs);
+        private final Ga ga;
+        private final String existingVersion;
+        private final String newVersion;
+
+        private DuplicateVersionException(BomEntryData bomEntryData, Gavtc gavtc) {
+            super(bomEntryData.ga() + " has conflicting versions: "
+                    + bomEntryData.version() + " vs " + gavtc.getVersion());
+            this.ga = bomEntryData.ga();
+            this.existingVersion = bomEntryData.version();
+            this.newVersion = gavtc.getVersion();
+        }
+
+        public Ga getGa() {
+            return ga;
+        }
+
+        public String getExistingVersion() {
+            return existingVersion;
+        }
+
+        public String getNewVersion() {
+            return newVersion;
         }
 
     }
