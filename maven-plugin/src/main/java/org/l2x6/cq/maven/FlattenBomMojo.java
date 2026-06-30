@@ -175,7 +175,7 @@ public class FlattenBomMojo extends AbstractMojo {
      *
      * @since 5.0.0
      */
-    @Parameter(defaultValue = FlattenBomTask.DEFAULT_FLATTENED_REDUCED_EXPANDED_POM_FILE, property = "cq.flattenedReducedExpandedPomFile")
+    @Parameter(property = "cq.flattenedReducedExpandedPomFile")
     File flattenedReducedExpandedPomFile;
 
     /**
@@ -377,7 +377,7 @@ public class FlattenBomMojo extends AbstractMojo {
         final Path fullPomPath = basedir.toPath().resolve(flattenedFullPomFile.toPath());
         final Path reducedVerbosePamPath = basedir.toPath().resolve(flattenedReducedVerbosePomFile.toPath());
         final Path reducedPomPath = basedir.toPath().resolve(flattenedReducedPomFile.toPath());
-        final Path reducedExpandedPomPath = basedir.toPath().resolve(flattenedReducedExpandedPomFile.toPath());
+        final Path reducedExpandedPomPath = flattenedReducedExpandedPomFile != null ? basedir.toPath().resolve(flattenedReducedExpandedPomFile.toPath()) : null;
         if (bomEntryTransformations == null) {
             bomEntryTransformations = new ArrayList<>();
         }
