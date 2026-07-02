@@ -650,8 +650,8 @@ public class CqCommonUtils {
 
     }
 
-    public static Predicate<Profile> getProfiles(MavenSession session) {
-        final Predicate<Profile> profiles = ActiveProfiles.of(
+    public static ActiveProfiles getProfiles(MavenSession session) {
+        final ActiveProfiles profiles = ActiveProfiles.of(
                 session.getCurrentProject().getActiveProfiles().stream()
                         .map(org.apache.maven.model.Profile::getId)
                         .toArray(String[]::new));

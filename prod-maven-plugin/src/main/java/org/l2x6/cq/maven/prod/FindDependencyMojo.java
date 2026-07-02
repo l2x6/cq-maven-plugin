@@ -33,7 +33,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
@@ -264,7 +263,7 @@ public class FindDependencyMojo extends AbstractMojo {
     }
 
     public Set<Gav> listRoots() {
-        final Predicate<Profile> profiles = ActiveProfiles.of(
+        final ActiveProfiles profiles = ActiveProfiles.of(
                 session.getCurrentProject().getActiveProfiles().stream()
                         .map(org.apache.maven.model.Profile::getId)
                         .toArray(String[]::new));

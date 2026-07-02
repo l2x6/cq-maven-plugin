@@ -407,7 +407,7 @@ public class ProdExcludesMojo extends AbstractMojo {
 
         final Path rootPomPath = workRoot.resolve("pom.xml");
         final MavenSourceTree initialTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
-        final Predicate<Profile> profiles = ActiveProfiles.of();
+        final ActiveProfiles profiles = ActiveProfiles.of();
 
         /* Re-link any previously commented modules */
         final MavenSourceTree fullTree = initialTree.relinkModules(charset, MODULE_COMMENT,
@@ -656,7 +656,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                 .transform(pomXmlPath);
     }
 
-    void updateVersions(MavenSourceTree fullTree, Predicate<Profile> profiles, Map<String, String> versionTransformers) {
+    void updateVersions(MavenSourceTree fullTree, ActiveProfiles profiles, Map<String, String> versionTransformers) {
         /* Check that all modules have the same version - another version may have slipped in when backporting */
         final ExpressionEvaluator evaluator = fullTree.getExpressionEvaluator(profiles);
         final Module rootModule = fullTree.getRootModule();
@@ -722,7 +722,7 @@ public class ProdExcludesMojo extends AbstractMojo {
 
     }
 
-    void minimizeTree(Path workRoot, Set<Ga> expandedIncludes, Map<Ga, TestCategory> tests, Predicate<Profile> profiles) {
+    void minimizeTree(Path workRoot, Set<Ga> expandedIncludes, Map<Ga, TestCategory> tests, ActiveProfiles profiles) {
         final Set<String> testParents = new TreeSet<>(
                 Arrays.asList("integration-tests", "integration-tests-jvm", "integration-test-groups"));
         final Set<String> testParentArtifactIds = testParents.stream().map(base -> "camel-quarkus-" + base)
@@ -820,7 +820,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         }
     }
 
-    Set<Ga> updateBoms(MavenSourceTree tree, Set<Ga> expandedIncludes, Predicate<Profile> profiles,
+    Set<Ga> updateBoms(MavenSourceTree tree, Set<Ga> expandedIncludes, ActiveProfiles profiles,
             Set<Ga> requiredCamelArtifacts) {
         final ExpressionEvaluator evaluator = tree.getExpressionEvaluator(profiles);
 
@@ -837,7 +837,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                 final List<Transformation> transformations = new ArrayList<>();
                 for (Profile profile : module.getProfiles()) {
 
-                    if (profiles.test(profile) && !profile.getDependencyManagement().isEmpty()) {
+                    if (profiles.test(moduleGa, profile) && !profile.getDependencyManagement().isEmpty()) {
                         final Map<String, List<Ga>> gasByNewVersion = new LinkedHashMap<>();
                         Stream.of(CqEdition.values())
                                 .forEach(edition -> gasByNewVersion.put(edition.preferredVersionExpression, new ArrayList<>()));
@@ -998,7 +998,7 @@ public class ProdExcludesMojo extends AbstractMojo {
      * @param  integrationTests
      * @return                     a {@link Map} covering all integration tests, from {@link Ga} to {@link TestCategory}
      */
-    Map<Ga, TestCategory> analyzeTests(final MavenSourceTree tree, final Set<Ga> productizedGas, Predicate<Profile> profiles,
+    Map<Ga, TestCategory> analyzeTests(final MavenSourceTree tree, final Set<Ga> productizedGas, ActiveProfiles profiles,
             Map<Ga, Map<Ga, Set<Ga>>> uncoveredExtensions, Map<Ga, Set<Ga>> allowedMixedTests, Set<Ga> excludeTests,
             List<DirectoryScanner> integrationTests) {
         getLog().debug("Included extensions before considering tests:");
@@ -1075,7 +1075,7 @@ public class ProdExcludesMojo extends AbstractMojo {
         throw new IllegalStateException("Could not assign a category to test " + pomPath);
     }
 
-    static Map<Ga, Set<Ga>> collectIntegrationTests(final MavenSourceTree tree, Predicate<Profile> profiles,
+    static Map<Ga, Set<Ga>> collectIntegrationTests(final MavenSourceTree tree, ActiveProfiles profiles,
             Set<Ga> excludeTests, Log log, Path basedir, List<DirectoryScanner> integrationTests) {
         final ExpressionEvaluator evaluator = tree.getExpressionEvaluator(profiles);
         final Map<Ga, Set<Ga>> testModules = new TreeMap<>();
@@ -1113,7 +1113,7 @@ public class ProdExcludesMojo extends AbstractMojo {
     void writeProdReports(
             MavenSourceTree tree,
             Set<Ga> expandedIncludes,
-            Predicate<Profile> profiles,
+            ActiveProfiles profiles,
             Set<Ga> requiredCamelArtifacts,
             Product product) {
         final Path cqFile = product.getProductizedCamelQuarkusArtifacts();

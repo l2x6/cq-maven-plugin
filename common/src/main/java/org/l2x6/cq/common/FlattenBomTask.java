@@ -85,6 +85,7 @@ import org.jdom2.output.Format;
 import org.jdom2.output.XMLOutputter;
 import org.l2x6.pom.tuner.ExpressionEvaluator;
 import org.l2x6.pom.tuner.MavenSourceTree;
+import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
 import org.l2x6.pom.tuner.PomTransformer.NodeGavtcs;
@@ -100,7 +101,6 @@ import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.model.GavtcsSet;
 import org.l2x6.pom.tuner.model.Module;
 import org.l2x6.pom.tuner.model.OptionalWithDefault;
-import org.l2x6.pom.tuner.model.Profile;
 import org.l2x6.pom.tuner.transform.Siblings;
 
 import static java.util.stream.Collectors.joining;
@@ -445,7 +445,7 @@ public class FlattenBomTask {
     private final List<RemoteRepository> repositories;
     private final RepositorySystem repoSystem;
     private final RepositorySystemSession repoSession;
-    private final Predicate<Profile> profiles;
+    private final ActiveProfiles profiles;
     private final boolean format;
     private final MavenProject project;
     private final FlattenBomTask.InstallFlavor installFlavor;
@@ -482,7 +482,7 @@ public class FlattenBomTask {
             List<RemoteRepository> repositories,
             RepositorySystem repoSystem,
             RepositorySystemSession repoSession,
-            Predicate<Profile> profiles,
+            ActiveProfiles profiles,
             boolean format,
             FlattenBomTask.InstallFlavor installFlavor,
             boolean quickly,
@@ -961,7 +961,7 @@ public class FlattenBomTask {
             MavenSourceTree t,
             ExpressionEvaluator evaluator,
             Ga ga,
-            Predicate<Profile> profiles,
+            ActiveProfiles profiles,
             Set<String> wantedScopes,
             Consumer<Gavtcs> dependencyConsumer) {
 
