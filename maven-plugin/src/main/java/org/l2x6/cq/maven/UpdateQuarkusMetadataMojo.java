@@ -18,13 +18,16 @@ package org.l2x6.cq.maven;
 
 import freemarker.template.Configuration;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
@@ -41,6 +44,8 @@ import org.l2x6.cq.common.CqCatalog;
 import org.l2x6.cq.common.CqCatalog.Flavor;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.cq.common.ExtensionStatus;
+import org.l2x6.pom.tuner.PomTransformer;
+import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
 
 /**
  * Updates {@code quarkus-extension.yaml} files in extension modules based on the info from Camel Catalog.
@@ -107,8 +112,19 @@ public class UpdateQuarkusMetadataMojo extends AbstractExtensionListMojo {
                     final ExtensionStatus status = ExtensionStatus.valueOf(runtimePom.getProperties().getProperty(
                             "quarkus.metadata.status", ExtensionStatus.stable.toString()));
 
+                    String pomDescription = runtimePom.getDescription();
+                    if (!"false".equalsIgnoreCase(
+                            runtimePom.getProperties().getProperty("cq.descriptionSync", "true"))) {
+                        final String catalogDescription = resolveCatalogDescription(models);
+                        if (catalogDescription != null && !catalogDescription.equals(pomDescription)) {
+                            getLog().info("Syncing <description> in " + relativeRuntimePomPath + " to catalog value");
+                            syncPomDescription(extModule.getRuntimePomPath(), catalogDescription, getCharset());
+                            pomDescription = catalogDescription;
+                        }
+                    }
+
                     final TemplateParams templateParams = CqUtils.quarkusExtensionYamlParams(models, artifactIdBase, titleBase,
-                            runtimePom.getDescription(), configPrefixes, keywords, unlisted, deprecated,
+                            pomDescription, configPrefixes, keywords, unlisted, deprecated,
                             extModule.isNativeSupported(), status,
                             multiModuleProjectDirectory.toPath(), getLog(), errors);
                     final Configuration cfg = CqUtils.getTemplateConfig(multiModuleProjectDirectory.toPath(),
@@ -123,6 +139,48 @@ public class UpdateQuarkusMetadataMojo extends AbstractExtensionListMojo {
         if (!errors.isEmpty()) {
             throw new MojoFailureException(errors.stream().collect(Collectors.joining("\n")));
         }
+    }
+
+    static void syncPomDescription(Path pomPath, String description, Charset charset) {
+        PomTransformer.builder()
+                .charset(charset)
+                .transformers(context -> context.getContainerElement("project")
+                        .ifPresent(project -> {
+                            final Optional<ContainerElement> descOpt = project
+                                    .getChildContainerElement("description");
+                            if (descOpt.isPresent()) {
+                                descOpt.get().getNode().textContent(description);
+                            } else {
+                                final List<ContainerElement> children = project.childElements();
+                                for (int i = 0; i < children.size(); i++) {
+                                    if ("name".equals(children.get(i).getElementName())
+                                            && i + 1 < children.size()) {
+                                        project.addChildTextElement("description",
+                                                description,
+                                                children.get(i + 1)
+                                                        .previousSiblingInsertionRefNode());
+                                        return;
+                                    }
+                                }
+                                project.addChildTextElement("description", description);
+                            }
+                        }))
+                .transform(pomPath);
+    }
+
+    static String resolveCatalogDescription(List<ArtifactModel<?>> models) {
+        if (models.isEmpty()) {
+            return null;
+        }
+        if (models.size() == 1) {
+            final String desc = models.get(0).getDescription();
+            return desc != null && !desc.isBlank() ? desc : null;
+        }
+        final Set<String> uniqueDescriptions = models.stream()
+                .map(ArtifactModel::getDescription)
+                .filter(d -> d != null && !d.isBlank())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        return uniqueDescriptions.isEmpty() ? null : String.join(" ", uniqueDescriptions);
     }
 
     static Set<String> resolveConfigPrefixes(ExtensionModule extension, Model runtimePom) {
