@@ -19,7 +19,6 @@ package org.l2x6.cq.maven;
 import java.io.File;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
-import java.util.function.Predicate;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -71,12 +70,11 @@ public class SetVersionsMojo extends AbstractMojo {
         basePath = basedir.toPath();
         charset = Charset.forName(encoding);
 
-        final Predicate<Profile> profiles = getProfiles();
-        MavenSourceTree.of(basePath.resolve("pom.xml"), charset).setVersions(newVersion, profiles);
+        MavenSourceTree.of(basePath.resolve("pom.xml"), charset).setVersions(newVersion, getProfiles());
     }
 
-    Predicate<Profile> getProfiles() {
-        final Predicate<Profile> profiles = ActiveProfiles.of(
+    ActiveProfiles getProfiles() {
+        final ActiveProfiles profiles = ActiveProfiles.of(
                 session.getCurrentProject().getActiveProfiles().stream()
                         .map(org.apache.maven.model.Profile::getId)
                         .toArray(String[]::new));

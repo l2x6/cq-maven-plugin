@@ -29,7 +29,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 import java.util.stream.Stream;
 import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.apache.maven.plugin.AbstractMojo;
@@ -60,7 +59,6 @@ import org.l2x6.pom.tuner.model.Ga;
 import org.l2x6.pom.tuner.model.Gavtc.Type;
 import org.l2x6.pom.tuner.model.Gavtcs;
 import org.l2x6.pom.tuner.model.GavtcsPattern;
-import org.l2x6.pom.tuner.model.Profile;
 import org.l2x6.pom.tuner.transform.Modules;
 import org.l2x6.pom.tuner.transform.Parent;
 import org.l2x6.pom.tuner.transform.Siblings;
@@ -200,7 +198,7 @@ public class ProdInitMojo extends AbstractMojo {
         }
 
         /* Add .rhbac-SNAPSHOT suffix to the version */
-        final Predicate<Profile> profiles = ActiveProfiles.of();
+        final ActiveProfiles profiles = ActiveProfiles.of();
         final Path pomXmlPath = basedir.toPath().resolve("pom.xml");
         final MavenSourceTree t = MavenSourceTree.of(pomXmlPath, charset, Dependency::isVirtual);
         t.setVersions(version + RHBAC_SNAPSHOT_SUFFIX, profiles);

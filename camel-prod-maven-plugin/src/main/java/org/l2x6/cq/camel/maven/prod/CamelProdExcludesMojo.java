@@ -295,7 +295,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                 .transform(rootPomPath);
 
         final MavenSourceTree initialTree = MavenSourceTree.of(rootPomPath, charset, Dependency::isVirtual);
-        final Predicate<Profile> profiles = ActiveProfiles.of();
+        final ActiveProfiles profiles = ActiveProfiles.of();
 
         /* Re-link any previously commented modules */
         final MavenSourceTree fullTree = initialTree.relinkModules(charset, MODULE_COMMENT);
@@ -490,7 +490,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
     }
 
     void handleExcludedTargetDirectories(final Path basePath, final MavenSourceTree fullTree, final Set<Ga> excludes,
-            Predicate<Profile> profiles) {
+            ActiveProfiles profiles) {
         /* Clean the target folders in all excluded modules so that Camel plugins do not see any stale content there */
         excludes.stream()
                 .map(ga -> fullTree.getModulesByGa().get(ga))
@@ -559,7 +559,7 @@ public class CamelProdExcludesMojo extends AbstractMojo {
                 && (module.getPomPath().startsWith("components/") || module.getPomPath().startsWith("core/"));
     }
 
-    void updateVersions(MavenSourceTree fullTree, Predicate<Profile> profiles) {
+    void updateVersions(MavenSourceTree fullTree, ActiveProfiles profiles) {
         /* Check that all modules have the same version - another version may have slipped in when backporting */
         final Module rootModule = fullTree.getRootModule();
         final String expectedVersion = rootModule.getGav().getVersion().asConstant();

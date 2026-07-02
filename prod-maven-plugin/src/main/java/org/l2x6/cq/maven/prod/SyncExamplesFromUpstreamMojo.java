@@ -74,6 +74,7 @@ import org.eclipse.aether.util.artifact.JavaScopes;
 import org.eclipse.aether.util.filter.DependencyFilterUtils;
 import org.l2x6.cq.common.CqCommonUtils;
 import org.l2x6.pom.tuner.MavenSourceTree;
+import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
@@ -570,7 +571,7 @@ public class SyncExamplesFromUpstreamMojo extends AbstractMojo {
 
                 /* Set versions in the top pom.xml and in submodules if there are any */
                 MavenSourceTree t = MavenSourceTree.of(source, StandardCharsets.UTF_8);
-                t.setVersions(getCamelQuarkusExamplesVersion(), p -> true);
+                t.setVersions(getCamelQuarkusExamplesVersion(), ActiveProfiles.all());
 
                 PomTransformer.of((TransformationContext context) -> {
                     // Update BOM version properties
