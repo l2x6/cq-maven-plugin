@@ -19,13 +19,11 @@ package org.l2x6.cq.maven;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.function.Predicate;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.junit.jupiter.api.Test;
 import org.l2x6.cq.test.utils.TestUtils;
 import org.l2x6.pom.tuner.MavenSourceTree.ActiveProfiles;
-import org.l2x6.pom.tuner.model.Profile;
 
 public class SetVersionsMojoTest {
 
@@ -33,7 +31,7 @@ public class SetVersionsMojoTest {
         final SetVersionsMojo mojo = new SetVersionsMojo() {
 
             @Override
-            Predicate<Profile> getProfiles() {
+            ActiveProfiles getProfiles() {
                 return ActiveProfiles.of();
             }
 

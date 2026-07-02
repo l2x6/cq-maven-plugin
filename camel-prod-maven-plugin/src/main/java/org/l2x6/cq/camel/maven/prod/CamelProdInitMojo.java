@@ -21,7 +21,6 @@ import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.Map;
-import java.util.function.Predicate;
 import java.util.stream.Stream;
 import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.apache.maven.plugin.AbstractMojo;
@@ -38,7 +37,6 @@ import org.l2x6.pom.tuner.PomTransformer.ContainerElement;
 import org.l2x6.pom.tuner.PomTransformer.TransformationContext;
 import org.l2x6.pom.tuner.model.Dependency;
 import org.l2x6.pom.tuner.model.GavtcsPattern;
-import org.l2x6.pom.tuner.model.Profile;
 
 /**
  * Initialize a Camel product branch.
@@ -122,7 +120,7 @@ public class CamelProdInitMojo extends AbstractMojo {
         }
 
         /* Add .rhbac-SNAPSHOT suffix to the version */
-        final Predicate<Profile> profiles = ActiveProfiles.of();
+        final ActiveProfiles profiles = ActiveProfiles.of();
         final Path pomXmlPath = basedir.toPath().resolve("pom.xml");
         final MavenSourceTree t = MavenSourceTree.of(pomXmlPath, charset, Dependency::isVirtual);
         t.setVersions(version + RHBAC_SNAPSHOT_SUFFIX, profiles);
