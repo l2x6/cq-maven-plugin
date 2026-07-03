@@ -30,6 +30,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 import org.apache.camel.tooling.model.ComponentModel;
 import org.apache.maven.model.Model;
+import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -188,19 +189,22 @@ class UpdateQuarkusMetadataTest {
         Files.writeString(pomFile,
                 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
                         + "<project>\n"
-                        + "    <name>Test :: Runtime</name>\n"
                         + "    <packaging>jar</packaging>\n"
+                        + "    <name>Test :: Runtime</name>\n"
+                        + "    <url>foo</url>\n"
+                        + "    <inceptionYear>2019</inceptionYear>\n"
                         + "</project>\n",
                 StandardCharsets.UTF_8);
 
         UpdateQuarkusMetadataMojo.syncPomDescription(pomFile, "Inserted description", StandardCharsets.UTF_8);
 
         String result = Files.readString(pomFile, StandardCharsets.UTF_8);
-        assertTrue(result.contains("<description>Inserted description</description>"));
+        Assertions.assertThat(result)
+                .contains("<description>Inserted description</description>");
         int namePos = result.indexOf("<name>");
         int descPos = result.indexOf("<description>");
-        int packagingPos = result.indexOf("<packaging>");
+        int urlPos = result.indexOf("<url>");
         assertTrue(namePos < descPos, "<description> should appear after <name>");
-        assertTrue(descPos < packagingPos, "<description> should appear before <packaging>");
+        assertTrue(descPos < urlPos, "<description> should appear before <url>");
     }
 }

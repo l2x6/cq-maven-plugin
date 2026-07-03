@@ -27,7 +27,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
@@ -144,27 +143,18 @@ public class UpdateQuarkusMetadataMojo extends AbstractExtensionListMojo {
     static void syncPomDescription(Path pomPath, String description, Charset charset) {
         PomTransformer.builder()
                 .charset(charset)
-                .transformers(context -> context.getContainerElement("project")
-                        .ifPresent(project -> {
-                            final Optional<ContainerElement> descOpt = project
-                                    .getChildContainerElement("description");
-                            if (descOpt.isPresent()) {
-                                descOpt.get().getNode().textContent(description);
-                            } else {
-                                final List<ContainerElement> children = project.childElements();
-                                for (int i = 0; i < children.size(); i++) {
-                                    if ("name".equals(children.get(i).getElementName())
-                                            && i + 1 < children.size()) {
-                                        project.addChildTextElement("description",
-                                                description,
-                                                children.get(i + 1)
-                                                        .previousSiblingInsertionRefNode());
-                                        return;
-                                    }
-                                }
-                                project.addChildTextElement("description", description);
-                            }
-                        }))
+                .transformers(context -> {
+                    final ContainerElement decriptionNode = context.getProject()
+                            // adds the node on the proper position according to
+                            // http://maven.apache.org/developers/conventions/code.html
+                            .getOrAddChildContainerElement("description");
+                    decriptionNode.setTextContent(description);
+                    // getOrAddChildContainerElement adds a newline before the closing tag, so we have to remove it.
+                    // org.l2x6.pom.tuner.PomTransformer.ProjectElement should ideally override
+                    // org.l2x6.pom.tuner.PomTransformer.ContainerElement.addOrSetChildTextElement(String, String)
+                    // taking care for the proper insertion position
+                    decriptionNode.getNode().innerPrecedingWhitespace("");
+                })
                 .transform(pomPath);
     }
 
