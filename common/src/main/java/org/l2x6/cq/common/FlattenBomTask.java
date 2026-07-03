@@ -402,9 +402,11 @@ public class FlattenBomTask {
         }
     }
 
-    private static record RequiredGas(Set<Gavtcs> gavtcs, Set<Ga> gas, Map<Ga, Set<Ga>> expectedExclusions) {
+    private static record RequiredGas(Set<Gavtcs> gavtcs, Set<Gavtc> gavtc, Set<Ga> gas, Map<Ga, Set<Ga>> expectedExclusions) {
         public static RequiredGas of(Set<Gavtcs> gavtcs, Map<Ga, Set<Ga>> expectedExclusions) {
-            return new RequiredGas(gavtcs, gavtcs.stream().map(Gavtcs::toGa).collect(Collectors.toCollection(TreeSet::new)),
+            return new RequiredGas(gavtcs,
+                    gavtcs.stream().map(Gavtcs::toGavtc).collect(Collectors.toCollection(LinkedHashSet::new)),
+                    gavtcs.stream().map(Gavtcs::toGa).collect(Collectors.toCollection(TreeSet::new)),
                     expectedExclusions);
         }
     }
@@ -427,6 +429,7 @@ public class FlattenBomTask {
     private final List<String> resolutionEntryPointIncludes;
     private final List<String> resolutionEntryPointExcludes;
     private final List<String> resolutionExcludes;
+    private final GavtcsSet additionalBomEntries;
     private final List<String> resolutionSuspects;
     private final List<String> originExcludes;
     private final List<FlattenBomTask.BomEntryTransformation> bomEntryTransformations;
@@ -467,6 +470,7 @@ public class FlattenBomTask {
             List<String> resolutionEntryPointIncludes,
             List<String> resolutionEntryPointExcludes,
             List<String> resolutionExcludes,
+            List<String> additionalBomEntries,
             List<String> resolutionSuspects, List<String> originExcludes,
             List<FlattenBomTask.BomEntryTransformation> bomEntryTransformations,
             List<String> requiredBomEntryIncludes, List<String> requiredBomEntryExcludes,
@@ -492,6 +496,10 @@ public class FlattenBomTask {
         this.resolutionEntryPointIncludes = resolutionEntryPointIncludes;
         this.resolutionEntryPointExcludes = resolutionEntryPointExcludes;
         this.resolutionExcludes = resolutionExcludes;
+        this.additionalBomEntries = GavtcsSet.builder()
+                .includes(additionalBomEntries == null ? Collections.emptyList() : additionalBomEntries)
+                .defaultResult(GavtcsSet.excludeAll())
+                .build();
         this.resolutionSuspects = resolutionSuspects;
         this.originExcludes = originExcludes;
         this.bomEntryTransformations = mergeTransformations(rootModuleDirectory, bomEntryTransformations, charset);
@@ -662,6 +670,31 @@ public class FlattenBomTask {
                     requiredConstraints.values().stream()
                             .flatMap(BomEntryData::toGavtcs)
                             .collect(Collectors.toCollection(() -> new TreeSet<Gavtcs>(Gavtcs.groupFirstComparator()))));
+
+            /* Each own managed constraint must be either included or in additionalBomEntries */
+            List<String> uneededConstraints = ownManagedDependencies.stream()
+                    .map(FlattenBomTask::toGavtcs)
+                    .filter(gavtc -> !additionalBomEntries.contains(gavtc)
+                            && !requiredGas.gavtc.contains(gavtc.toGavtc()))
+                    .map(Gavtcs::toString)
+                    .toList();
+            if (!uneededConstraints.isEmpty()) {
+                throw new IllegalStateException("Each managed dependency in " + basePath + "/pom.xml"
+                        + " must be present either the set defined by resolutionEntryPointIncludes and resolutionEntryPointExcludes or by the set defined by additionalBomEntries. The following dependencies are not available in any of those. You may want to remove them from the BOM or add them to resolutionEntryPointIncludes or additionalBomEntries:\n  - "
+                        + uneededConstraints.stream().collect(Collectors.joining("\n  - ")));
+            }
+
+            /* Add additionalBomEntries without resolving their transitives */
+            ownManagedDependencies.stream()
+                    .map(FlattenBomTask::toGavtcs)
+                    .filter(additionalBomEntries)
+                    .forEach(gavtcs -> {
+                        final Gavtc gavtc = gavtcs.toGavtc();
+                        if (resolutionSet.contains(gavtcs)) {
+                            requiredConstraints.compute(gavtc.toGa(), (k, v) -> BomEntryData.of(v, gavtcs));
+                            requiredGavtcs.add(gavtc);
+                        }
+                    });
 
             checkRequiredConstraints(requiredGas.gas, flatRequiredConstraints);
             checkExclusions(requiredGas.expectedExclusions);

@@ -1246,6 +1246,7 @@ public class ProdExcludesMojo extends AbstractMojo {
                     childList(config, "resolutionEntryPointIncludes"),
                     childList(config, "resolutionEntryPointExcludes"),
                     childList(config, "resolutionExcludes"),
+                    childList(config, "additionalBomEntries"),
                     childList(config, "resolutionSuspects"),
                     childList(config, "originExcludes"),
                     bomEntryTransformers,
