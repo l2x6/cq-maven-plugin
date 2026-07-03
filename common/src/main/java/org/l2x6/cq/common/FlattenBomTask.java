@@ -663,7 +663,6 @@ public class FlattenBomTask {
                             .flatMap(BomEntryData::toGavtcs)
                             .collect(Collectors.toCollection(() -> new TreeSet<Gavtcs>(Gavtcs.groupFirstComparator()))));
 
-
             checkRequiredConstraints(requiredGas.gas, flatRequiredConstraints);
             checkExclusions(requiredGas.expectedExclusions);
 
@@ -923,6 +922,7 @@ public class FlattenBomTask {
         ownManagedDependencies.stream()
                 .map(FlattenBomTask::toGavtcs)
                 .map(Gavtcs::toGavtc)
+                .filter(dep -> t.getModulesByGa().keySet().contains(dep.toGa()))
                 .forEach(dep -> allTransitives.put(dep.toGa(), BomEntryData.of(dep)));
         Set<Gavtcs> allTransitiveGavtcs = allTransitives.values().stream()
                 .flatMap(BomEntryData::toGavtcs)
