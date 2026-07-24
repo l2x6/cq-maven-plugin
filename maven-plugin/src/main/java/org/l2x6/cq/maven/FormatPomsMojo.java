@@ -169,7 +169,7 @@ public class FormatPomsMojo extends AbstractExtensionListMojo {
                                     dep.getGroupId(),
                                     dep.getArtifactId(),
                                     dep.getVersion(),
-                                    Type.of(dep.getType()),
+                                    Type.of(dep.getType()).preferDefault(),
                                     dep.getClassifier(),
                                     dep.getScope(),
                                     dep.getExclusions().stream()
