@@ -100,7 +100,6 @@ import org.l2x6.pom.tuner.model.Module;
 import org.l2x6.pom.tuner.model.Profile;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
-import org.w3c.dom.Node;
 
 /**
  * Unlink modules that should not be productized from Camel Quarkus source tree based on
@@ -875,31 +874,6 @@ public class ProdExcludesMojo extends AbstractMojo {
                                 final QuarkusEdition edition = QuarkusEdition.COMMUNITY;
                                 if (!rawExpression.equals(edition.versionExpression)) {
                                     gasByNewVersion.get(edition.versionExpression).add(depGa);
-
-                                    if (!profile.getDependencyManagement().stream()
-                                            .map(evaluator::evaluateGa)
-                                            .anyMatch(IO_QUARKUS_QUARKUS_BOM::equals)) {
-                                        /*
-                                         * Add quarkus-bom productized version before quarkus-bom-test community
-                                         * if not already there
-                                         */
-                                        transformations.add((Document document, TransformationContext context) -> {
-                                            final ContainerElement dependencyManagementDeps = context.getOrAddContainerElements(
-                                                    "dependencyManagement",
-                                                    "dependencies");
-                                            final Node refNode = dependencyManagementDeps.childElementsStream()
-                                                    .map(ContainerElement::asGavtcs)
-                                                    .filter(gavtcs -> gavtcs.toGa().equals(IO_QUARKUS_QUARKUS_BOM_TEST))
-                                                    .findFirst()
-                                                    .get()
-                                                    .getNode()
-                                                    .previousSiblingInsertionRefNode();
-                                            dependencyManagementDeps.addGavtcs(
-                                                    new Gavtcs("io.quarkus", "quarkus-bom", "${quarkus.version}", "pom", null,
-                                                            "import"),
-                                                    refNode);
-                                        });
-                                    }
                                 }
                             }
                         }
