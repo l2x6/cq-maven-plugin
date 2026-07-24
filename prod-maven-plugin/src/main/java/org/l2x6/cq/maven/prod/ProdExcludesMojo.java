@@ -874,33 +874,6 @@ public class ProdExcludesMojo extends AbstractMojo {
                                 final QuarkusEdition edition = QuarkusEdition.COMMUNITY;
                                 if (!rawExpression.equals(edition.versionExpression)) {
                                     gasByNewVersion.get(edition.versionExpression).add(depGa);
-
-                                    if (!profile.getDependencyManagement().stream()
-                                            .map(evaluator::evaluateGa)
-                                            .anyMatch(IO_QUARKUS_QUARKUS_BOM::equals)) {
-                                        /*
-                                         * Add quarkus-bom productized version before quarkus-bom-test community
-                                         * if not already there
-                                         */
-                                        transformations.add((TransformationContext context) -> {
-                                            final ContainerElement dependencyManagementDeps = context.getOrAddContainerElements(
-                                                    "dependencyManagement",
-                                                    "dependencies");
-                                            final eu.maveniverse.domtrip.Node refNode = dependencyManagementDeps
-                                                    .childElementsStream()
-                                                    .map(ContainerElement::asGavtcs)
-                                                    .filter(gavtcs -> gavtcs.toGa().equals(IO_QUARKUS_QUARKUS_BOM_TEST))
-                                                    .findFirst()
-                                                    .get()
-                                                    .getNode()
-                                                    .previousSiblingInsertionRefNode();
-                                            dependencyManagementDeps.addGavtcs(
-                                                    new Gavtcs("io.quarkus", "quarkus-bom", "${quarkus.version}", Type.pom(),
-                                                            null,
-                                                            "import"),
-                                                    refNode);
-                                        });
-                                    }
                                 }
                             }
                         }
