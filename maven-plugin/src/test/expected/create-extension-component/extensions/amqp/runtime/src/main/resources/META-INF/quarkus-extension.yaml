@@ -22,7 +22,7 @@
 #
 ---
 name: "Camel AMQP"
-description: "Messaging with AMQP protocol using Apache QPid Client"
+description: "Messaging with AMQP protocol using Apache Qpid Client"
 metadata:
   guide: "https://camel.apache.org/camel-quarkus/latest/reference/extensions/amqp.html"
   categories:

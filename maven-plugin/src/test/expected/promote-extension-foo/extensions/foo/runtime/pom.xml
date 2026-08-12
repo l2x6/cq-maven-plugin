@@ -9,7 +9,7 @@
 
     <artifactId>camel-quarkus-foo</artifactId>
     <name>Camel Quarkus :: Foo :: Runtime</name>
-    <description>Send and receive messages using the Foo protocol.</description>
+    <description>Send and receive messages using the Foo protocol</description>
 
     <properties>
         <camel.quarkus.jvmSince>1.1.0</camel.quarkus.jvmSince>
