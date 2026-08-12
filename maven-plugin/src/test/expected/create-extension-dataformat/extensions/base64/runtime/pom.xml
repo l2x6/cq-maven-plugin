@@ -30,7 +30,7 @@
 
     <artifactId>camel-quarkus-base64</artifactId>
     <name>Camel Quarkus :: Base64 :: Runtime</name>
-    <description>Encode and decode data using Base64.</description>
+    <description>Encode and decode data using Base64</description>
 
     <properties>
         <firstVersion>1.0.0-M6</firstVersion>
