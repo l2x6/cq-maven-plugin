@@ -541,25 +541,41 @@ public class ProdInitMojo extends AbstractMojo {
                             .ifPresent(dep -> dep.getNode().remove(Siblings.previous(Siblings.commentsOrWhitespace())));
                 }).transform(basedir.toPath().resolve("poms/bom-test/pom.xml"));
 
-        /* Edit extensions-jvm/pom.xml to add cics & sap extension */
+        /* Edit extensions-jvm/pom.xml to add cics extension */
         PomTransformer.builder().charset(charset).transformers(
                 (TransformationContext context) -> {
                     final ContainerElement profileParent = context.getOrAddProfileParent(null);
                     final ContainerElement modules = profileParent.getOrAddChildContainerElement("modules");
 
                     modules.addChildTextElement("module", "cics");
-                    modules.addChildTextElement("module", "sap");
                 }).transform(basedir.toPath().resolve("extensions-jvm/pom.xml"));
 
-        /* Edit integration-tests-jvm/pom.xml to add cics & sap test */
+        /* Edit extensions/pom.xml to add sap extension (native support) */
+        PomTransformer.builder().charset(charset).transformers(
+                (TransformationContext context) -> {
+                    final ContainerElement profileParent = context.getOrAddProfileParent(null);
+                    final ContainerElement modules = profileParent.getOrAddChildContainerElement("modules");
+
+                    modules.addChildTextElement("module", "sap");
+                }).transform(basedir.toPath().resolve("extensions/pom.xml"));
+
+        /* Edit integration-tests-jvm/pom.xml to add cics test */
         PomTransformer.builder().charset(charset).transformers(
                 (TransformationContext context) -> {
                     final ContainerElement profileParent = context.getOrAddProfileParent(null);
                     final ContainerElement modules = profileParent.getOrAddChildContainerElement("modules");
 
                     modules.addChildTextElement("module", "cics");
-                    modules.addChildTextElement("module", "sap");
                 }).transform(basedir.toPath().resolve("integration-tests-jvm/pom.xml"));
+
+        /* Edit integration-tests/pom.xml to add sap test (native support) */
+        PomTransformer.builder().charset(charset).transformers(
+                (TransformationContext context) -> {
+                    final ContainerElement profileParent = context.getOrAddProfileParent(null);
+                    final ContainerElement modules = profileParent.getOrAddChildContainerElement("modules");
+
+                    modules.addChildTextElement("module", "sap");
+                }).transform(basedir.toPath().resolve("integration-tests/pom.xml"));
 
         // Force Camel community version for unsupported Maven plugins
         final Path buildParentItPomPath = basedir.toPath().resolve("poms/build-parent-it/pom.xml");
@@ -589,8 +605,8 @@ public class ProdInitMojo extends AbstractMojo {
                 "product/camel-quarkus-testing.sh",
                 "product/src/main/resources/quarkus-cxf-product-source.json",
                 "product/src/main/resources/camel-quarkus-product-source.json",
-                "extensions-jvm/sap/",
-                "integration-tests-jvm/sap/",
+                "extensions/sap/",
+                "integration-tests/sap/",
                 "extensions-jvm/cics/",
                 "integration-tests-jvm/cics/");
 
