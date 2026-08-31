@@ -98,6 +98,7 @@ import org.l2x6.pom.tuner.model.GavSet;
 import org.l2x6.pom.tuner.model.Gavtc;
 import org.l2x6.pom.tuner.model.Gavtc.Type;
 import org.l2x6.pom.tuner.model.Gavtcs;
+import org.l2x6.pom.tuner.model.GavtcsPattern;
 import org.l2x6.pom.tuner.model.GavtcsSet;
 import org.l2x6.pom.tuner.model.Module;
 import org.l2x6.pom.tuner.model.OptionalWithDefault;
@@ -402,10 +403,20 @@ public class FlattenBomTask {
         }
     }
 
-    private static record RequiredGas(Set<Gavtcs> gavtcs, Set<Gavtc> gavtc, Set<Ga> gas, Map<Ga, Set<Ga>> expectedExclusions) {
+    private static record RequiredGas(Set<Gavtcs> gavtcs, GavtcsSet gatc, Set<Ga> gas, Map<Ga, Set<Ga>> expectedExclusions) {
         public static RequiredGas of(Set<Gavtcs> gavtcs, Map<Ga, Set<Ga>> expectedExclusions) {
+            /* gatc is a GavtcsSet matching all transitives taking care only of groupId, artifactId, type, classifier, but not version */
+            Collection<GavtcsPattern> patterns = (Collection<GavtcsPattern>) gavtcs.stream()
+                    .map(gavtc -> gavtc.getGroupId()
+                            + ":" + gavtc.getArtifactId()
+                            + ":*:"
+                            + gavtc.getType().getValueOrDefault()
+                            + ":" + (gavtc.getClassifier() == null ? "" : gavtc.getClassifier()))
+                    .map(GavtcsPattern::of)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            GavtcsSet gatc = GavtcsSet.builder().includePatterns(patterns).build();
             return new RequiredGas(gavtcs,
-                    gavtcs.stream().map(Gavtcs::toGavtc).collect(Collectors.toCollection(LinkedHashSet::new)),
+                    gatc,
                     gavtcs.stream().map(Gavtcs::toGa).collect(Collectors.toCollection(TreeSet::new)),
                     expectedExclusions);
         }
@@ -629,7 +640,7 @@ public class FlattenBomTask {
                     .collect(Collectors.toList()));
 
             final List<Dependency> constraintsFilteredByOriginPlusAdditionalBoms = new ArrayList<>(constraintsFilteredByOrigin);
-            /* A map from dependency  managed in the given BOM to the BOM Gav containing the given dependency */
+            /* A map from dependency managed in the given BOM to the BOM Gav containing the given dependency */
             final Map<Ga, Set<Gav>> additionalBomConstraits = new TreeMap<>();
             final Set<Ga> allAdditionalBomConstraits = new TreeSet<>();
             addAdditionalBoms(
@@ -676,7 +687,7 @@ public class FlattenBomTask {
             List<String> uneededConstraints = ownManagedDependencies.stream()
                     .map(FlattenBomTask::toGavtcs)
                     .filter(gavtc -> !additionalBomEntries.contains(gavtc)
-                            && !requiredGas.gavtc.contains(gavtc.toGavtc()))
+                            && !requiredGas.gatc.contains(gavtc.toGavtc()))
                     .map(Gavtcs::toString)
                     .toList();
             if (!uneededConstraints.isEmpty()) {
@@ -1526,9 +1537,11 @@ public class FlattenBomTask {
                 Set<GaPattern> exclusions) throws DuplicateVersionException {
             if (existing != null) {
                 existing.assertSameVersion(ga.toGav(version).toGavtc(type, classifier));
-                existing.typeClassifiers.add(new TypeClassifier(type, classifier));
-                existing.exclusions.addAll(exclusions);
-                return existing;
+                Set<TypeClassifier> tc = new LinkedHashSet<>(existing.typeClassifiers);
+                tc.add(new TypeClassifier(type, classifier));
+                Set<GaPattern> excl = new TreeSet<>(existing.exclusions);
+                excl.addAll(exclusions);
+                return new BomEntryData(ga, version, Collections.unmodifiableSet(tc), Collections.unmodifiableSet(excl));
             } else {
                 return new BomEntryData(ga, version, newTypeClassifiers(type, classifier), exclusions);
             }
@@ -1556,8 +1569,11 @@ public class FlattenBomTask {
                 if (enforceDependencyConvergence) {
                     assertSameVersion(other.toGavtcs().findFirst().get().toGavtc());
                 }
-                typeClassifiers.addAll(other.typeClassifiers);
-                exclusions.addAll(other.exclusions);
+                Set<TypeClassifier> tc = new LinkedHashSet<>(this.typeClassifiers);
+                tc.addAll(other.typeClassifiers);
+                Set<GaPattern> excl = new TreeSet<>(this.exclusions);
+                excl.addAll(exclusions);
+                return new BomEntryData(ga, version, Collections.unmodifiableSet(tc), Collections.unmodifiableSet(excl));
             }
             return this;
         }
