@@ -561,6 +561,39 @@ public class ProdInitMojo extends AbstractMojo {
                     modules.addChildTextElement("module", "sap");
                 }).transform(basedir.toPath().resolve("integration-tests-jvm/pom.xml"));
 
+        /*
+         * Edit extensions-core/core/runtime/pom.xml to use the community version for the
+         * camel-quarkus-diagram conditional dev mode dependency, as it is a community-only extension
+         */
+        PomTransformer.builder().charset(charset).transformers(
+                (TransformationContext context) -> {
+                    final ContainerElement plugins = context.getOrAddContainerElements("build", "plugins");
+                    final ContainerElement quarkusExtensionPlugin = plugins.childElementsStream()
+                            .map(ContainerElement::asGavtcs)
+                            .filter(gavtcs -> "io.quarkus".equals(gavtcs.getGroupId())
+                                    && "quarkus-extension-maven-plugin".equals(gavtcs.getArtifactId()))
+                            .findFirst()
+                            .orElseThrow()
+                            .getNode();
+                    final ContainerElement conditionalDevDependencies = quarkusExtensionPlugin
+                            .getChildContainerElement("configuration", "conditionalDevDependencies")
+                            .orElseThrow(() -> new IllegalStateException(
+                                    "Could not find <conditionalDevDependencies> in the configuration of"
+                                            + " io.quarkus:quarkus-extension-maven-plugin in"
+                                            + " extensions-core/core/runtime/pom.xml"));
+                    final String communityVersion = "${camel-quarkus-community.version}";
+                    conditionalDevDependencies.childTextElementsStream()
+                            .filter(artifact -> artifact.getTextContent()
+                                    .startsWith("org.apache.camel.quarkus:camel-quarkus-diagram:"))
+                            .forEach(artifact -> {
+                                final String newValue = "org.apache.camel.quarkus:camel-quarkus-diagram:"
+                                        + communityVersion;
+                                getLog().info("Setting in extensions-core/core/runtime/pom.xml: "
+                                        + artifact.getTextContent() + " -> " + newValue);
+                                artifact.setTextContent(newValue);
+                            });
+                }).transform(basedir.toPath().resolve("extensions-core/core/runtime/pom.xml"));
+
         // Force Camel community version for unsupported Maven plugins
         final Path buildParentItPomPath = basedir.toPath().resolve("poms/build-parent-it/pom.xml");
         PomTransformer.builder().charset(charset).transformers(
