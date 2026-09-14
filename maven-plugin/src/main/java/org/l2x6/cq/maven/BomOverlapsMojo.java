@@ -139,7 +139,7 @@ public class BomOverlapsMojo extends AbstractMojo {
                     "pom", repositories, repoSystem, repoSession);
             final Model basePomModel = CqCommonUtils.readPom(baseBomPath, charset);
             baseGav = new Gav(basePomModel.getGroupId(), basePomModel.getArtifactId(), basePomModel.getVersion());
-            final Model comparePomModel = CqCommonUtils.readPom(baseBomPath, charset);
+            final Model comparePomModel = CqCommonUtils.readPom(compareBomPath, charset);
             compareGav = new Gav(comparePomModel.getGroupId(), comparePomModel.getArtifactId(), comparePomModel.getVersion());
         } else {
             final String delim = "..";
