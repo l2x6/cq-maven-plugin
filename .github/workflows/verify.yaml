@@ -18,13 +18,13 @@
 name: Linux & Windows CI
 
 on:
-  push:
-    paths-ignore:
-       - '.github/project.yml'
-
   pull_request:
     paths-ignore:
        - '.github/project.yml'
+
+concurrency:
+    group: ${{ github.ref }}-${{ github.workflow }}
+    cancel-in-progress: true
 
 jobs:
 
