@@ -357,6 +357,7 @@ limitations under the License.</inlineHeader>
                             <exclude>**/create-extension-templates/*</exclude>
                             <exclude>**/create-example-templates/*</exclude>
                             <exclude>**/README.*</exclude>
+                            <exclude>**/.directory</exclude>
                             <exclude>**/.gitkeep</exclude>
                             <exclude>.gitattributes/</exclude>
                             <exclude>.mvn/wrapper/</exclude>
