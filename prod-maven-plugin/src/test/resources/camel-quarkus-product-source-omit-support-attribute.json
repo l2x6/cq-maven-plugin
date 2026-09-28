@@ -1,0 +1,44 @@
+{
+    "extensions": {
+        "camel-quarkus-bean": {
+            "jvm": "supported",
+            "native": "supported",
+            "comment": "no overrides - both attributes should be derived to ['supported']"
+        },
+        "camel-quarkus-splunk": {
+            "jvm": "deprecated",
+            "native": "deprecated",
+            "redhat-camel-support": [
+                "supported",
+                "deprecated"
+            ],
+            "ibm-support": [],
+            "comment": "explicit empty ibm-support - the attribute should be omitted rather than derived to ['deprecated']"
+        },
+        "camel-quarkus-direct": {
+            "jvm": "supported",
+            "native": "supported",
+            "redhat-camel-support": [],
+            "ibm-support": [],
+            "comment": "all attributes suppressed - should not appear in output"
+        }
+    },
+    "excludeTests": [],
+    "additionalProductizedArtifacts": [
+        "camel-quarkus-catalog"
+    ],
+    "guideUrlTemplate": "https://access.redhat.com/documentation/en-us/red_hat_integration/${cqMajorVersion}.latest/html/camel_extensions_for_quarkus_reference/extensions-${artifactIdBase}",
+    "integrationTests": [
+        {
+            "basedir": ".",
+            "includes": [
+                "integration-tests/*/pom.xml"
+            ],
+            "excludes": []
+        }
+    ],
+    "platformOverridesSupportAttributeNames": ["redhat-camel-support", "ibm-support"],
+    "artifactVersionOverrides": {
+        "camel-launcher": "${camel.launcher.version}"
+    }
+}

@@ -80,7 +80,9 @@ public class Product {
                 for (String attrName : platformOverridesSupportAttributeNames) {
                     @SuppressWarnings("unchecked")
                     List<String> override = (List<String>) extensionEntry.get(attrName);
-                    if (override != null && !override.isEmpty()) {
+                    // An explicit empty array is kept on purpose: it suppresses the attribute altogether,
+                    // as opposed to a missing entry, which makes the value derived from the jvm/native statuses
+                    if (override != null) {
                         overrideSupportLevels.put(attrName, override);
                     }
                 }
