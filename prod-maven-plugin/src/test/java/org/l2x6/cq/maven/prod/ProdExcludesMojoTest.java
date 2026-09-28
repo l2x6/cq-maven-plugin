@@ -106,4 +106,32 @@ public class ProdExcludesMojoTest {
                 generatedDir);
     }
 
+    @Test
+    void platformOverridesOmitSupportAttribute() throws MojoExecutionException, MojoFailureException, IOException {
+        final String testName = "platform-overrides-omit-support-attribute-test";
+        final Path projectDir = TestUtils.createProjectFromTemplate("prod-excludes", testName);
+        final Path basePath = projectDir.toAbsolutePath().normalize();
+
+        final Path productJsonPath = basePath.resolve("product/src/main/resources/camel-quarkus-product-source.json");
+        try (InputStream in = getClass().getClassLoader()
+                .getResourceAsStream("camel-quarkus-product-source-omit-support-attribute.json")) {
+            Files.copy(in, productJsonPath, StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        // Run platform-overrides mojo
+        final PlatformOverridesMojo platformMojo = new PlatformOverridesMojo();
+        platformMojo.basedir = basePath.toFile();
+        platformMojo.encoding = "utf-8";
+        platformMojo.documentedProductVersion = "3.8";
+        platformMojo.productJson = productJsonPath.toFile();
+        platformMojo.overrideGuide = true;
+        platformMojo.execute();
+
+        // An explicit empty array suppresses the given attribute, while a missing entry keeps deriving it
+        final Path generatedDir = basePath.resolve("product/src/main/generated");
+        TestUtils.assertTreesMatch(
+                Paths.get("src/test/expected/platform-overrides-omit-support-attribute/product/src/main/generated"),
+                generatedDir);
+    }
+
 }

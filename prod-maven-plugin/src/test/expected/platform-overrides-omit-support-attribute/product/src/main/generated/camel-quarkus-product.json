@@ -1,0 +1,28 @@
+{
+  "extensions": [
+    {
+      "group-id": "org.apache.camel.quarkus",
+      "artifact-id": "camel-quarkus-bean",
+      "metadata": {
+        "redhat-camel-support": [
+          "supported"
+        ],
+        "ibm-support": [
+          "supported"
+        ],
+        "guide": "https://access.redhat.com/documentation/en-us/red_hat_integration/${cqMajorVersion}.latest/html/camel_extensions_for_quarkus_reference/extensions-bean"
+      }
+    },
+    {
+      "group-id": "org.apache.camel.quarkus",
+      "artifact-id": "camel-quarkus-splunk",
+      "metadata": {
+        "redhat-camel-support": [
+          "supported",
+          "deprecated"
+        ],
+        "guide": "https://access.redhat.com/documentation/en-us/red_hat_integration/${cqMajorVersion}.latest/html/camel_extensions_for_quarkus_reference/extensions-splunk"
+      }
+    }
+  ]
+}
