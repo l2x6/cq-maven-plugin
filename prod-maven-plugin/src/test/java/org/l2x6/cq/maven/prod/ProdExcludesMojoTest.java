@@ -18,15 +18,21 @@ package org.l2x6.cq.maven.prod;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
+import java.util.Set;
+import java.util.TreeSet;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
 import org.junit.jupiter.api.Test;
 import org.l2x6.cq.test.utils.TestUtils;
+import org.l2x6.pom.tuner.PomTransformer;
+import org.l2x6.pom.tuner.model.Ga;
 
 public class ProdExcludesMojoTest {
 
@@ -132,6 +138,24 @@ public class ProdExcludesMojoTest {
         TestUtils.assertTreesMatch(
                 Paths.get("src/test/expected/platform-overrides-omit-support-attribute/product/src/main/generated"),
                 generatedDir);
+    }
+
+    @Test
+    void removeExcludedVirtualDependencies() throws IOException {
+        final String testName = "prod-excludes-remove-virtual-deps";
+        final Path baseDir = TestUtils.createProjectFromTemplate(testName, testName);
+        final Path pomXmlPath = baseDir.resolve("pom.xml");
+
+        // base64 and direct stay in the product tree; sjms (profile) and excluded-top (top level) do not and must go
+        final Set<Ga> productizedModules = new TreeSet<>(Arrays.asList(
+                new Ga("org.apache.camel.quarkus", "camel-quarkus-base64-deployment"),
+                new Ga("org.apache.camel.quarkus", "camel-quarkus-direct-deployment")));
+
+        PomTransformer.builder().charset(StandardCharsets.UTF_8)
+                .transformers(ProdExcludesMojo.removeExcludedVirtualDependencies(productizedModules))
+                .transform(pomXmlPath);
+
+        TestUtils.assertTreesMatch(Paths.get("src/test/expected/" + testName + "/pom.xml"), pomXmlPath);
     }
 
 }
