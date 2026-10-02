@@ -448,6 +448,21 @@ public class ProdExcludesMojo extends AbstractMojo {
                 .collect(Collectors.toSet());
         CqCommonUtils.updateVirtualDependencies(charset, allVirtualExtensions, catalogPomPath);
 
+        /*
+         * Strip virtual dependencies pointing at excluded modules from the retained non-test modules, otherwise they
+         * break a plain `mvn install`. Integration tests are left alone: they are mixed builds that may legitimately
+         * keep virtual dependencies on non-productized (community) extensions. The transformer is a no-op (no rewrite)
+         * for modules that have none.
+         */
+        for (Ga includedGa : expandedIncludesWithoutTests) {
+            final Module module = fullTree.getModulesByGa().get(includedGa);
+            if (module != null) {
+                PomTransformer.builder().charset(charset)
+                        .transformers(removeExcludedVirtualDependencies(expandedIncludesWithoutTests))
+                        .transform(workRoot.resolve(module.getPomPath()));
+            }
+        }
+
         /* Enable the mixed tests in special modules */
         final TreeSet<Ga> expandedIncludesWithAllTests = updateMixedTests(fullTree, expandedIncludesWithProdTests, tests,
                 product);
@@ -742,6 +757,14 @@ public class ProdExcludesMojo extends AbstractMojo {
                 .collect(Collectors.toCollection(LinkedHashSet<Ga>::new));
         final MavenSourceTree tree = MavenSourceTree.of(rootPomPath, charset);
         tree.unlinkModules(expandedIncludesWithoutTests, profiles, charset, MODULE_COMMENT);
+    }
+
+    /** Removes virtual dependencies whose target module is not contained in {@code productizedModules}. */
+    static Transformation removeExcludedVirtualDependencies(Set<Ga> productizedModules) {
+        return Dependencies
+                .remove(gavtcs -> gavtcs.isVirtual()
+                        && !productizedModules.contains(new Ga(gavtcs.getGroupId(), gavtcs.getArtifactId())))
+                .from("virtualDependencies");
     }
 
     TreeSet<Ga> updateMixedTests(final MavenSourceTree fullTree, Set<Ga> expandedIncludes, final Map<Ga, TestCategory> tests,
