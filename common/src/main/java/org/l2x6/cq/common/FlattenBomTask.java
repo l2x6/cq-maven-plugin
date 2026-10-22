@@ -131,6 +131,41 @@ public class FlattenBomTask {
             }
         }
 
+        public void set(String serialized) {
+            if (serialized == null || serialized.isEmpty()) {
+                return;
+            }
+            int atPos = serialized.indexOf('@');
+            int pipePos = serialized.indexOf('|');
+
+            final String gavPattern;
+            final String versionReplacement;
+            final String addExclusions;
+            if (atPos >= 0) {
+                gavPattern = serialized.substring(0, atPos);
+                versionReplacement = serialized.substring(atPos + 1);
+                addExclusions = null;
+            } else if (pipePos >= 0) {
+                gavPattern = serialized.substring(0, pipePos);
+                versionReplacement = null;
+                addExclusions = serialized.substring(pipePos + 1);
+            } else {
+                throw new IllegalArgumentException(
+                        "Could not parse BomEntryTransformation '" + serialized + "': must contain @ or |");
+            }
+            setGavPattern(gavPattern);
+            if (versionReplacement != null) {
+                setVersionReplacement(versionReplacement);
+            }
+            if (addExclusions != null) {
+                setAddExclusions(addExclusions);
+            }
+        }
+
+        public Set<Ga> getInternalExclusions() {
+            return internalExclusions;
+        }
+
         public List<Exclusion> getAddExclusions() {
             return internalExclusions.stream()
                     .map(ga -> {
@@ -143,7 +178,7 @@ public class FlattenBomTask {
         }
 
         public void setAddExclusions(String exclusions) {
-            for (String rawExcl : exclusions.split("[,\\s]+")) {
+            for (String rawExcl : exclusions.split("[|,\\s]+")) {
                 this.internalExclusions.add(GavPattern.of(rawExcl).asWildcardGa());
             }
         }
