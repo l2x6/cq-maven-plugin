@@ -16,8 +16,8 @@
  */
 package org.l2x6.cq.maven;
 
+import java.io.File;
 import java.nio.charset.Charset;
-import java.nio.file.Path;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
@@ -56,7 +56,7 @@ public class AuditMojo extends AbstractMojo {
      * @since 4.29.0
      */
     @Parameter(defaultValue = "${project.basedir}/pom.xml", property = "cq.pomFile")
-    Path pomFile;
+    File pomFile;
 
     /**
      * Require a regular expression match on versions of managed artifacts.
@@ -100,7 +100,7 @@ public class AuditMojo extends AbstractMojo {
 
         charset = Charset.forName(encoding);
 
-        Model model = CqCommonUtils.readPom(pomFile, charset);
+        Model model = CqCommonUtils.readPom(pomFile.toPath(), charset);
 
         DependencyManagement dm = model.getDependencyManagement();
         if (dm != null) {
