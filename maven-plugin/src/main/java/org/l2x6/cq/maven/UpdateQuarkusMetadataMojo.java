@@ -109,7 +109,7 @@ public class UpdateQuarkusMetadataMojo extends AbstractExtensionListMojo {
                                             .getProperty("quarkus.metadata.deprecated", "false"));
 
                     final ExtensionStatus status = ExtensionStatus.valueOf(runtimePom.getProperties().getProperty(
-                            "quarkus.metadata.status", ExtensionStatus.stable.toString()));
+                            "quarkus.metadata.status", CqUtils.supportLevelToStatus(models).toString()));
 
                     String pomDescription = runtimePom.getDescription();
                     if (!"false".equalsIgnoreCase(
