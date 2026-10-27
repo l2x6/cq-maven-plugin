@@ -35,7 +35,6 @@ import org.apache.maven.model.Model;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.shared.utils.io.DirectoryScanner;
-import org.l2x6.cq.common.ExtensionStatus;
 import org.l2x6.cq.maven.TemplateParams.Builder;
 import org.l2x6.pom.tuner.PomTransformer;
 import org.l2x6.pom.tuner.PomTransformer.Transformation;
@@ -278,7 +277,7 @@ public class CreateExtensionMojo extends CreateTestMojo {
 
         final TemplateParams quarkusExtensionYamlParams = CqUtils.quarkusExtensionYamlParams(models, artifactIdBase, nameBase,
                 description, configPrefixes, keywords, !nativeSupported, deprecated, nativeSupported,
-                ExtensionStatus.stable,
+                CqUtils.supportLevelToStatus(models),
                 runtimeBomPath.getParent().getParent().getParent(), getLog(), new ArrayList<>());
         final Path metaInfDir = extensionRuntimeBaseDir.resolve("src/main/resources/META-INF");
         try {

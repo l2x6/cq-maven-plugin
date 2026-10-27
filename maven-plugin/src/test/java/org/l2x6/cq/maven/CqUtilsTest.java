@@ -17,10 +17,15 @@
 package org.l2x6.cq.maven;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.apache.camel.tooling.model.ComponentModel;
+import org.apache.camel.tooling.model.SupportLevel;
 import org.junit.jupiter.api.Test;
+import org.l2x6.cq.common.ExtensionStatus;
 import org.l2x6.pom.tuner.model.Ga;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -51,6 +56,53 @@ public class CqUtilsTest {
                 Set.of("foo"),
                 CqUtils.findExtensionArtifactIds(set)
                         .collect(Collectors.toSet()));
+    }
+
+    @Test
+    void supportLevelToStatusEmpty() {
+        assertEquals(ExtensionStatus.stable, CqUtils.supportLevelToStatus(Collections.emptyList()));
+    }
+
+    @Test
+    void supportLevelToStatusNoSupportLevel() {
+        assertEquals(ExtensionStatus.stable, CqUtils.supportLevelToStatus(List.of(new ComponentModel())));
+    }
+
+    @Test
+    void supportLevelToStatusStable() {
+        assertEquals(ExtensionStatus.stable,
+                CqUtils.supportLevelToStatus(List.of(model(SupportLevel.Stable))));
+    }
+
+    @Test
+    void supportLevelToStatusPreview() {
+        assertEquals(ExtensionStatus.preview,
+                CqUtils.supportLevelToStatus(List.of(model(SupportLevel.Preview))));
+    }
+
+    @Test
+    void supportLevelToStatusExperimental() {
+        assertEquals(ExtensionStatus.experimental,
+                CqUtils.supportLevelToStatus(List.of(model(SupportLevel.Experimental))));
+    }
+
+    @Test
+    void supportLevelToStatusBaseStability() {
+        assertEquals(ExtensionStatus.stable,
+                CqUtils.supportLevelToStatus(List.of(model(SupportLevel.baseStability))));
+    }
+
+    @Test
+    void supportLevelToStatusLeastStableModel() {
+        assertEquals(ExtensionStatus.experimental,
+                CqUtils.supportLevelToStatus(List.of(model(SupportLevel.Stable), model(SupportLevel.Experimental),
+                        model(SupportLevel.Preview))));
+    }
+
+    static ComponentModel model(SupportLevel supportLevel) {
+        ComponentModel model = new ComponentModel();
+        model.setSupportLevel(supportLevel);
+        return model;
     }
 
 }

@@ -42,6 +42,7 @@ import java.util.stream.Stream;
 import javax.lang.model.SourceVersion;
 import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.camel.tooling.model.Kind;
+import org.apache.camel.tooling.model.SupportLevel;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.logging.Log;
 import org.l2x6.cq.common.ExtensionStatus;
@@ -152,6 +153,31 @@ public class CqUtils {
             }
         } catch (IOException | TemplateException e) {
             throw new RuntimeException("Could not evaluate template " + templateUri, e);
+        }
+    }
+
+    /**
+     * Derives the extension status from the least stable {@link SupportLevel} declared by the given catalog models.
+     * Models without an explicit support level are considered {@link SupportLevel#Stable}.
+     */
+    public static ExtensionStatus supportLevelToStatus(List<ArtifactModel<?>> models) {
+        SupportLevel leastStable = SupportLevel.Stable;
+        for (ArtifactModel<?> model : models) {
+            final SupportLevel level = model.getSupportLevel();
+            if (level == null || level == SupportLevel.baseStability) {
+                continue;
+            }
+            if (level.compareTo(leastStable) < 0) {
+                leastStable = level;
+            }
+        }
+        switch (leastStable) {
+        case Experimental:
+            return ExtensionStatus.experimental;
+        case Preview:
+            return ExtensionStatus.preview;
+        default:
+            return ExtensionStatus.stable;
         }
     }
 
